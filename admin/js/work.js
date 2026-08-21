@@ -1,7 +1,7 @@
 // admin/js/work.js
 
 Admin.sections.assignments = {
-  label: "الواجبات", icon: "📝",
+  label: "الواجبات",
   async render(body){
     const cid = Admin.currentCourseId;
     const { data: assignments } = await db.from("assignments").select("*").eq("course_id", cid).order("deadline");
@@ -55,7 +55,7 @@ function openAssignmentModal(courseId, a){
 }
 
 Admin.sections.submissions = {
-  label: "التسليمات", icon: "📤",
+  label: "التسليمات",
   async render(body){
     const cid = Admin.currentCourseId;
     const { data: subs } = await db.from("submissions")
@@ -103,7 +103,7 @@ async function openReviewModal(sub){
   for(const f of (files||[])){
     try{
       const url = await CodeUp.getSignedUrl("submissions", f.storage_path, 600);
-      fileLinks += `<div><a href="${url}" target="_blank">📎 ${CodeUp.escapeHtml(f.file_name||"ملف")}</a></div>`;
+      fileLinks += `<div><a href="${url}" target="_blank">${CodeUp.escapeHtml(f.file_name||"ملف")}</a></div>`;
     }catch(e){ fileLinks += `<div class="small">تعذّر تحميل رابط الملف: ${CodeUp.escapeHtml(f.file_name||"")}</div>`; }
   }
 

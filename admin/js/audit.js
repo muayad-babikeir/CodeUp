@@ -1,7 +1,7 @@
 // admin/js/audit.js
 
 Admin.sections.files = {
-  label: "الملفات", icon: "🗂️",
+  label: "الملفات",
   async render(body){
     const cid = Admin.currentCourseId;
     const { data } = await db.from("file_uploads").select("*, profiles(full_name)").eq("course_id", cid).order("created_at",{ascending:false}).limit(80);
@@ -14,7 +14,7 @@ Admin.sections.files = {
 };
 
 Admin.sections.audit_log = {
-  label: "سجل التدقيق", icon: "🧾",
+  label: "سجل التدقيق",
   async render(body){
     let q = db.from("activity_log").select("*, profiles(full_name)").order("created_at",{ascending:false}).limit(150);
     if(Admin.role !== "super") q = q.eq("course_id", Admin.currentCourseId);
@@ -48,7 +48,7 @@ async function renderLeaderSection(section, body){
   if(!mySquads.includes(squadId)){ body.innerHTML = `<div class="emptyState">لا تملك صلاحية على هذه المجموعة.</div>`; return; }
 
   const { data: squad } = await db.from("squads").select("*, courses(id,name)").eq("id", squadId).single();
-  document.getElementById("pageTitle").textContent = `${squad?.emoji||"👥"} ${squad?.name||""}`;
+  document.getElementById("pageTitle").textContent = squad?.name || "";
 
   if(section==="mysquad" || section==="members"){
     const { data: members } = await db.from("enrollments").select("*, profiles(full_name,email)").eq("squad_id", squadId);

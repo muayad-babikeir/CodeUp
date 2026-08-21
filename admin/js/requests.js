@@ -1,7 +1,7 @@
 // admin/js/requests.js
 
 Admin.sections.join_requests = {
-  label: "طلبات الانضمام", icon: "📥",
+  label: "طلبات الانضمام",
   async render(body){
     const cid = Admin.currentCourseId;
     const { data } = await db.from("squad_join_requests")
@@ -18,7 +18,7 @@ Admin.sections.join_requests = {
 };
 
 Admin.sections.leader_applications = {
-  label: "طلبات القيادة", icon: "👑",
+  label: "طلبات القيادة",
   async render(body){
     const cid = Admin.currentCourseId;
     const { data } = await db.from("leader_applications")

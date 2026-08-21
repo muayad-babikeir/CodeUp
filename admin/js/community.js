@@ -1,7 +1,7 @@
 // admin/js/community.js
 
 Admin.sections.timeline = {
-  label: "المستجدات", icon: "📰",
+  label: "المستجدات",
   async render(body){
     const cid = Admin.currentCourseId;
     const { data: posts } = await db.from("submissions")
@@ -31,7 +31,7 @@ Admin.sections.timeline = {
 };
 
 Admin.sections.moderation = {
-  label: "الإشراف", icon: "🛡️",
+  label: "الإشراف",
   async render(body){
     const { data: comments } = await db.from("comments").select("*, profiles(full_name)").order("created_at",{ascending:false}).limit(50);
     body.innerHTML = `<div class="card"><b>أحدث التعليقات على المنصة</b>
@@ -55,7 +55,7 @@ Admin.sections.moderation = {
 };
 
 Admin.sections.announcements = {
-  label: "الإعلانات", icon: "📢",
+  label: "الإعلانات",
   async render(body){
     const cid = Admin.currentCourseId;
     const { data: anns } = await db.from("announcements").select("*").eq("course_id", cid).order("created_at",{ascending:false});

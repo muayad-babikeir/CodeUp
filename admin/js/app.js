@@ -66,13 +66,13 @@ const Admin = {
       return [
         {group:"عام", items:["dashboard"]},
         {group:"المنصة", items:["courses","users","course_admins"]},
-        {group:"الكورس الحالي", items:["squads","leaders","join_requests","leader_applications","assignments","submissions","timeline","announcements","progress"]},
+        {group:"الكورس الحالي", items:["content","squads","leaders","join_requests","leader_applications","assignments","submissions","timeline","announcements","progress"]},
         {group:"النظام", items:["files","moderation","audit_log","settings"]}
       ];
     }
     if(this.role === "course_admin"){
       return [
-        {group:"الكورس", items:["dashboard","squads","join_requests","leader_applications","assignments","submissions","timeline","announcements","progress","files","settings"]}
+        {group:"الكورس", items:["dashboard","content","squads","join_requests","leader_applications","assignments","submissions","timeline","announcements","progress","files","settings"]}
       ];
     }
     // leader
@@ -101,7 +101,7 @@ const Admin = {
       group.items.forEach(key=>{
         const s = this.sections[key];
         if(!s) return;
-        html += `<div class="navItem" data-section="${key}"><span>${s.icon||"•"}</span><span>${s.label}</span></div>`;
+        html += `<div class="navItem" data-section="${key}"><span>${s.label}</span></div>`;
       });
       html += `</div>`;
     });
@@ -145,11 +145,11 @@ function roleLabel(r){ return {super:"سوبر أدمن", course_admin:"أدمن
 
 function leaderNavHtml(){
   const items = [
-    ["mysquad","👥","مجموعتي"],["members","🧑‍🤝‍🧑","الأعضاء"],["ljoin","📥","طلبات الانضمام"],
-    ["lassignments","📝","الواجبات"],["lsubmissions","📤","التسليمات"],["ltimeline","📰","المستجدات"],
-    ["lactivity","📊","النشاط"],["lprogress","📈","التقدم"]
+    ["mysquad","مجموعتي"],["members","الأعضاء"],["ljoin","طلبات الانضمام"],
+    ["lassignments","الواجبات"],["lsubmissions","التسليمات"],["ltimeline","المستجدات"],
+    ["lactivity","النشاط"],["lprogress","التقدم"]
   ];
   return `<div class="navGroup"><div class="navLabel">مجموعتي</div>` +
-    items.map(([k,i,l])=>`<div class="navItem" data-section="${k}"><span>${i}</span><span>${l}</span></div>`).join("") +
+    items.map(([k,l])=>`<div class="navItem" data-section="${k}"><span>${l}</span></div>`).join("") +
     `</div>`;
 }

@@ -97,6 +97,7 @@ const CodeUp = (() => {
   }
 
   const rpc = {
+    enrollInCourse: (courseId) => call("enroll_in_course", { p_course_id: courseId }),
     requestJoinSquad: (squadId, message) => call("request_join_squad", { p_squad_id: squadId, p_message: message || null }),
     cancelJoinRequest: (requestId) => call("cancel_join_request", { p_request_id: requestId }),
     approveJoinRequest: (requestId) => call("approve_join_request", { p_request_id: requestId }),

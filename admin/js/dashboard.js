@@ -1,6 +1,6 @@
 // admin/js/dashboard.js
 Admin.sections.dashboard = {
-  label: "لوحة التحكم", icon: "📊",
+  label: "لوحة التحكم",
   async render(body){
     const isSuper = Admin.role === "super";
     let usersCount, coursesCount, squadsCount, studentsCount, submissionsCount, recent;
@@ -30,12 +30,12 @@ Admin.sections.dashboard = {
 
     let stats = `<div class="statGrid">`;
     if(isSuper){
-      stats += stat("👤 المستخدمون", usersCount);
-      stats += stat("📚 الكورسات", coursesCount);
+      stats += stat("المستخدمون", usersCount);
+      stats += stat("الكورسات", coursesCount);
     }
-    stats += stat("👥 المجموعات", squadsCount);
-    stats += stat("🎓 الطلاب", studentsCount);
-    stats += stat("📤 التسليمات", submissionsCount);
+    stats += stat("المجموعات", squadsCount);
+    stats += stat("الطلاب", studentsCount);
+    stats += stat("التسليمات", submissionsCount);
     stats += `</div>`;
 
     const activity = (recent||[]).map(a=>`

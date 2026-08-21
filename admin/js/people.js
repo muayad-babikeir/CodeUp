@@ -1,7 +1,7 @@
 // admin/js/people.js
 
 Admin.sections.users = {
-  label: "المستخدمون", icon: "👤",
+  label: "المستخدمون",
   async render(body){
     const { data: profiles } = await db.from("profiles").select("*").order("created_at",{ascending:false}).limit(200);
     body.innerHTML = `
@@ -35,7 +35,7 @@ Admin.sections.users = {
 };
 
 Admin.sections.squads = {
-  label: "المجموعات", icon: "👥",
+  label: "المجموعات",
   async render(body){
     const cid = Admin.currentCourseId;
     if(!cid){ body.innerHTML = `<div class="emptyState">اختر كورسًا أولًا.</div>`; return; }
@@ -49,7 +49,7 @@ Admin.sections.squads = {
       <div class="card"><table><thead><tr><th>المجموعة</th><th>القادة</th><th>الأعضاء</th><th>السعة</th><th>الحالة</th><th></th></tr></thead>
       <tbody>${(squads||[]).map(sq=>`
         <tr>
-          <td>${sq.emoji||"🏆"} ${CodeUp.escapeHtml(sq.name)}</td>
+          <td>${CodeUp.escapeHtml(sq.name)}</td>
           <td>${(sq.squad_leaders||[]).map(l=>CodeUp.escapeHtml(l.profiles?.full_name||"")).join("، ")||"—"}</td>
           <td>${memberCount[sq.id]||0}</td>
           <td>${sq.capacity??"—"}</td>
@@ -70,7 +70,6 @@ function openSquadModal(courseId, squad){
   const m = Admin.modal(`
     <h3>${isEdit?"تعديل المجموعة":"مجموعة جديدة"}</h3>
     <label>الاسم</label><input id="sqName" value="${squad?CodeUp.escapeHtml(squad.name):""}">
-    <label>الإيموجي</label><input id="sqEmoji" value="${squad?CodeUp.escapeHtml(squad.emoji||"🏆"):"🏆"}">
     <label>الوصف</label><textarea id="sqDesc" rows="2">${squad?CodeUp.escapeHtml(squad.description||""):""}</textarea>
     <label>السعة (اختياري)</label><input id="sqCap" type="number" min="1" value="${squad?.capacity??""}">
     <label>الحالة</label>
@@ -84,7 +83,6 @@ function openSquadModal(courseId, squad){
     const msgEl = m.el.querySelector("#sqMsg");
     const payload = {
       name: m.el.querySelector("#sqName").value.trim(),
-      emoji: m.el.querySelector("#sqEmoji").value.trim() || "🏆",
       description: m.el.querySelector("#sqDesc").value.trim(),
       capacity: m.el.querySelector("#sqCap").value ? Number(m.el.querySelector("#sqCap").value) : null,
       status: m.el.querySelector("#sqStatus").value
@@ -99,7 +97,7 @@ function openSquadModal(courseId, squad){
 }
 
 Admin.sections.leaders = {
-  label: "القادة", icon: "👑",
+  label: "القادة",
   async render(body){
     const cid = Admin.currentCourseId;
     const { data: leaders } = await db.from("squad_leaders").select("*, profiles(full_name,email), squads!inner(name,course_id)").eq("squads.course_id", cid);

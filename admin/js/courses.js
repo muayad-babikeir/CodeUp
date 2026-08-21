@@ -1,7 +1,7 @@
 // admin/js/courses.js
 
 Admin.sections.courses = {
-  label: "الكورسات", icon: "📚",
+  label: "الكورسات",
   async render(body){
     const { data: courses } = await db.from("courses").select("*").order("created_at",{ascending:false});
     body.innerHTML = `
@@ -64,7 +64,7 @@ function openCourseModal(course){
 }
 
 Admin.sections.course_admins = {
-  label: "أدمن الكورسات", icon: "🛡️",
+  label: "أدمن الكورسات",
   async render(body){
     const [{data: admins}, {data: profiles}] = await Promise.all([
       db.from("course_admins").select("*, courses(name), profiles(full_name,email)").order("created_at",{ascending:false}),
@@ -120,7 +120,7 @@ Admin.sections.course_admins = {
 };
 
 Admin.sections.settings = {
-  label: "إعدادات الكورس", icon: "⚙️",
+  label: "إعدادات الكورس",
   async render(body){
     const { data: course } = await db.from("courses").select("*").eq("id", Admin.currentCourseId).single();
     if(!course){ body.innerHTML = `<div class="emptyState">اختر كورسًا أولًا.</div>`; return; }
@@ -148,7 +148,7 @@ Admin.sections.settings = {
 };
 
 Admin.sections.progress = {
-  label: "التقدم", icon: "📈",
+  label: "التقدم",
   async render(body){
     const { data } = await db.from("enrollments").select("*, profiles(full_name,email), squads(name)").eq("course_id", Admin.currentCourseId).order("xp",{ascending:false});
     body.innerHTML = `<div class="card"><table><thead><tr><th>الطالب</th><th>المجموعة</th><th>الحالة</th><th>التقدم</th><th>XP</th><th>Streak</th></tr></thead>
