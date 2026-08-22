@@ -4,9 +4,10 @@ Admin.sections.join_requests = {
   label: "طلبات الانضمام",
   async render(body){
     const cid = Admin.currentCourseId;
-    const { data } = await db.from("squad_join_requests")
-      .select("*, profiles(full_name,email), squads!inner(name,course_id)")
+    const { data, error } = await db.from("squad_join_requests")
+      .select("*, profiles!user_id(full_name,email), squads!inner(name,course_id)")
       .eq("squads.course_id", cid).order("created_at",{ascending:false});
+    if(error){ body.innerHTML = `<div class="emptyState">تعذّر تحميل طلبات الانضمام: ${CodeUp.escapeHtml(error.message)}</div>`; return; }
     renderRequestQueue(body, data||[], {
       title: (r)=> `${CodeUp.escapeHtml(r.profiles?.full_name||r.profiles?.email||"")} → ${CodeUp.escapeHtml(r.squads?.name||"")}`,
       subtitle: (r)=> r.message ? CodeUp.escapeHtml(r.message) : "بدون رسالة",
@@ -21,9 +22,10 @@ Admin.sections.leader_applications = {
   label: "طلبات القيادة",
   async render(body){
     const cid = Admin.currentCourseId;
-    const { data } = await db.from("leader_applications")
-      .select("*, profiles(full_name,email)")
+    const { data, error } = await db.from("leader_applications")
+      .select("*, profiles!user_id(full_name,email)")
       .eq("course_id", cid).order("created_at",{ascending:false});
+    if(error){ body.innerHTML = `<div class="emptyState">تعذّر تحميل طلبات القيادة: ${CodeUp.escapeHtml(error.message)}</div>`; return; }
     const { data: squads } = await db.from("squads").select("id,name").eq("course_id", cid).eq("status","active");
 
     renderRequestQueue(body, data||[], {
@@ -101,7 +103,7 @@ function renderRequestQueue(body, items, opts){
         <textarea id="rejReason" rows="3" placeholder="اكتب سببًا واضحًا…"></textarea>
         <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
           <button class="btn" id="rCancel">إلغاء</button><button class="btn danger" id="rOk">تأكيد الرفض</button>
-        </div><div id="rMsg" class="emptyState" style="display:none;padding:8px;color:#b42318"></div>`);
+        </div><div id="rMsg" class="emptyState" style="display:none;padding:8px;color:#F2555F"></div>`);
       m.el.querySelector("#rCancel").onclick = m.close;
       m.el.querySelector("#rOk").onclick = async ()=>{
         const reason = m.el.querySelector("#rejReason").value.trim();

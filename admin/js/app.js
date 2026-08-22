@@ -68,7 +68,7 @@ const Admin = {
   async openNotifications(){
     const {data} = await db.from("notifications").select("*").eq("profile_id", this.ctx.user.id).order("created_at",{ascending:false}).limit(20);
     const list = (data||[]).map(n=>`
-      <div class="card" style="${n.is_read?'':'background:#F7F7FF'}">
+      <div class="card" style="${n.is_read?'':'background:rgba(138,111,201,.14)'}">
         <div style="display:flex;justify-content:space-between;gap:8px"><b style="font-size:13.5px">${CodeUp.escapeHtml(n.title)}</b><span class="who">${CodeUp.timeAgo(n.created_at)}</span></div>
         <div class="who" style="margin-top:6px">${CodeUp.escapeHtml(n.body||"")}</div>
       </div>`).join("") || `<div class="emptyState">لا توجد إشعارات بعد.</div>`;
@@ -126,10 +126,7 @@ const Admin = {
         {group:"الكورس", items:["dashboard","content","squads","join_requests","leader_applications","assignments","submissions","timeline","announcements","progress","files","settings"]}
       ];
     }
-    // leader
-    return [
-      {group:"مجموعتي", items:["myszquad_placeholder"]} // مُستبدلة أدناه بـ mysquad أدوات
-    ];
+    // leader — القائمة الفعلية للقائد تُبنى عبر leaderNavHtml() وليس هنا
   },
 
   async renderNav(){

@@ -34,7 +34,7 @@ function openAssignmentModal(courseId, a){
     <label>الموعد النهائي</label><input id="aDeadline" type="date" value="${a?.deadline||""}">
     <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
       <button class="btn" id="aCancel">إلغاء</button><button class="btn dark" id="aSave">حفظ</button>
-    </div><div id="aMsg" class="emptyState" style="display:none;padding:8px;color:#b42318"></div>
+    </div><div id="aMsg" class="emptyState" style="display:none;padding:8px;color:#F2555F"></div>
   `);
   m.el.querySelector("#aCancel").onclick = m.close;
   m.el.querySelector("#aSave").onclick = async ()=>{

@@ -61,7 +61,8 @@ async function renderLeaderSection(section, body){
   }
 
   if(section==="ljoin"){
-    const { data } = await db.from("squad_join_requests").select("*, profiles(full_name,email)").eq("squad_id", squadId).order("created_at",{ascending:false});
+    const { data, error } = await db.from("squad_join_requests").select("*, profiles!user_id(full_name,email)").eq("squad_id", squadId).order("created_at",{ascending:false});
+    if(error){ body.innerHTML = `<div class="emptyState">تعذّر تحميل طلبات الانضمام: ${CodeUp.escapeHtml(error.message)}</div>`; return; }
     renderRequestQueue(body, data||[], {
       title:(r)=>CodeUp.escapeHtml(r.profiles?.full_name||r.profiles?.email||""),
       subtitle:(r)=> r.message?CodeUp.escapeHtml(r.message):"بدون رسالة",

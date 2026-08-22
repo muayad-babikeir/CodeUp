@@ -76,7 +76,7 @@ function openSquadModal(courseId, squad){
     <select id="sqStatus"><option value="active" ${!squad||squad.status==='active'?'selected':''}>نشطة</option><option value="archived" ${squad?.status==='archived'?'selected':''}>مؤرشفة</option></select>
     <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
       <button class="btn" id="sqCancel">إلغاء</button><button class="btn dark" id="sqSave">حفظ</button>
-    </div><div id="sqMsg" class="emptyState" style="display:none;padding:8px;color:#b42318"></div>
+    </div><div id="sqMsg" class="emptyState" style="display:none;padding:8px;color:#F2555F"></div>
   `);
   m.el.querySelector("#sqCancel").onclick = m.close;
   m.el.querySelector("#sqSave").onclick = async ()=>{

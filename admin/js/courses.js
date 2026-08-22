@@ -25,6 +25,7 @@ Admin.sections.courses = {
 };
 
 function courseStatusLabel(s){ return {published:"منشور",draft:"مسودة",archived:"مؤرشف"}[s]||s; }
+function enrollmentStatusLabel(s){ return {on_track:"على المسار",at_risk:"في خطر",behind:"متأخر",inactive:"غير نشط"}[s]||s; }
 
 function openCourseModal(course){
   const isEdit = !!course;
@@ -43,7 +44,7 @@ function openCourseModal(course){
       <button class="btn" id="cCancel">إلغاء</button>
       <button class="btn dark" id="cSave">حفظ</button>
     </div>
-    <div id="cMsg" class="emptyState" style="display:none;padding:8px;color:#b42318"></div>
+    <div id="cMsg" class="emptyState" style="display:none;padding:8px;color:#F2555F"></div>
   `);
   m.el.querySelector("#cCancel").onclick = m.close;
   m.el.querySelector("#cSave").onclick = async ()=>{
@@ -93,7 +94,7 @@ Admin.sections.course_admins = {
         <select id="acRole"><option value="admin">أدمن</option><option value="owner">مالك</option></select>
         <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
           <button class="btn" id="acCancel">إلغاء</button><button class="btn dark" id="acSave">تعيين</button>
-        </div><div id="acMsg" class="emptyState" style="display:none;padding:8px;color:#b42318"></div>
+        </div><div id="acMsg" class="emptyState" style="display:none;padding:8px;color:#F2555F"></div>
       `);
       m.el.querySelector("#acCancel").onclick = m.close;
       m.el.querySelector("#acSave").onclick = async ()=>{
@@ -157,7 +158,7 @@ Admin.sections.progress = {
         <tr>
           <td>${CodeUp.escapeHtml(e.profiles?.full_name||e.profiles?.email||"")}</td>
           <td>${CodeUp.escapeHtml(e.squads?.name||"—")}</td>
-          <td><span class="pill ${e.status==='on_track'?'approved':e.status==='behind'?'rejected':'pending'}">${e.status}</span></td>
+          <td><span class="pill ${e.status==='on_track'?'approved':e.status==='behind'?'rejected':'pending'}">${enrollmentStatusLabel(e.status)}</span></td>
           <td>${e.progress}%</td><td>${e.xp}</td><td>${e.streak}</td>
         </tr>`).join("") || `<tr><td colspan="6" class="emptyState">لا يوجد طلاب مسجلون بعد.</td></tr>`}
       </tbody></table></div>`;

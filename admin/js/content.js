@@ -74,7 +74,7 @@ function openUnitModal(courseId, unit){
     <label>الترتيب</label><input id="uOrder" type="number" value="${unit?.order_index??0}">
     <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
       <button class="btn" id="uCancel">إلغاء</button><button class="btn dark" id="uSave">حفظ</button>
-    </div><div id="uMsg" class="emptyState" style="display:none;padding:8px;color:#b42318"></div>
+    </div><div id="uMsg" class="emptyState" style="display:none;padding:8px;color:#F2555F"></div>
   `);
   m.el.querySelector("#uCancel").onclick = m.close;
   m.el.querySelector("#uSave").onclick = async ()=>{
@@ -98,7 +98,7 @@ function openLessonModal(unitId, lesson){
     <label>الترتيب</label><input id="lOrder" type="number" value="${lesson?.order_index??0}">
     <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
       <button class="btn" id="lCancel">إلغاء</button><button class="btn dark" id="lSave">حفظ</button>
-    </div><div id="lMsg" class="emptyState" style="display:none;padding:8px;color:#b42318"></div>
+    </div><div id="lMsg" class="emptyState" style="display:none;padding:8px;color:#F2555F"></div>
   `);
   m.el.querySelector("#lCancel").onclick = m.close;
   m.el.querySelector("#lSave").onclick = async ()=>{
