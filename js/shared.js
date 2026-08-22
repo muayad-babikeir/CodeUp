@@ -109,7 +109,10 @@ const CodeUp = (() => {
     rejectLeaderApplication: (appId, reason) => call("reject_leader_application", { p_application_id: appId, p_reason: reason }),
 
     addComment: (submissionId, content, parentId) => call("add_comment", { p_submission_id: submissionId, p_content: content, p_parent_id: parentId || null }),
-    toggleReaction: (targetType, targetId, reactionType) => call("toggle_reaction", { p_target_type: targetType, p_target_id: targetId, p_reaction_type: reactionType || "like" })
+    toggleReaction: (targetType, targetId, reactionType) => call("toggle_reaction", { p_target_type: targetType, p_target_id: targetId, p_reaction_type: reactionType || "like" }),
+
+    reviewSubmission: (submissionId, grade, notes) => call("review_submission", { p_submission_id: submissionId, p_grade: grade, p_notes: notes || null }),
+    createAnnouncement: (courseId, title, content) => call("create_announcement", { p_course_id: courseId, p_title: title, p_content: content || null })
   };
 
   // ---------- Storage helpers ----------
@@ -127,5 +130,16 @@ const CodeUp = (() => {
     return data.signedUrl;
   }
 
-  return { toast, escapeHtml, timeAgo, formatDate, debounce, requireSession, loadMyContext, rpc, call, uploadSubmissionFile, getSignedUrl };
+  // ---------- Realtime ----------
+  // يعتمد على أن جدول notifications محمي بـ RLS (select: profile_id = auth.uid()),
+  // فالاشتراك آمن بشكل افتراضي — المستخدم لا يستقبل إلا إشعاراته هو.
+  function subscribeToMyNotifications(userId, onInsert) {
+    return db.channel("notif-" + userId)
+      .on("postgres_changes",
+        { event: "INSERT", schema: "public", table: "notifications", filter: `profile_id=eq.${userId}` },
+        (payload) => onInsert(payload.new))
+      .subscribe();
+  }
+
+  return { toast, escapeHtml, timeAgo, formatDate, debounce, requireSession, loadMyContext, rpc, call, uploadSubmissionFile, getSignedUrl, subscribeToMyNotifications };
 })();

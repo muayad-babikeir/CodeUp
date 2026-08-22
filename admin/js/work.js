@@ -119,11 +119,14 @@ async function openReviewModal(sub){
     </div>`);
   m.el.querySelector("#rCancel").onclick = m.close;
   m.el.querySelector("#rSave").onclick = async ()=>{
-    await db.from("submissions").update({
-      grade: m.el.querySelector("#rGrade").value ? Number(m.el.querySelector("#rGrade").value) : null,
-      reviewer_notes: m.el.querySelector("#rNotes").value.trim(),
-      status: "reviewed", reviewed_at: new Date().toISOString()
-    }).eq("id", sub.id);
-    CodeUp.toast("تم حفظ المراجعة", "success"); m.close(); Admin.go("submissions");
+    const saveBtn = m.el.querySelector("#rSave");
+    saveBtn.disabled = true;
+    try{
+      const gradeVal = m.el.querySelector("#rGrade").value;
+      await CodeUp.rpc.reviewSubmission(sub.id, gradeVal ? Number(gradeVal) : null, m.el.querySelector("#rNotes").value.trim());
+      CodeUp.toast("تم حفظ المراجعة", "success"); m.close(); Admin.go("submissions");
+    }catch(e){
+      CodeUp.toast(e.message || "تعذّر حفظ المراجعة", "error"); saveBtn.disabled = false;
+    }
   };
 }

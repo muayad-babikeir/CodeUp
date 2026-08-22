@@ -67,7 +67,7 @@ async function renderLeaderSection(section, body){
       subtitle:(r)=> r.message?CodeUp.escapeHtml(r.message):"بدون رسالة",
       onApprove: async (r)=> CodeUp.rpc.approveJoinRequest(r.id),
       onReject: async (r, reason)=> CodeUp.rpc.rejectJoinRequest(r.id, reason),
-      afterAction: ()=> Admin.go("ljoin")
+      afterAction: ()=>{ Admin.renderNav(); Admin.go("ljoin"); }
     });
     return;
   }
@@ -90,7 +90,10 @@ async function renderLeaderSection(section, body){
   }
 
   if(section==="ltimeline"){
-    const { data } = await db.from("submissions").select("*, profiles(full_name)").eq("visibility","squad").order("created_at",{ascending:false}).limit(30);
+    const { data: members } = await db.from("enrollments").select("profile_id").eq("squad_id", squadId);
+    const memberIds = (members||[]).map(m=>m.profile_id);
+    if(!memberIds.length){ body.innerHTML = `<div class="emptyState">لا يوجد أعضاء بعد.</div>`; return; }
+    const { data } = await db.from("submissions").select("*, profiles(full_name)").eq("visibility","squad").in("profile_id", memberIds).order("created_at",{ascending:false}).limit(30);
     body.innerHTML = `<div class="card">${(data||[]).map(p=>`<div style="padding:8px 0;border-top:1px dashed #eee"><b>${CodeUp.escapeHtml(p.profiles?.full_name||"")}</b> — ${CodeUp.escapeHtml(p.content||"")}</div>`).join("")||`<div class="emptyState">لا توجد منشورات بعد.</div>`}</div>`;
     return;
   }

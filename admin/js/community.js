@@ -23,7 +23,8 @@ Admin.sections.timeline = {
     body.querySelectorAll("[data-hide]").forEach(b=>{
       b.onclick = async ()=>{
         if(!confirm("سيتم إخفاء هذا المنشور من المستجدات (لن يُحذف التسليم نفسه). متابعة؟")) return;
-        await db.from("submissions").update({ visibility: "private" }).eq("id", b.dataset.hide);
+        const { error } = await db.from("submissions").update({ visibility: "private" }).eq("id", b.dataset.hide);
+        if(error){ CodeUp.toast(error.message, "error"); return; }
         Admin.go("timeline");
       };
     });
@@ -47,7 +48,8 @@ Admin.sections.moderation = {
     body.querySelectorAll("[data-del]").forEach(b=>{
       b.onclick = async ()=>{
         if(!confirm("تأكيد حذف هذا التعليق؟")) return;
-        await db.from("comments").delete().eq("id", b.dataset.del);
+        const { error } = await db.from("comments").delete().eq("id", b.dataset.del);
+        if(error){ CodeUp.toast(error.message, "error"); return; }
         Admin.go("moderation");
       };
     });
@@ -78,11 +80,14 @@ Admin.sections.announcements = {
       m.el.querySelector("#anSave").onclick = async ()=>{
         const title = m.el.querySelector("#anTitle").value.trim();
         if(!title) return;
-        await db.from("announcements").insert({
-          course_id: cid, title, content: m.el.querySelector("#anContent").value.trim(),
-          type: "general", created_by: Admin.ctx.user.id
-        });
-        CodeUp.toast("تم النشر", "success"); m.close(); Admin.go("announcements");
+        const saveBtn = m.el.querySelector("#anSave");
+        saveBtn.disabled = true;
+        try{
+          await CodeUp.rpc.createAnnouncement(cid, title, m.el.querySelector("#anContent").value.trim());
+          CodeUp.toast("تم النشر", "success"); m.close(); Admin.go("announcements");
+        }catch(e){
+          CodeUp.toast(e.message || "تعذّر نشر الإعلان", "error"); saveBtn.disabled = false;
+        }
       };
     };
   }

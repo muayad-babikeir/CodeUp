@@ -12,7 +12,7 @@ Admin.sections.join_requests = {
       subtitle: (r)=> r.message ? CodeUp.escapeHtml(r.message) : "بدون رسالة",
       onApprove: async (r)=> CodeUp.rpc.approveJoinRequest(r.id),
       onReject: async (r, reason)=> CodeUp.rpc.rejectJoinRequest(r.id, reason),
-      afterAction: ()=> Admin.go("join_requests")
+      afterAction: ()=>{ Admin.renderNav(); Admin.go("join_requests"); }
     });
   }
 };
@@ -35,7 +35,7 @@ Admin.sections.leader_applications = {
         return CodeUp.rpc.approveLeaderApplication(r.id, squadId);
       },
       onReject: async (r, reason)=> CodeUp.rpc.rejectLeaderApplication(r.id, reason),
-      afterAction: ()=> Admin.go("leader_applications")
+      afterAction: ()=>{ Admin.renderNav(); Admin.go("leader_applications"); }
     });
   }
 };

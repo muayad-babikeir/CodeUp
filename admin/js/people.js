@@ -112,7 +112,8 @@ Admin.sections.leaders = {
     body.querySelectorAll("[data-remove]").forEach(b=>{
       b.onclick = async ()=>{
         if(!confirm("تأكيد إزالة صلاحية القيادة؟")) return;
-        await db.from("squad_leaders").delete().eq("id", b.dataset.remove);
+        const { error } = await db.from("squad_leaders").delete().eq("id", b.dataset.remove);
+        if(error){ CodeUp.toast(error.message, "error"); return; }
         Admin.go("leaders");
       };
     });

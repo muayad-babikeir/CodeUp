@@ -195,6 +195,7 @@ const App = {
     document.getElementById("crumbHome").onclick = ()=>{this.go({name:"home"})};
     document.getElementById("notifBtn").onclick = ()=>this.openNotifications();
     this.refreshNotifBadge();
+    CodeUp.subscribeToMyNotifications(user.id, (n)=>{ this.refreshNotifBadge(); CodeUp.toast(n.title, "info"); });
     this.go({name:"home"});
   },
 
@@ -434,7 +435,7 @@ const App = {
 
     const list = body.querySelector("#timelineList");
     const load = async (filter)=>{
-      let q = db.from("submissions").select("*, assignments(title,course_id), profiles(full_name,avatar_url)")
+      let q = db.from("submissions").select("*, assignments!inner(title,course_id), profiles(full_name,avatar_url)")
         .eq("assignments.course_id", course.id).order("created_at",{ascending:false}).limit(30);
       if(filter==="mine") q = q.eq("profile_id", this.ctx.user.id);
       else if(filter==="squad") q = q.eq("visibility","squad");

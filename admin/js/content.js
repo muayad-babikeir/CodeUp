@@ -42,7 +42,8 @@ Admin.sections.content = {
     body.querySelectorAll("[data-delunit]").forEach(b=>{
       b.onclick = async ()=>{
         if(!confirm("سيتم حذف الوحدة وكل دروسها. متابعة؟")) return;
-        await db.from("units").delete().eq("id", b.dataset.delunit);
+        const { error } = await db.from("units").delete().eq("id", b.dataset.delunit);
+        if(error){ CodeUp.toast(error.message, "error"); return; }
         Admin.go("content");
       };
     });
@@ -57,7 +58,8 @@ Admin.sections.content = {
     body.querySelectorAll("[data-dellesson]").forEach(b=>{
       b.onclick = async ()=>{
         if(!confirm("تأكيد حذف هذا الدرس؟")) return;
-        await db.from("lessons").delete().eq("id", b.dataset.dellesson);
+        const { error } = await db.from("lessons").delete().eq("id", b.dataset.dellesson);
+        if(error){ CodeUp.toast(error.message, "error"); return; }
         Admin.go("content");
       };
     });

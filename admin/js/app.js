@@ -48,10 +48,61 @@ const Admin = {
       `${this.ctx.profile.full_name || this.ctx.user.email} — ${roleLabel(this.role)}`;
     document.getElementById("backToApp").href = "../index.html";
     document.getElementById("signOut").onclick = async (e)=>{ e.preventDefault(); await db.auth.signOut(); window.location.href="../index.html"; };
+    document.getElementById("notifBtn").onclick = ()=>this.openNotifications();
+    this.refreshNotifBadge();
+    CodeUp.subscribeToMyNotifications(this.ctx.user.id, (n)=>{ this.refreshNotifBadge(); CodeUp.toast(n.title, "info"); });
 
     await this.loadAccessibleCourses();
-    this.renderNav();
+    await this.renderNav();
     this.go(this.role === "leader" ? "mysquad" : "dashboard");
+  },
+
+  async refreshNotifBadge(){
+    const {count} = await db.from("notifications").select("id",{count:"exact",head:true}).eq("profile_id", this.ctx.user.id).eq("is_read", false);
+    const badge = document.getElementById("notifBadge");
+    if(!badge) return;
+    if(count>0){ badge.textContent = count>9?"9+":count; badge.classList.remove("hidden"); }
+    else badge.classList.add("hidden");
+  },
+
+  async openNotifications(){
+    const {data} = await db.from("notifications").select("*").eq("profile_id", this.ctx.user.id).order("created_at",{ascending:false}).limit(20);
+    const list = (data||[]).map(n=>`
+      <div class="card" style="${n.is_read?'':'background:#F7F7FF'}">
+        <div style="display:flex;justify-content:space-between;gap:8px"><b style="font-size:13.5px">${CodeUp.escapeHtml(n.title)}</b><span class="who">${CodeUp.timeAgo(n.created_at)}</span></div>
+        <div class="who" style="margin-top:6px">${CodeUp.escapeHtml(n.body||"")}</div>
+      </div>`).join("") || `<div class="emptyState">لا توجد إشعارات بعد.</div>`;
+    const m = this.modal(`<h3>الإشعارات</h3><div>${list}</div><div style="margin-top:16px;text-align:end"><button class="btn" id="notifCloseBtn">إغلاق</button></div>`);
+    m.el.querySelector("#notifCloseBtn").onclick = async ()=>{
+      const ids = (data||[]).filter(n=>!n.is_read).map(n=>n.id);
+      if(ids.length) await db.from("notifications").update({is_read:true}).in("id", ids);
+      this.refreshNotifBadge();
+      m.close();
+    };
+  },
+
+  // عدد الطلبات المعلّقة ذات الصلة بالقسم الحالي المختار (كورس/مجموعة)،
+  // يُستخدم كـ badge بجانب اسم القسم بالقائمة الجانبية.
+  async pendingCounts(){
+    const counts = {};
+    if(this.role === "leader"){
+      const mySquads = this.ctx.leaderSquads.map(s=>s.squad_id);
+      const squadId = this.currentSquadId || mySquads[0];
+      if(squadId){
+        const {count} = await db.from("squad_join_requests").select("id",{count:"exact",head:true}).eq("squad_id", squadId).eq("status","pending");
+        counts.ljoin = count || 0;
+      }
+      return counts;
+    }
+    const cid = this.currentCourseId;
+    if(!cid) return counts;
+    const [{count:jr},{count:la}] = await Promise.all([
+      db.from("squad_join_requests").select("id, squads!inner(course_id)",{count:"exact",head:true}).eq("squads.course_id", cid).eq("status","pending"),
+      db.from("leader_applications").select("id",{count:"exact",head:true}).eq("course_id", cid).eq("status","pending")
+    ]);
+    counts.join_requests = jr || 0;
+    counts.leader_applications = la || 0;
+    return counts;
   },
 
   async loadAccessibleCourses(){
@@ -81,10 +132,11 @@ const Admin = {
     ];
   },
 
-  renderNav(){
+  async renderNav(){
     const root = document.getElementById("navRoot");
+    const counts = await this.pendingCounts();
     if(this.role === "leader"){
-      root.innerHTML = leaderNavHtml();
+      root.innerHTML = leaderNavHtml(counts);
       root.querySelectorAll(".navItem").forEach(el=>el.onclick=()=>this.go(el.dataset.section));
       return;
     }
@@ -101,13 +153,14 @@ const Admin = {
       group.items.forEach(key=>{
         const s = this.sections[key];
         if(!s) return;
-        html += `<div class="navItem" data-section="${key}"><span>${s.label}</span></div>`;
+        const badge = counts[key] ? `<span class="navBadge">${counts[key]}</span>` : "";
+        html += `<div class="navItem" data-section="${key}"><span>${s.label}</span>${badge}</div>`;
       });
       html += `</div>`;
     });
     root.innerHTML = html;
     const switcher = document.getElementById("courseSwitcher");
-    if(switcher) switcher.onchange = ()=>{ this.currentCourseId = switcher.value; this.go(this.section); };
+    if(switcher) switcher.onchange = async ()=>{ this.currentCourseId = switcher.value; await this.renderNav(); this.go(this.section); };
     root.querySelectorAll(".navItem").forEach(el=>el.onclick=()=>this.go(el.dataset.section));
   },
 
@@ -118,7 +171,12 @@ const Admin = {
     body.innerHTML = `<div class="emptyState">جارِ التحميل…</div>`;
 
     if(this.role === "leader"){
-      return renderLeaderSection(sectionKey, body);
+      try{
+        await renderLeaderSection(sectionKey, body);
+      }catch(e){
+        body.innerHTML = `<div class="emptyState">حدث خطأ: ${CodeUp.escapeHtml(e.message||String(e))}</div>`;
+      }
+      return;
     }
 
     const s = this.sections[sectionKey];
@@ -143,13 +201,16 @@ const Admin = {
 
 function roleLabel(r){ return {super:"سوبر أدمن", course_admin:"أدمن كورس", leader:"قائد مجموعة"}[r]||r; }
 
-function leaderNavHtml(){
+function leaderNavHtml(counts={}){
   const items = [
     ["mysquad","مجموعتي"],["members","الأعضاء"],["ljoin","طلبات الانضمام"],
     ["lassignments","الواجبات"],["lsubmissions","التسليمات"],["ltimeline","المستجدات"],
     ["lactivity","النشاط"],["lprogress","التقدم"]
   ];
   return `<div class="navGroup"><div class="navLabel">مجموعتي</div>` +
-    items.map(([k,l])=>`<div class="navItem" data-section="${k}"><span>${l}</span></div>`).join("") +
+    items.map(([k,l])=>{
+      const badge = counts[k] ? `<span class="navBadge">${counts[k]}</span>` : "";
+      return `<div class="navItem" data-section="${k}"><span>${l}</span>${badge}</div>`;
+    }).join("") +
     `</div>`;
 }

@@ -112,7 +112,8 @@ Admin.sections.course_admins = {
     body.querySelectorAll("[data-remove]").forEach(b=>{
       b.onclick = async ()=>{
         if(!confirm("تأكيد إزالة صلاحية الإدارة؟")) return;
-        await db.from("course_admins").delete().eq("id", b.dataset.remove);
+        const { error } = await db.from("course_admins").delete().eq("id", b.dataset.remove);
+        if(error){ CodeUp.toast(error.message, "error"); return; }
         Admin.go("course_admins");
       };
     });
