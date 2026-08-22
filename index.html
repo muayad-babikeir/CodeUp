@@ -11,39 +11,38 @@
 /* ===== CodeUp — نظام تصميم داكن مستوحى من لوحات ألوان @graphix_theory =====
    Onyx (خلفية) + Candy Blue (أساسي) + Lime (XP/نجاح) + Violet (ثانوي/قيادة) */
 :root{
-  --bg0:#020204; --bg1:#0B0C10; --bg2:#131620;
-  --ink:#F3F5FA; --ink60:#9AA0B4; --ink40:#666C82;
-  --line:rgba(255,255,255,.09); --line-strong:rgba(255,255,255,.16);
-  --surface:rgba(255,255,255,.045); --surface-solid:#111319;
-  --accent:#B7D8EC; --accent-ink:#0B0C10; --accent-deep:#3E7CA6;
-  --lime:#C6FF34; --lime-ink:#131A02;
-  --violet:#8A6FC9; --violet-soft:rgba(138,111,201,.16);
-  --teal:#79D6C4; --amber:#F0B429; --red:#F2555F;
+  --bg0:#000000; --bg1:#0A0A0A; --bg2:#121212;
+  --ink:#FFFFFF; --ink60:#A6A6A6; --ink40:#6B6B6B;
+  --line:rgba(255,255,255,.12); --line-strong:rgba(255,255,255,.22);
+  --surface:rgba(255,255,255,.05); --surface-solid:#111111;
+  --accent:#FFFFFF; --accent-ink:#000000; --accent-deep:#C9C9C9;
+  --green:#3DD16F; --green-ink:#06210F; --green-soft:rgba(61,209,111,.14);
+  --red:#F2555F; --red-soft:rgba(242,85,95,.14);
   --blur:blur(22px);
-  --shadow:0 24px 60px -24px rgba(0,0,0,.65);
+  --shadow:0 24px 60px -24px rgba(0,0,0,.8);
 }
 *{box-sizing:border-box; min-width:0}
 body{
   margin:0;font-family:'IBM Plex Sans Arabic',system-ui,sans-serif;color:var(--ink);line-height:1.55;
   background:
-    radial-gradient(900px 500px at 15% -10%, rgba(183,216,236,.10), transparent 60%),
-    radial-gradient(700px 500px at 110% 10%, rgba(138,111,201,.14), transparent 55%),
-    radial-gradient(600px 420px at 50% 120%, rgba(198,255,52,.06), transparent 60%),
+    radial-gradient(900px 500px at 15% -10%, rgba(255,255,255,.06), transparent 60%),
+    radial-gradient(700px 500px at 110% 10%, rgba(255,255,255,.04), transparent 55%),
     var(--bg0);
   background-attachment:fixed;
 }
 .mono{font-family:'IBM Plex Mono',monospace}
 .tag{display:inline-flex;align-items:center;gap:4px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-weight:500;letter-spacing:.02em;padding:3px 9px;border-radius:7px;border:1px solid var(--line);color:var(--ink60);background:rgba(255,255,255,.03);white-space:nowrap}
-.tag.on_track,.tag.active,.tag.approved{background:rgba(198,255,52,.1);color:var(--lime);border-color:rgba(198,255,52,.28)}
-.tag.at_risk,.tag.pending{background:rgba(240,180,41,.1);color:var(--amber);border-color:rgba(240,180,41,.28)}
-.tag.behind,.tag.rejected{background:rgba(242,85,95,.1);color:var(--red);border-color:rgba(242,85,95,.28)}
+.tag.on_track,.tag.active,.tag.approved,.tag.reviewed{background:var(--green-soft);color:var(--green);border-color:rgba(61,209,111,.35)}
+.tag.at_risk,.tag.pending{background:rgba(255,255,255,.06);color:var(--ink);border-color:var(--line-strong)}
+.tag.behind,.tag.rejected,.tag.late{background:var(--red-soft);color:var(--red);border-color:rgba(242,85,95,.35)}
 .tag.inactive,.tag.missing{background:rgba(255,255,255,.04);color:var(--ink60);border-color:var(--line)}
-.eyebrow{font-family:'IBM Plex Mono',monospace;font-size:11.5px;letter-spacing:.06em;color:var(--accent);text-transform:uppercase}
+.eyebrow{font-family:'IBM Plex Mono',monospace;font-size:11.5px;letter-spacing:.06em;color:var(--ink);text-transform:uppercase}
 .eyebrow::before{content:"> ";color:var(--ink40)}
 .app{min-height:100vh;display:grid;place-items:center;padding:18px}
 .card{width:min(440px,100%);background:var(--surface);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);border-radius:24px;padding:32px;box-shadow:var(--shadow)}
 .brand{text-align:center;margin-bottom:26px}
-.brand .mark{width:52px;height:52px;border-radius:16px;background:linear-gradient(155deg,var(--accent),var(--violet));color:var(--accent-ink);display:grid;place-items:center;margin:0 auto 14px;font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:19px}
+.brand .mark{width:52px;height:52px;border-radius:16px;background:linear-gradient(155deg,var(--accent),var(--accent-deep));color:var(--accent-ink);display:grid;place-items:center;margin:0 auto 14px;font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:19px;overflow:hidden}
+.brand .mark img{width:68%;height:68%;object-fit:contain}
 .brand h1{margin:0 0 4px;font-size:26px;font-weight:700;letter-spacing:-.02em}
 .brand p{margin:0;color:var(--ink60);font-size:14px}
 .tabs{display:grid;grid-template-columns:1fr 1fr;background:rgba(255,255,255,.04);padding:4px;border-radius:12px;margin-bottom:22px;border:1px solid var(--line)}
@@ -52,12 +51,12 @@ body{
 label{display:block;font-size:13px;font-weight:600;margin:14px 0 6px;color:var(--ink)}
 input,textarea,select{width:100%;padding:12px 14px;border:1px solid var(--line);border-radius:11px;outline:0;font-family:inherit;font-size:14px;background:rgba(255,255,255,.03);color:var(--ink)}
 input::placeholder,textarea::placeholder{color:var(--ink40)}
-input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(183,216,236,.15)}
+input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(255,255,255,.12)}
 .primary{width:100%;border:0;border-radius:12px;padding:13px;margin-top:20px;background:linear-gradient(135deg,var(--accent),var(--accent-deep));color:var(--accent-ink);font-weight:700;font-family:inherit;font-size:14.5px;cursor:pointer}
 .primary:hover{filter:brightness(1.08)}
 .primary:disabled{opacity:.6;cursor:not-allowed}
 .message{display:none;margin-top:14px;padding:11px 13px;border-radius:10px;font-size:13.5px;line-height:1.6}
-.message.show{display:block}.message.error{background:rgba(242,85,95,.12);color:var(--red)}.message.success{background:rgba(121,214,196,.12);color:var(--teal)}
+.message.show{display:block}.message.error{background:var(--red-soft);color:var(--red)}.message.success{background:var(--green-soft);color:var(--green)}
 .hidden{display:none!important}
 .pwdWrap{position:relative}.pwdWrap input{padding-left:44px}
 .pwdToggle{position:absolute;left:6px;top:50%;transform:translateY(-50%);width:34px;height:34px;border:0;background:transparent;cursor:pointer;display:grid;place-items:center;border-radius:8px;color:var(--ink60)}
@@ -70,7 +69,8 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
 .wrap{max-width:1080px;margin:0 auto}
 .topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--surface);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);border-radius:18px;padding:12px 16px;position:sticky;top:10px;z-index:20}
 .topbrand{display:flex;align-items:center;gap:9px;font-weight:700;flex-shrink:0}
-.topbrand .mark{width:30px;height:30px;border-radius:10px;background:linear-gradient(155deg,var(--accent),var(--violet));color:var(--accent-ink);display:grid;place-items:center;font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:13px}
+.topbrand .mark{width:30px;height:30px;border-radius:10px;background:linear-gradient(155deg,var(--accent),var(--accent-deep));color:var(--accent-ink);display:grid;place-items:center;font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:13px;overflow:hidden}
+.topbrand .mark img{width:68%;height:68%;object-fit:contain}
 .topRight{display:flex;align-items:center;gap:8px;flex-shrink:0}
 .iconBtn{position:relative;border:1px solid var(--line);background:rgba(255,255,255,.03);border-radius:10px;width:38px;height:38px;display:grid;place-items:center;cursor:pointer;color:var(--ink)}
 .iconBtn svg{width:19px;height:19px}
@@ -94,6 +94,21 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
 .subtabs{display:flex;gap:4px;overflow-x:auto;background:var(--surface);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);border-radius:14px;padding:5px;margin:14px 0;scrollbar-width:thin}
 .subtabs button{white-space:nowrap;border:0;background:transparent;padding:9px 13px;border-radius:10px;cursor:pointer;color:var(--ink60);font-weight:600;font-family:inherit;font-size:13.5px;flex-shrink:0}
 .subtabs button.active{background:var(--ink);color:var(--bg0)}
+/* ===== قائمة جانبية بدل عرض كل التبويبات دفعة واحدة ===== */
+.courseTabBar{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--surface);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);border-radius:14px;padding:6px 6px 6px 14px;margin:14px 0}
+.courseTabBar .curTab{font-weight:700;font-size:14px}
+.menuBtn{border:1px solid var(--line);background:rgba(255,255,255,.03);border-radius:10px;width:38px;height:38px;display:grid;place-items:center;cursor:pointer;color:var(--ink);flex-shrink:0}
+.menuBtn svg{width:19px;height:19px}
+.drawerBg{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:150;opacity:0;transition:opacity .2s}
+.drawerBg.open{opacity:1}
+.drawer{position:fixed;top:0;bottom:0;right:0;width:min(280px,80vw);background:var(--surface-solid);border-inline-start:1px solid var(--line-strong);box-shadow:var(--shadow);transform:translateX(100%);transition:transform .22s ease;padding:18px 14px;overflow-y:auto;z-index:151}
+.drawer.open{transform:translateX(0)}
+[dir="rtl"] .drawer{right:auto;left:0;border-inline-start:0;border-inline-end:1px solid var(--line-strong);transform:translateX(-100%)}
+[dir="rtl"] .drawer.open{transform:translateX(0)}
+.drawer h4{margin:0 0 14px;font-size:13px;color:var(--ink60);font-weight:600}
+.drawerItem{display:block;width:100%;text-align:start;border:0;background:transparent;color:var(--ink);padding:12px 10px;border-radius:10px;font-family:inherit;font-size:14.5px;font-weight:600;cursor:pointer;margin-bottom:4px}
+.drawerItem.active{background:var(--ink);color:var(--bg0)}
+.drawerItem:not(.active):hover{background:rgba(255,255,255,.06)}
 .card2{background:var(--surface);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:12px}
 .row{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
 .row > *{min-width:0}
@@ -113,7 +128,7 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
 .timelinePost .body{white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px}
 .reactBar{display:flex;gap:8px;margin-top:10px;border-top:1px solid var(--line);padding-top:10px;flex-wrap:wrap}
 .reactBtn{border:1px solid var(--line);background:rgba(255,255,255,.03);border-radius:9px;padding:6px 11px;cursor:pointer;font-size:12.5px;font-family:'IBM Plex Mono',monospace;color:var(--ink)}
-.reactBtn.active{background:var(--violet-soft);border-color:var(--violet);color:#D9CFF2}
+.reactBtn.active{background:rgba(255,255,255,.12);border-color:var(--line-strong);color:var(--ink)}
 .commentBox{margin-top:10px;display:flex;gap:8px}
 .commentBox input{flex:1;min-width:0}
 .comment{font-size:12.5px;padding:8px 0;border-top:1px dashed var(--line);overflow-wrap:anywhere}
@@ -121,14 +136,15 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
 .filterRow button{border:1px solid var(--line);background:rgba(255,255,255,.03);color:var(--ink);border-radius:999px;padding:6px 13px;font-size:12.5px;cursor:pointer;font-family:inherit}
 .filterRow button.active{background:var(--ink);color:var(--bg0);border-color:var(--ink)}
 /* شارات XP/Streak — تستخدم Lime كلون نجاح/طاقة مميز عن باقي الحالات */
-.xpPill{display:inline-flex;align-items:center;gap:4px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-weight:700;color:var(--lime-ink);background:var(--lime);padding:3px 9px;border-radius:999px}
+.xpPill{display:inline-flex;align-items:center;gap:4px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-weight:700;color:var(--green-ink);background:var(--green);padding:3px 9px;border-radius:999px}
+.btn.success{background:var(--green-soft);color:var(--green);border-color:rgba(61,209,111,.35)}
 </style>
 </head>
 <body>
 <div id="authApp" class="app">
 <main class="card">
 <div class="brand">
-<div class="mark">&lt;/&gt;</div>
+<div class="mark"><img src="codeup-logo.svg" alt="CodeUp"></div>
 <h1>CodeUp</h1><p>منصة التعلم والتدريب البرمجي</p>
 </div>
 <div class="tabs"><button id="loginTab" class="active">تسجيل الدخول</button><button id="signupTab">إنشاء حساب</button></div>
@@ -151,7 +167,7 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
 
 <div id="dashboardApp" class="dashboard hidden">
 <div class="topbar wrap">
-<div class="topbrand"><div class="mark">&lt;/&gt;</div><span>CodeUp</span></div>
+<div class="topbrand"><div class="mark"><img src="codeup-logo.svg" alt="CodeUp"></div><span>CodeUp</span></div>
 <div class="topRight">
 <button class="iconBtn" id="notifBtn" title="الإشعارات" aria-label="الإشعارات">
 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
@@ -244,14 +260,31 @@ const App = {
   async openNotifications(){
     const {data} = await db.from("notifications").select("*").eq("profile_id", this.ctx.user.id).order("created_at",{ascending:false}).limit(20);
     const list = (data||[]).map(n=>`
-      <div class="card2" style="${n.is_read?'':'background:rgba(138,111,201,.14)'}">
+      <div class="card2" style="${n.is_read?'':'background:rgba(255,255,255,.08)'}">
         <div class="row"><b style="font-size:13.5px">${CodeUp.escapeHtml(n.title)}</b><span class="small mono">${CodeUp.timeAgo(n.created_at)}</span></div>
-        <div class="small" style="margin-top:6px">${CodeUp.escapeHtml(n.body||"")}</div>
       </div>`).join("") || `<div class="emptyState">لا توجد إشعارات بعد.</div>`;
     this.modal(`<h3>الإشعارات</h3><div>${list}</div>`, async ()=>{
       const ids=(data||[]).filter(n=>!n.is_read).map(n=>n.id);
       if(ids.length) await db.from("notifications").update({is_read:true}).in("id", ids);
       this.refreshNotifBadge();
+    });
+  },
+
+  openTabDrawer(tabs, activeTab, onSelect){
+    const bg=document.createElement("div");bg.className="drawerBg";
+    const drawer=document.createElement("div");drawer.className="drawer";
+    drawer.innerHTML = `<h4>القائمة</h4>` + tabs.map(([key,label])=>
+      `<button class="drawerItem ${key===activeTab?'active':''}" data-tab="${key}">${label}</button>`).join("");
+    bg.appendChild(drawer);
+    document.body.appendChild(bg);
+    requestAnimationFrame(()=>{bg.classList.add("open");drawer.classList.add("open")});
+    function close(){
+      bg.classList.remove("open");drawer.classList.remove("open");
+      setTimeout(()=>bg.remove(),220);
+    }
+    bg.addEventListener("click",e=>{if(e.target===bg)close()});
+    drawer.querySelectorAll("[data-tab]").forEach(b=>{
+      b.onclick=()=>{ close(); if(b.dataset.tab!==activeTab) onSelect(b.dataset.tab); };
     });
   },
 
@@ -333,10 +366,17 @@ const App = {
       ["learning","التعلم"],["assignments","الواجبات"],["timeline","المستجدات"],
       ["squads","المجموعات"],["progress","تقدمي"],["leaderboard","المتصدرون"]
     ];
-    let html = `<div class="subtabs">` + tabs.map(([key,label])=>
-      `<button data-tab="${key}" class="${tab===key?'active':''}">${label}</button>`).join("") + `</div><div id="tabBody"></div>`;
+    const curLabel = (tabs.find(([key])=>key===tab)||[,""])[1];
+    let html = `
+      <div class="courseTabBar">
+        <span class="curTab">${curLabel}</span>
+        <button class="menuBtn" id="courseMenuBtn" title="القائمة" aria-label="القائمة">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>
+        </button>
+      </div>
+      <div id="tabBody"></div>`;
     this.root.innerHTML = html;
-    this.root.querySelectorAll("[data-tab]").forEach(b=>b.onclick=()=>this.go({name:"course",courseId,tab:b.dataset.tab}));
+    document.getElementById("courseMenuBtn").onclick = ()=> this.openTabDrawer(tabs, tab, key=>this.go({name:"course",courseId,tab:key}));
 
     const body = document.getElementById("tabBody");
     body.innerHTML = `<div class="emptyState">جارِ التحميل…</div>`;

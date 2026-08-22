@@ -19,9 +19,10 @@ const CodeUp = (() => {
   function toast(message, type = "info") {
     const host = ensureToastHost();
     const el = document.createElement("div");
-    const colors = { info: "#2563eb", success: "#16a34a", error: "#dc2626", warn: "#d97706" };
+    const colors = { info: "#1A1A1A", success: "#3DD16F", error: "#F2555F", warn: "#1A1A1A" };
+    const textColors = { info: "#fff", success: "#06210F", error: "#fff", warn: "#fff" };
     el.textContent = message;
-    el.style.cssText = `background:${colors[type] || colors.info};color:#fff;padding:12px 16px;border-radius:10px;font-size:14px;box-shadow:0 6px 20px rgba(0,0,0,.18);animation:cuFadeIn .2s ease`;
+    el.style.cssText = `background:${colors[type] || colors.info};color:${textColors[type] || textColors.info};border:1px solid rgba(255,255,255,.15);padding:12px 16px;border-radius:10px;font-size:14px;box-shadow:0 6px 20px rgba(0,0,0,.4);animation:cuFadeIn .2s ease`;
     host.appendChild(el);
     setTimeout(() => { el.style.opacity = "0"; el.style.transition = "opacity .3s"; setTimeout(() => el.remove(), 300); }, 4200);
   }
