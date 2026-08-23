@@ -94,15 +94,15 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
 .subtabs{display:flex;gap:4px;overflow-x:auto;background:var(--surface);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);border-radius:14px;padding:5px;margin:14px 0;scrollbar-width:thin}
 .subtabs button{white-space:nowrap;border:0;background:transparent;padding:9px 13px;border-radius:10px;cursor:pointer;color:var(--ink60);font-weight:600;font-family:inherit;font-size:13.5px;flex-shrink:0}
 .subtabs button.active{background:var(--ink);color:var(--bg0)}
-/* ===== قائمة جانبية بدل عرض كل التبويبات دفعة واحدة ===== */
-.courseTabBar{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--surface);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);border-radius:14px;padding:6px 6px 6px 14px;margin:14px 0}
-.courseTabBar .curTab{font-weight:700;font-size:14px}
-.menuBtn{border:1px solid var(--line);background:rgba(255,255,255,.03);border-radius:10px;width:38px;height:38px;display:grid;place-items:center;cursor:pointer;color:var(--ink);flex-shrink:0}
-.menuBtn svg{width:19px;height:19px}
-.drawerBg{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:150;opacity:0;transition:opacity .2s}
-.drawerBg.open{opacity:1}
-.drawer{position:fixed;top:0;bottom:0;right:0;width:min(280px,80vw);background:var(--surface-solid);border-inline-start:1px solid var(--line-strong);box-shadow:var(--shadow);transform:translateX(100%);transition:transform .22s ease;padding:18px 14px;overflow-y:auto;z-index:151}
-.drawer.open{transform:translateX(0)}
+/* ===== شريط تبويبات علوي (نمط فيسبوك) ===== */
+.fbTabBar{display:flex;gap:2px;overflow-x:auto;background:var(--surface);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);border-radius:14px;padding:5px;margin:14px 0;scrollbar-width:thin}
+.fbTabBar button{white-space:nowrap;border:0;background:transparent;padding:10px 14px;border-radius:10px;cursor:pointer;color:var(--ink60);font-weight:600;font-family:inherit;font-size:13px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:3px}
+.fbTabBar button .tabIcon{font-size:17px;line-height:1}
+.fbTabBar button.active{background:var(--ink);color:var(--bg0)}
+.joinBanner{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--surface);border:1px solid var(--accent,#4c8dff);border-radius:14px;padding:12px 16px;margin:14px 0}
+.joinBanner p{margin:0;font-size:13.5px;color:var(--ink60)}
+.feedAnnouncement{border-inline-start:3px solid var(--accent,#4c8dff)}
+.feedTag{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;background:rgba(76,141,255,.15);color:var(--accent,#4c8dff);margin-bottom:6px}
 [dir="rtl"] .drawer{right:auto;left:0;border-inline-start:0;border-inline-end:1px solid var(--line-strong);transform:translateX(-100%)}
 [dir="rtl"] .drawer.open{transform:translateX(0)}
 .drawer h4{margin:0 0 14px;font-size:13px;color:var(--ink60);font-weight:600}
@@ -349,34 +349,41 @@ const App = {
     if(!course){ this.root.innerHTML = `<div class="emptyState">الكورس غير موجود.</div>`; return; }
 
     let myEnrollment = this.ctx.enrollments.find(e=>e.course_id===courseId);
-    if(!myEnrollment){
-      try{
-        await CodeUp.rpc.enrollInCourse(courseId);
-        this.ctx = await CodeUp.loadMyContext();
-        myEnrollment = this.ctx.enrollments.find(e=>e.course_id===courseId);
-      }catch(e){ CodeUp.toast(e.message || "تعذّر تسجيلك في الكورس", "error"); }
-    }
 
     this.crumbTrail([{label: course.name, onClick: ()=>this.go({name:"course",courseId,tab:"learning"})}]);
 
     const isAdmin = this.ctx.courseAdminCourseIds.includes(courseId);
     const isLeader = this.ctx.leaderCourseIds.includes(courseId);
 
+    const tabIcons = {learning:"📚",assignments:"📝",timeline:"🗞️",squads:"👥",progress:"📈",leaderboard:"🏆"};
     const tabs = [
       ["learning","التعلم"],["assignments","الواجبات"],["timeline","المستجدات"],
       ["squads","المجموعات"],["progress","تقدمي"],["leaderboard","المتصدرون"]
     ];
-    const curLabel = (tabs.find(([key])=>key===tab)||[,""])[1];
     let html = `
-      <div class="courseTabBar">
-        <span class="curTab">${curLabel}</span>
-        <button class="menuBtn" id="courseMenuBtn" title="القائمة" aria-label="القائمة">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>
-        </button>
+      <div class="fbTabBar">
+        ${tabs.map(([key,label])=>`<button data-tab="${key}" class="${key===tab?'active':''}"><span class="tabIcon">${tabIcons[key]}</span>${label}</button>`).join("")}
       </div>
+      ${!myEnrollment ? `
+      <div class="joinBanner">
+        <p>أنت تتصفح هذا الكورس فقط. انضم للمشاركة بالواجبات والمستجدات وتتبع تقدمك.</p>
+        <button class="btn dark" id="joinCourseBtn" style="flex-shrink:0">انضمام للكورس</button>
+      </div>` : ``}
       <div id="tabBody"></div>`;
     this.root.innerHTML = html;
-    document.getElementById("courseMenuBtn").onclick = ()=> this.openTabDrawer(tabs, tab, key=>this.go({name:"course",courseId,tab:key}));
+    this.root.querySelectorAll(".fbTabBar [data-tab]").forEach(b=>{
+      b.onclick = ()=>{ if(b.dataset.tab!==tab) this.go({name:"course",courseId,tab:b.dataset.tab}); };
+    });
+    const joinBtn = document.getElementById("joinCourseBtn");
+    if(joinBtn) joinBtn.onclick = async ()=>{
+      joinBtn.disabled = true;
+      try{
+        await CodeUp.rpc.enrollInCourse(courseId);
+        this.ctx = await CodeUp.loadMyContext();
+        CodeUp.toast("تم الانضمام للكورس", "success");
+        this.go({name:"course",courseId,tab});
+      }catch(e){ CodeUp.toast(e.message||"تعذّر الانضمام", "error"); joinBtn.disabled = false; }
+    };
 
     const body = document.getElementById("tabBody");
     body.innerHTML = `<div class="emptyState">جارِ التحميل…</div>`;
@@ -428,7 +435,17 @@ const App = {
     }).join("");
 
     body.querySelectorAll("[data-submit]").forEach(b=>{
-      b.onclick = ()=> this.openSubmitModal(assignments.find(a=>a.id===b.dataset.submit), course, subByAssignment[b.dataset.submit]);
+      b.onclick = async ()=>{
+        if(!myEnrollment){
+          if(!confirm("للتسليم يجب الانضمام للكورس أولًا. تريد الانضمام الآن؟")) return;
+          try{
+            await CodeUp.rpc.enrollInCourse(course.id);
+            this.ctx = await CodeUp.loadMyContext();
+            myEnrollment = this.ctx.enrollments.find(e=>e.course_id===course.id);
+          }catch(e){ CodeUp.toast(e.message||"تعذّر الانضمام", "error"); return; }
+        }
+        this.openSubmitModal(assignments.find(a=>a.id===b.dataset.submit), course, subByAssignment[b.dataset.submit]);
+      };
     });
   },
 
@@ -505,11 +522,20 @@ const App = {
       else q = q.in("visibility",["course","squad"]).neq("profile_id","");
 
       const {data: posts, error} = await q;
-      if(error || !posts || !posts.length){ list.innerHTML = `<div class="emptyState">لا توجد منشورات بعد.</div>`; return; }
 
-      const {data: reactions} = await db.from("reactions").select("*").eq("target_type","submission").in("target_id", posts.map(p=>p.id));
-      const {data: comments} = await db.from("comments").select("*, profiles(full_name)").in("submission_id", posts.map(p=>p.id)).order("created_at");
-      const {data: postFiles} = await db.from("file_uploads").select("*").eq("related_type","submission").in("related_id", posts.map(p=>p.id));
+      let announcements = [];
+      if(filter!=="mine"){
+        let aq = db.from("announcements").select("*, profiles(full_name)").eq("course_id", course.id).order("created_at",{ascending:false}).limit(15);
+        const {data: annData} = await aq;
+        announcements = (annData||[]).filter(a => filter!=="squad" || !a.target_squad_id || a.target_squad_id===myEnrollment?.squad_id);
+      }
+
+      if((error || !posts || !posts.length) && !announcements.length){ list.innerHTML = `<div class="emptyState">لا توجد منشورات بعد.</div>`; return; }
+      const safePosts = posts || [];
+
+      const {data: reactions} = await db.from("reactions").select("*").eq("target_type","submission").in("target_id", safePosts.map(p=>p.id));
+      const {data: comments} = await db.from("comments").select("*, profiles(full_name)").in("submission_id", safePosts.map(p=>p.id)).order("created_at");
+      const {data: postFiles} = await db.from("file_uploads").select("*").eq("related_type","submission").in("related_id", safePosts.map(p=>p.id));
 
       const imageBlocksByPost = {};
       for(const f of (postFiles||[])){
@@ -521,12 +547,28 @@ const App = {
         }catch(e){ /* تجاهل الفشل بصمت — النص يبقى ظاهر */ }
       }
 
-      list.innerHTML = posts.map(p=>{
+      const feed = [
+        ...announcements.map(a=>({type:"announcement", created_at:a.created_at, data:a})),
+        ...safePosts.map(p=>({type:"submission", created_at:p.created_at, data:p}))
+      ].sort((x,y)=> new Date(y.created_at) - new Date(x.created_at));
+
+      list.innerHTML = feed.map(item=>{
+        if(item.type==="announcement"){
+          const a = item.data;
+          return `
+          <div class="timelinePost feedAnnouncement" data-announcement="${a.id}">
+            <span class="feedTag">📢 إعلان</span>
+            <div class="meta"><b style="color:var(--ink)">${CodeUp.escapeHtml(a.profiles?.full_name||"إدارة الكورس")}</b><span class="mono">${CodeUp.timeAgo(a.created_at)}</span></div>
+            <div class="body"><b>${CodeUp.escapeHtml(a.title)}</b>${a.content?`<br>${CodeUp.escapeHtml(a.content)}`:""}</div>
+          </div>`;
+        }
+        const p = item.data;
         const myLiked = (reactions||[]).some(r=>r.target_id===p.id && r.user_id===this.ctx.user.id);
         const likeCount = (reactions||[]).filter(r=>r.target_id===p.id).length;
         const postComments = (comments||[]).filter(c=>c.submission_id===p.id);
         return `
         <div class="timelinePost" data-post="${p.id}">
+          <span class="feedTag">✅ تسليم واجب</span>
           <div class="meta"><b style="color:var(--ink)">${CodeUp.escapeHtml(p.profiles?.full_name||"طالب")}</b><span class="mono">${CodeUp.timeAgo(p.created_at)}</span></div>
           <div class="small mono" style="margin-bottom:6px">${CodeUp.escapeHtml(p.assignments?.title||"")}</div>
           <div class="body">${CodeUp.escapeHtml(p.content||"")}</div>
@@ -544,14 +586,23 @@ const App = {
         </div>`;
       }).join("");
 
+      const requireJoin = async ()=>{
+        if(myEnrollment) return true;
+        if(!confirm("للتفاعل يجب الانضمام للكورس أولًا. تريد الانضمام الآن؟")) return false;
+        try{ await CodeUp.rpc.enrollInCourse(course.id); this.ctx = await CodeUp.loadMyContext(); myEnrollment = this.ctx.enrollments.find(e=>e.course_id===course.id); return true; }
+        catch(e){ CodeUp.toast(e.message||"تعذّر الانضمام", "error"); return false; }
+      };
+
       list.querySelectorAll("[data-like]").forEach(b=>{
         b.onclick = async ()=>{
+          if(!(await requireJoin())) return;
           try{ await CodeUp.rpc.toggleReaction("submission", b.dataset.like, "like"); load(currentFilter); }
           catch(e){ CodeUp.toast(e.message,"error"); }
         };
       });
       list.querySelectorAll("[data-commentsend]").forEach(b=>{
         b.onclick = async ()=>{
+          if(!(await requireJoin())) return;
           const input = list.querySelector(`[data-commentinput="${b.dataset.commentsend}"]`);
           const val = input.value.trim(); if(!val) return;
           try{ await CodeUp.rpc.addComment(b.dataset.commentsend, val); input.value=""; load(currentFilter); }
@@ -599,6 +650,11 @@ const App = {
 
     body.querySelectorAll("[data-join]").forEach(b=>{
       b.onclick = async ()=>{
+        if(!myEnrollment){
+          if(!confirm("للانضمام لمجموعة يجب الانضمام للكورس أولًا. تريد الانضمام الآن؟")) return;
+          try{ await CodeUp.rpc.enrollInCourse(course.id); this.ctx = await CodeUp.loadMyContext(); }
+          catch(e){ CodeUp.toast(e.message||"تعذّر الانضمام", "error"); return; }
+        }
         b.disabled = true;
         try{
           await CodeUp.rpc.requestJoinSquad(b.dataset.join);
