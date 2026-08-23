@@ -2,19 +2,19 @@
    نظام تصميم داكن مستوحى من لوحات ألوان @graphix_theory:
    Onyx (خلفية) + Candy Blue (أساسي) + Lime (XP/نجاح) + Violet (ثانوي) */
 :root{
-  --bg0:#020204; --bg1:#0B0C10; --bg2:#131620;
-  --ink:#F3F5FA; --paper:#020204; --surface:#111319; --ink60:#9AA0B4; --ink40:#666C82;
-  --line:rgba(255,255,255,.09); --line-strong:rgba(255,255,255,.16);
-  --indigo:#B7D8EC; --indigo-ink:#3E7CA6; --accent-ink:#0B0C10;
-  --lime:#C6FF34; --violet:#8A6FC9; --violet-soft:rgba(138,111,201,.16);
+  --bg0:#000000; --bg1:#000000; --bg2:#16181C;
+  --ink:#E7E9EA; --paper:#000000; --surface:#16181C; --ink60:#71767B; --ink40:#536471;
+  --line:rgba(239,243,244,.13); --line-strong:rgba(239,243,244,.24);
+  --indigo:#1D9BF0; --indigo-ink:#1A8CD8; --accent-ink:#FFFFFF;
+  --lime:#00BA7C; --violet:#71767B; --violet-soft:rgba(113,118,123,.16);
   --teal:#79D6C4; --amber:#F0B429; --red:#F2555F;
 }
 *{box-sizing:border-box; min-width:0}
 body{
   margin:0;font-family:'IBM Plex Sans Arabic',system-ui,sans-serif;color:var(--ink);
   background:
-    radial-gradient(800px 480px at 10% -10%, rgba(183,216,236,.09), transparent 60%),
-    radial-gradient(700px 480px at 105% 0%, rgba(138,111,201,.13), transparent 55%),
+    radial-gradient(800px 480px at 10% -10%, rgba(29,155,240,.08), transparent 60%),
+    radial-gradient(700px 480px at 105% 0%, rgba(29,155,240,.13), transparent 55%),
     var(--bg0);
   background-attachment:fixed;
 }
@@ -49,13 +49,13 @@ th{color:var(--ink60);font-weight:600;font-size:12px;font-family:'IBM Plex Mono'
 .btn.dark{background:linear-gradient(135deg,var(--indigo),var(--indigo-ink));color:var(--accent-ink);border-color:transparent;font-weight:700}
 .btn.dark:hover{filter:brightness(1.08)}
 .btn.danger{background:rgba(242,85,95,.1);color:var(--red);border-color:rgba(242,85,95,.28)}
-.btn.ok{background:rgba(198,255,52,.1);color:var(--lime);border-color:rgba(198,255,52,.28)}
+.btn.ok{background:rgba(0,186,124,.12);color:var(--lime);border-color:rgba(0,186,124,.3)}
 .btn:disabled{opacity:.5;cursor:not-allowed}
 .pill{display:inline-flex;align-items:center;font-family:'IBM Plex Mono',monospace;padding:3px 9px;border-radius:7px;font-size:11px;font-weight:500;border:1px solid var(--line);color:var(--ink60)}
 .pill.pending{background:rgba(240,180,41,.1);color:var(--amber);border-color:rgba(240,180,41,.28)}
-.pill.approved{background:rgba(198,255,52,.1);color:var(--lime);border-color:rgba(198,255,52,.28)}
+.pill.approved{background:rgba(0,186,124,.12);color:var(--lime);border-color:rgba(0,186,124,.3)}
 .pill.rejected{background:rgba(242,85,95,.1);color:var(--red);border-color:rgba(242,85,95,.28)}
-.pill.owner{background:var(--violet-soft);color:#D9CFF2;border-color:rgba(138,111,201,.35)}
+.pill.owner{background:var(--violet-soft);color:#E7E9EA;border-color:rgba(113,118,123,.3)}
 .pill.admin{background:rgba(255,255,255,.04);color:var(--ink60)}
 .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;align-items:center}
 .toolbar input,.toolbar select{padding:9px 12px;border:1px solid var(--line);border-radius:10px;font-size:13.5px;font-family:inherit;background:rgba(255,255,255,.03);color:var(--ink)}

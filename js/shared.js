@@ -113,7 +113,7 @@ const CodeUp = (() => {
     toggleReaction: (targetType, targetId, reactionType) => call("toggle_reaction", { p_target_type: targetType, p_target_id: targetId, p_reaction_type: reactionType || "like" }),
 
     reviewSubmission: (submissionId, grade, notes) => call("review_submission", { p_submission_id: submissionId, p_grade: grade, p_notes: notes || null }),
-    createAnnouncement: (courseId, title, content) => call("create_announcement", { p_course_id: courseId, p_title: title, p_content: content || null })
+    createAnnouncement: (courseId, title, content, targetSquadId) => call("create_announcement", { p_course_id: courseId, p_title: title, p_content: content || null, p_target_squad_id: targetSquadId || null })
   };
 
   // ---------- Storage helpers ----------

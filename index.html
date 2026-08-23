@@ -11,11 +11,11 @@
 /* ===== CodeUp — نظام تصميم داكن مستوحى من لوحات ألوان @graphix_theory =====
    Onyx (خلفية) + Candy Blue (أساسي) + Lime (XP/نجاح) + Violet (ثانوي/قيادة) */
 :root{
-  --bg0:#000000; --bg1:#0A0A0A; --bg2:#121212;
-  --ink:#FFFFFF; --ink60:#A6A6A6; --ink40:#6B6B6B;
-  --line:rgba(255,255,255,.12); --line-strong:rgba(255,255,255,.22);
-  --surface:rgba(255,255,255,.05); --surface-solid:#111111;
-  --accent:#FFFFFF; --accent-ink:#000000; --accent-deep:#C9C9C9;
+  --bg0:#000000; --bg1:#000000; --bg2:#16181C;
+  --ink:#E7E9EA; --ink60:#71767B; --ink40:#536471;
+  --line:rgba(239,243,244,.13); --line-strong:rgba(239,243,244,.24);
+  --surface:rgba(239,243,244,.04); --surface-solid:#16181C;
+  --accent:#1D9BF0; --accent-ink:#FFFFFF; --accent-deep:#1A8CD8;
   --green:#3DD16F; --green-ink:#06210F; --green-soft:rgba(61,209,111,.14);
   --red:#F2555F; --red-soft:rgba(242,85,95,.14);
   --blur:blur(22px);
@@ -97,7 +97,9 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
 /* ===== شريط تبويبات علوي (نمط فيسبوك) ===== */
 .fbTabBar{display:flex;gap:2px;overflow-x:auto;background:var(--surface);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);border-radius:14px;padding:5px;margin:14px 0;scrollbar-width:thin}
 .fbTabBar button{white-space:nowrap;border:0;background:transparent;padding:10px 14px;border-radius:10px;cursor:pointer;color:var(--ink60);font-weight:600;font-family:inherit;font-size:13px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:3px}
-.fbTabBar button .tabIcon{font-size:17px;line-height:1}
+.fbTabBar button .tabIcon{font-size:17px;line-height:1;display:inline-flex}
+.fbTabBar button .tabIcon svg{width:19px;height:19px}
+.feedTag svg{width:13px;height:13px;vertical-align:-2px;margin-inline-end:2px}
 .fbTabBar button.active{background:var(--ink);color:var(--bg0)}
 .joinBanner{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--surface);border:1px solid var(--accent,#4c8dff);border-radius:14px;padding:12px 16px;margin:14px 0}
 .joinBanner p{margin:0;font-size:13.5px;color:var(--ink60)}
@@ -221,6 +223,20 @@ logoutBtn.onclick=async()=>{await db.auth.signOut();dash.classList.add("hidden")
 async function bootApp(user){
   authApp.classList.add("hidden");dash.classList.remove("hidden");
   await App.init(user);
+}
+
+function Icon(name){
+  const paths = {
+    learning: '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>',
+    assignments: '<path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>',
+    timeline: '<path d="M4 11a9 9 0 0 1 9 9"/><path d="M4 4a16 16 0 0 1 16 16"/><circle cx="5" cy="19" r="1.5"/>',
+    squads: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+    progress: '<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>',
+    leaderboard: '<path d="M8 21h8"/><path d="M12 17v4"/><path d="M7 4h10v5a5 5 0 0 1-10 0V4z"/><path d="M17 5h3a2 2 0 0 1-2 4h-1"/><path d="M7 5H4a2 2 0 0 0 2 4h1"/>',
+    announcement: '<path d="M3 11v2a1 1 0 0 0 1 1h2l3.5 4.5V5.5L6 10H4a1 1 0 0 0-1 1z"/><path d="M14 8a4 4 0 0 1 0 8"/><path d="M17 5a8 8 0 0 1 0 14"/>',
+    check: '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/>'
+  };
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${paths[name]||''}</svg>`;
 }
 
 const App = {
@@ -355,14 +371,14 @@ const App = {
     const isAdmin = this.ctx.courseAdminCourseIds.includes(courseId);
     const isLeader = this.ctx.leaderCourseIds.includes(courseId);
 
-    const tabIcons = {learning:"📚",assignments:"📝",timeline:"🗞️",squads:"👥",progress:"📈",leaderboard:"🏆"};
+    const tabIcons = {learning:"learning",assignments:"assignments",timeline:"timeline",squads:"squads",progress:"progress",leaderboard:"leaderboard"};
     const tabs = [
       ["learning","التعلم"],["assignments","الواجبات"],["timeline","المستجدات"],
       ["squads","المجموعات"],["progress","تقدمي"],["leaderboard","المتصدرون"]
     ];
     let html = `
       <div class="fbTabBar">
-        ${tabs.map(([key,label])=>`<button data-tab="${key}" class="${key===tab?'active':''}"><span class="tabIcon">${tabIcons[key]}</span>${label}</button>`).join("")}
+        ${tabs.map(([key,label])=>`<button data-tab="${key}" class="${key===tab?'active':''}"><span class="tabIcon">${Icon(tabIcons[key])}</span>${label}</button>`).join("")}
       </div>
       ${!myEnrollment ? `
       <div class="joinBanner">
@@ -557,7 +573,7 @@ const App = {
           const a = item.data;
           return `
           <div class="timelinePost feedAnnouncement" data-announcement="${a.id}">
-            <span class="feedTag">📢 إعلان</span>
+            <span class="feedTag">${Icon("announcement")} إعلان</span>
             <div class="meta"><b style="color:var(--ink)">${CodeUp.escapeHtml(a.profiles?.full_name||"إدارة الكورس")}</b><span class="mono">${CodeUp.timeAgo(a.created_at)}</span></div>
             <div class="body"><b>${CodeUp.escapeHtml(a.title)}</b>${a.content?`<br>${CodeUp.escapeHtml(a.content)}`:""}</div>
           </div>`;
@@ -568,7 +584,7 @@ const App = {
         const postComments = (comments||[]).filter(c=>c.submission_id===p.id);
         return `
         <div class="timelinePost" data-post="${p.id}">
-          <span class="feedTag">✅ تسليم واجب</span>
+          <span class="feedTag">${Icon("check")} تسليم واجب</span>
           <div class="meta"><b style="color:var(--ink)">${CodeUp.escapeHtml(p.profiles?.full_name||"طالب")}</b><span class="mono">${CodeUp.timeAgo(p.created_at)}</span></div>
           <div class="small mono" style="margin-bottom:6px">${CodeUp.escapeHtml(p.assignments?.title||"")}</div>
           <div class="body">${CodeUp.escapeHtml(p.content||"")}</div>
