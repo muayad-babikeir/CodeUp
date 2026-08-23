@@ -99,29 +99,19 @@ function subStatusAr(s){ return {submitted:"تم التسليم",late:"متأخ�
 
 async function openReviewModal(sub){
   const { data: files } = await db.from("file_uploads").select("*").eq("submission_id", sub.id);
-  let fileLinks = "";
-  for(const f of (files||[])){
-    try{
-      const url = await CodeUp.getSignedUrl("submissions", f.storage_path, 600);
-      const isImage = (f.mime_type||"").startsWith("image/");
-      if(isImage){
-        fileLinks += `<div style="margin:8px 0"><a href="${url}" target="_blank"><img src="${url}" alt="${CodeUp.escapeHtml(f.file_name||"صورة")}" style="max-width:100%;max-height:360px;border-radius:8px;display:block"></a></div>`;
-      }else{
-        fileLinks += `<div><a href="${url}" target="_blank">${CodeUp.escapeHtml(f.file_name||"ملف")}</a></div>`;
-      }
-    }catch(e){ fileLinks += `<div class="small">تعذّر تحميل رابط الملف: ${CodeUp.escapeHtml(f.file_name||"")}</div>`; }
-  }
+  const fileCards = (files||[]).map(f=>renderFileCard(f,"submissions")).join("");
 
   const m = Admin.modal(`
     <h3>مراجعة تسليم: ${CodeUp.escapeHtml(sub.profiles?.full_name||"")}</h3>
     <p class="small">${CodeUp.escapeHtml(sub.assignments?.title||"")}</p>
     <div style="margin:10px 0">${CodeUp.escapeHtml(sub.content||"بدون ملاحظات")}</div>
-    ${fileLinks || '<p class="small">لا توجد ملفات مرفقة.</p>'}
+    ${fileCards || '<p class="small">لا توجد ملفات مرفقة.</p>'}
     <label>الدرجة</label><input id="rGrade" type="number" step="0.5" value="${sub.grade??""}">
     <label>ملاحظات المراجع</label><textarea id="rNotes" rows="3">${CodeUp.escapeHtml(sub.reviewer_notes||"")}</textarea>
     <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
       <button class="btn" id="rCancel">إغلاق</button><button class="btn dark" id="rSave">حفظ المراجعة</button>
     </div>`);
+  wireFileCardPreviews(m.el);
   m.el.querySelector("#rCancel").onclick = m.close;
   m.el.querySelector("#rSave").onclick = async ()=>{
     const saveBtn = m.el.querySelector("#rSave");

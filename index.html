@@ -100,6 +100,16 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
 .fbTabBar button .tabIcon{font-size:17px;line-height:1;display:inline-flex}
 .fbTabBar button .tabIcon svg{width:19px;height:19px}
 .feedTag svg{width:13px;height:13px;vertical-align:-2px;margin-inline-end:2px}
+.fileCard{display:flex;align-items:center;gap:10px;background:rgba(239,243,244,.03);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-top:8px}
+.fileCard .tabIcon svg{width:20px;height:20px;flex-shrink:0}
+.fileCard.archived .tabIcon svg{color:var(--ink60)}
+.fileCardInfo{flex:1;display:flex;flex-direction:column;gap:2px;min-width:0}
+.fileCardInfo b{font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.videoEmbed{position:relative;border-radius:12px;overflow:hidden;margin:10px 0;background:#000;aspect-ratio:16/9}
+.videoEmbed img{width:100%;height:100%;object-fit:cover;display:block;cursor:pointer}
+.videoEmbed .playBtn{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;cursor:pointer;background:rgba(0,0,0,.25)}
+.videoEmbed .playBtn svg{width:56px;height:56px;color:#fff;filter:drop-shadow(0 2px 8px rgba(0,0,0,.5))}
+.videoEmbed iframe{width:100%;height:100%;border:0;display:block}
 .fbTabBar button.active{background:var(--ink);color:var(--bg0)}
 .joinBanner{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--surface);border:1px solid var(--accent,#4c8dff);border-radius:14px;padding:12px 16px;margin:14px 0}
 .joinBanner p{margin:0;font-size:13.5px;color:var(--ink60)}
@@ -223,20 +233,6 @@ logoutBtn.onclick=async()=>{await db.auth.signOut();dash.classList.add("hidden")
 async function bootApp(user){
   authApp.classList.add("hidden");dash.classList.remove("hidden");
   await App.init(user);
-}
-
-function Icon(name){
-  const paths = {
-    learning: '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>',
-    assignments: '<path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>',
-    timeline: '<path d="M4 11a9 9 0 0 1 9 9"/><path d="M4 4a16 16 0 0 1 16 16"/><circle cx="5" cy="19" r="1.5"/>',
-    squads: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
-    progress: '<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>',
-    leaderboard: '<path d="M8 21h8"/><path d="M12 17v4"/><path d="M7 4h10v5a5 5 0 0 1-10 0V4z"/><path d="M17 5h3a2 2 0 0 1-2 4h-1"/><path d="M7 5H4a2 2 0 0 0 2 4h1"/>',
-    announcement: '<path d="M3 11v2a1 1 0 0 0 1 1h2l3.5 4.5V5.5L6 10H4a1 1 0 0 0-1 1z"/><path d="M14 8a4 4 0 0 1 0 8"/><path d="M17 5a8 8 0 0 1 0 14"/>',
-    check: '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/>'
-  };
-  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${paths[name]||''}</svg>`;
 }
 
 const App = {
@@ -420,12 +416,15 @@ const App = {
         <b>${CodeUp.escapeHtml(u.title)}</b>
         <div style="margin-top:8px">
           ${(u.lessons||[]).sort((a,b)=>a.order_index-b.order_index).map(l=>`
-            <div class="row" style="padding:8px 0;border-top:1px dashed rgba(255,255,255,.12)">
-              <span>${CodeUp.escapeHtml(l.title)}</span>
-              ${l.video_url?`<a href="${l.video_url}" target="_blank" class="btn">مشاهدة</a>`:""}
+            <div class="lessonBlock" style="padding:8px 0;border-top:1px dashed rgba(255,255,255,.12)">
+              <div class="row"><span>${CodeUp.escapeHtml(l.title)}</span></div>
+              ${l.video_url?youtubeEmbedHtml(l.video_url):""}
+              ${l.text_content?`<p class="small" style="white-space:pre-wrap;margin-top:6px">${CodeUp.escapeHtml(l.text_content)}</p>`:""}
+              ${l.pdf_url?`<a class="btn" style="margin-top:6px;display:inline-block" href="${l.pdf_url}" target="_blank">فتح ملف PDF ↗</a>`:""}
             </div>`).join("") || `<p class="small">لا توجد دروس بعد.</p>`}
         </div>
       </div>`).join("");
+    wireYoutubeEmbeds(body);
   },
 
   async renderAssignments(body, course, myEnrollment){
@@ -471,7 +470,8 @@ const App = {
       <label>ملاحظات/شرح (اختياري)</label>
       <textarea id="subContent" rows="4">${CodeUp.escapeHtml(existing?.content||"")}</textarea>
       <label>الملف</label>
-      <input type="file" id="subFile">
+      <input type="file" id="subFile" accept="image/*,application/pdf,.doc,.docx,.txt">
+      <div id="subFilePreview" style="margin-top:8px"></div>
       <label>مشاركة في المستجدات</label>
       <select id="subVisibility">
         <option value="private" ${existing?.visibility==="private"?"selected":""}>خاص — لا يظهر لأحد</option>
@@ -481,6 +481,18 @@ const App = {
       <button class="primary" id="subSubmitBtn">إرسال</button>
       <div id="subMsg" class="message"></div>
     `);
+    const previewBox = m.el.querySelector("#subFilePreview");
+    m.el.querySelector("#subFile").onchange = (e)=>{
+      const f = e.target.files[0];
+      if(!f){ previewBox.innerHTML = ""; return; }
+      const sizeKb = (f.size/1024).toFixed(0);
+      if(f.type.startsWith("image/")){
+        const url = URL.createObjectURL(f);
+        previewBox.innerHTML = `<img src="${url}" style="max-width:100%;max-height:220px;border-radius:8px;display:block"><span class="small mono">${sizeKb} كيلوبايت — ستُضغط تلقائيًا قبل الرفع</span>`;
+      }else{
+        previewBox.innerHTML = `<div class="small mono">${CodeUp.escapeHtml(f.name)} — ${sizeKb} كيلوبايت</div>`;
+      }
+    };
     m.el.querySelector("#subSubmitBtn").onclick = async ()=>{
       const msgEl = m.el.querySelector("#subMsg");
       const submitBtn = m.el.querySelector("#subSubmitBtn");
@@ -505,11 +517,11 @@ const App = {
         }
 
         if(fileInput.files[0]){
-          const path = await CodeUp.uploadSubmissionFile(fileInput.files[0], this.ctx.user.id, submissionId);
+          const uploaded = await CodeUp.uploadSubmissionFile(fileInput.files[0], this.ctx.user.id, submissionId);
           await db.from("file_uploads").insert({
             course_id: course.id, uploader_id: this.ctx.user.id, related_type:"submission",
-            related_id: submissionId, submission_id: submissionId, storage_path: path,
-            file_name: fileInput.files[0].name, mime_type: fileInput.files[0].type, file_size: fileInput.files[0].size
+            related_id: submissionId, submission_id: submissionId, storage_path: uploaded.path,
+            file_name: uploaded.name, mime_type: uploaded.type, file_size: uploaded.size
           });
         }
 
@@ -523,52 +535,51 @@ const App = {
   },
 
   async renderTimeline(body, course, myEnrollment){
+    const PAGE_SIZE = 15;
     body.innerHTML = `<div class="filterRow">
       <button data-f="all" class="active">الكل</button>
       <button data-f="mine">تسليماتي</button>
       <button data-f="squad">مجموعتي</button>
-    </div><div id="timelineList"><div class="emptyState">جارِ التحميل…</div></div>`;
+    </div><div id="timelineList"></div><div id="timelineMore"></div>`;
 
     const list = body.querySelector("#timelineList");
-    const load = async (filter)=>{
+    const moreBox = body.querySelector("#timelineMore");
+    let currentFilter = "all", page = 0, doneAnnouncements = false;
+
+    const load = async (filter, reset)=>{
+      if(reset){ page = 0; list.innerHTML = ""; doneAnnouncements = false; }
+      moreBox.innerHTML = `<div class="emptyState">جارِ التحميل…</div>`;
+
       let q = db.from("submissions").select("*, assignments!inner(title,course_id), profiles(full_name,avatar_url)")
-        .eq("assignments.course_id", course.id).order("created_at",{ascending:false}).limit(30);
+        .eq("assignments.course_id", course.id).order("created_at",{ascending:false})
+        .range(page*PAGE_SIZE, page*PAGE_SIZE + PAGE_SIZE - 1);
       if(filter==="mine") q = q.eq("profile_id", this.ctx.user.id);
       else if(filter==="squad") q = q.eq("visibility","squad");
       else q = q.in("visibility",["course","squad"]).neq("profile_id","");
 
       const {data: posts, error} = await q;
+      const safePosts = posts || [];
 
       let announcements = [];
-      if(filter!=="mine"){
-        let aq = db.from("announcements").select("*, profiles(full_name)").eq("course_id", course.id).order("created_at",{ascending:false}).limit(15);
-        const {data: annData} = await aq;
+      if(page===0 && filter!=="mine"){
+        const {data: annData} = await db.from("announcements").select("*, profiles(full_name)").eq("course_id", course.id).order("created_at",{ascending:false}).limit(15);
         announcements = (annData||[]).filter(a => filter!=="squad" || !a.target_squad_id || a.target_squad_id===myEnrollment?.squad_id);
       }
 
-      if((error || !posts || !posts.length) && !announcements.length){ list.innerHTML = `<div class="emptyState">لا توجد منشورات بعد.</div>`; return; }
-      const safePosts = posts || [];
+      if(page===0 && (error || !safePosts.length) && !announcements.length){ list.innerHTML = `<div class="emptyState">لا توجد منشورات بعد.</div>`; moreBox.innerHTML = ""; return; }
 
       const {data: reactions} = await db.from("reactions").select("*").eq("target_type","submission").in("target_id", safePosts.map(p=>p.id));
       const {data: comments} = await db.from("comments").select("*, profiles(full_name)").in("submission_id", safePosts.map(p=>p.id)).order("created_at");
       const {data: postFiles} = await db.from("file_uploads").select("*").eq("related_type","submission").in("related_id", safePosts.map(p=>p.id));
-
-      const imageBlocksByPost = {};
-      for(const f of (postFiles||[])){
-        if(!(f.mime_type||"").startsWith("image/")) continue;
-        try{
-          const url = await CodeUp.getSignedUrl("submissions", f.storage_path, 3600);
-          imageBlocksByPost[f.related_id] = (imageBlocksByPost[f.related_id]||"") +
-            `<img src="${url}" alt="${CodeUp.escapeHtml(f.file_name||"صورة")}" style="max-width:100%;border-radius:10px;margin-top:8px;display:block">`;
-        }catch(e){ /* تجاهل الفشل بصمت — النص يبقى ظاهر */ }
-      }
+      const filesByPost = {};
+      for(const f of (postFiles||[])) (filesByPost[f.related_id] ||= []).push(f);
 
       const feed = [
         ...announcements.map(a=>({type:"announcement", created_at:a.created_at, data:a})),
         ...safePosts.map(p=>({type:"submission", created_at:p.created_at, data:p}))
       ].sort((x,y)=> new Date(y.created_at) - new Date(x.created_at));
 
-      list.innerHTML = feed.map(item=>{
+      const html = feed.map(item=>{
         if(item.type==="announcement"){
           const a = item.data;
           return `
@@ -588,7 +599,7 @@ const App = {
           <div class="meta"><b style="color:var(--ink)">${CodeUp.escapeHtml(p.profiles?.full_name||"طالب")}</b><span class="mono">${CodeUp.timeAgo(p.created_at)}</span></div>
           <div class="small mono" style="margin-bottom:6px">${CodeUp.escapeHtml(p.assignments?.title||"")}</div>
           <div class="body">${CodeUp.escapeHtml(p.content||"")}</div>
-          ${imageBlocksByPost[p.id]||""}
+          ${(filesByPost[p.id]||[]).map(f=>renderFileCard(f,"submissions")).join("")}
           <div class="reactBar">
             <button class="reactBtn ${myLiked?'active':''}" data-like="${p.id}">إعجاب ${likeCount||""}</button>
           </div>
@@ -601,6 +612,8 @@ const App = {
           </div>
         </div>`;
       }).join("");
+      list.insertAdjacentHTML("beforeend", html);
+      wireFileCardPreviews(list);
 
       const requireJoin = async ()=>{
         if(myEnrollment) return true;
@@ -608,30 +621,37 @@ const App = {
         try{ await CodeUp.rpc.enrollInCourse(course.id); this.ctx = await CodeUp.loadMyContext(); myEnrollment = this.ctx.enrollments.find(e=>e.course_id===course.id); return true; }
         catch(e){ CodeUp.toast(e.message||"تعذّر الانضمام", "error"); return false; }
       };
-
-      list.querySelectorAll("[data-like]").forEach(b=>{
+      list.querySelectorAll("[data-like]:not([data-wired])").forEach(b=>{
+        b.dataset.wired = "1";
         b.onclick = async ()=>{
           if(!(await requireJoin())) return;
-          try{ await CodeUp.rpc.toggleReaction("submission", b.dataset.like, "like"); load(currentFilter); }
+          try{ await CodeUp.rpc.toggleReaction("submission", b.dataset.like, "like"); load(currentFilter, true); }
           catch(e){ CodeUp.toast(e.message,"error"); }
         };
       });
-      list.querySelectorAll("[data-commentsend]").forEach(b=>{
+      list.querySelectorAll("[data-commentsend]:not([data-wired])").forEach(b=>{
+        b.dataset.wired = "1";
         b.onclick = async ()=>{
           if(!(await requireJoin())) return;
           const input = list.querySelector(`[data-commentinput="${b.dataset.commentsend}"]`);
           const val = input.value.trim(); if(!val) return;
-          try{ await CodeUp.rpc.addComment(b.dataset.commentsend, val); input.value=""; load(currentFilter); }
+          try{ await CodeUp.rpc.addComment(b.dataset.commentsend, val); input.value=""; load(currentFilter, true); }
           catch(e){ CodeUp.toast(e.message,"error"); }
         };
       });
+
+      if(safePosts.length === PAGE_SIZE){
+        moreBox.innerHTML = `<button class="btn" id="loadMoreBtn">تحميل المزيد</button>`;
+        moreBox.querySelector("#loadMoreBtn").onclick = ()=>{ page++; load(currentFilter, false); };
+      }else{
+        moreBox.innerHTML = "";
+      }
     };
 
-    let currentFilter = "all";
     body.querySelectorAll("[data-f]").forEach(b=>{
-      b.onclick = ()=>{ currentFilter=b.dataset.f; body.querySelectorAll("[data-f]").forEach(x=>x.classList.remove("active")); b.classList.add("active"); load(currentFilter); };
+      b.onclick = ()=>{ currentFilter=b.dataset.f; body.querySelectorAll("[data-f]").forEach(x=>x.classList.remove("active")); b.classList.add("active"); load(currentFilter, true); };
     });
-    load(currentFilter);
+    load(currentFilter, true);
   },
 
   async renderSquads(body, course, myEnrollment, isAdmin, isLeader){
