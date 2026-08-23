@@ -133,7 +133,10 @@ const Admin = {
     const root = document.getElementById("navRoot");
     const counts = await this.pendingCounts();
     if(this.role === "leader"){
-      root.innerHTML = leaderNavHtml(counts);
+      const squadId = this.currentSquadId || (this.ctx.leaderSquads[0] && this.ctx.leaderSquads[0].squad_id);
+      const myLeaderRow = this.ctx.leaderSquads.find(s=>s.squad_id===squadId);
+      const canAddContent = !!(myLeaderRow?.permissions?.can_add_content);
+      root.innerHTML = leaderNavHtml(counts, {canAddContent});
       root.querySelectorAll(".navItem").forEach(el=>el.onclick=()=>this.go(el.dataset.section));
       return;
     }
@@ -198,12 +201,13 @@ const Admin = {
 
 function roleLabel(r){ return {super:"سوبر أدمن", course_admin:"أدمن كورس", leader:"قائد مجموعة"}[r]||r; }
 
-function leaderNavHtml(counts={}){
+function leaderNavHtml(counts={}, opts={}){
   const items = [
     ["mysquad","مجموعتي"],["members","الأعضاء"],["ljoin","طلبات الانضمام"],
-    ["lassignments","الواجبات"],["lsubmissions","التسليمات"],["ltimeline","المستجدات"],
-    ["lactivity","النشاط"],["lprogress","التقدم"]
+    ["lassignments","الواجبات"]
   ];
+  if(opts.canAddContent) items.push(["lcontent","المحتوى التعليمي"]);
+  items.push(["lsubmissions","التسليمات"],["ltimeline","المستجدات"],["lactivity","النشاط"],["lprogress","التقدم"]);
   return `<div class="navGroup"><div class="navLabel">مجموعتي</div>` +
     items.map(([k,l])=>{
       const badge = counts[k] ? `<span class="navBadge">${counts[k]}</span>` : "";

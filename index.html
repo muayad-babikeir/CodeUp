@@ -509,6 +509,17 @@ const App = {
 
       const {data: reactions} = await db.from("reactions").select("*").eq("target_type","submission").in("target_id", posts.map(p=>p.id));
       const {data: comments} = await db.from("comments").select("*, profiles(full_name)").in("submission_id", posts.map(p=>p.id)).order("created_at");
+      const {data: postFiles} = await db.from("file_uploads").select("*").eq("related_type","submission").in("related_id", posts.map(p=>p.id));
+
+      const imageBlocksByPost = {};
+      for(const f of (postFiles||[])){
+        if(!(f.mime_type||"").startsWith("image/")) continue;
+        try{
+          const url = await CodeUp.getSignedUrl("submissions", f.storage_path, 3600);
+          imageBlocksByPost[f.related_id] = (imageBlocksByPost[f.related_id]||"") +
+            `<img src="${url}" alt="${CodeUp.escapeHtml(f.file_name||"صورة")}" style="max-width:100%;border-radius:10px;margin-top:8px;display:block">`;
+        }catch(e){ /* تجاهل الفشل بصمت — النص يبقى ظاهر */ }
+      }
 
       list.innerHTML = posts.map(p=>{
         const myLiked = (reactions||[]).some(r=>r.target_id===p.id && r.user_id===this.ctx.user.id);
@@ -519,6 +530,7 @@ const App = {
           <div class="meta"><b style="color:var(--ink)">${CodeUp.escapeHtml(p.profiles?.full_name||"طالب")}</b><span class="mono">${CodeUp.timeAgo(p.created_at)}</span></div>
           <div class="small mono" style="margin-bottom:6px">${CodeUp.escapeHtml(p.assignments?.title||"")}</div>
           <div class="body">${CodeUp.escapeHtml(p.content||"")}</div>
+          ${imageBlocksByPost[p.id]||""}
           <div class="reactBar">
             <button class="reactBtn ${myLiked?'active':''}" data-like="${p.id}">إعجاب ${likeCount||""}</button>
           </div>

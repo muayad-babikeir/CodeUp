@@ -103,7 +103,12 @@ async function openReviewModal(sub){
   for(const f of (files||[])){
     try{
       const url = await CodeUp.getSignedUrl("submissions", f.storage_path, 600);
-      fileLinks += `<div><a href="${url}" target="_blank">${CodeUp.escapeHtml(f.file_name||"ملف")}</a></div>`;
+      const isImage = (f.mime_type||"").startsWith("image/");
+      if(isImage){
+        fileLinks += `<div style="margin:8px 0"><a href="${url}" target="_blank"><img src="${url}" alt="${CodeUp.escapeHtml(f.file_name||"صورة")}" style="max-width:100%;max-height:360px;border-radius:8px;display:block"></a></div>`;
+      }else{
+        fileLinks += `<div><a href="${url}" target="_blank">${CodeUp.escapeHtml(f.file_name||"ملف")}</a></div>`;
+      }
     }catch(e){ fileLinks += `<div class="small">تعذّر تحميل رابط الملف: ${CodeUp.escapeHtml(f.file_name||"")}</div>`; }
   }
 

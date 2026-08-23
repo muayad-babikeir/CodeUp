@@ -66,7 +66,8 @@ Admin.sections.content = {
   }
 };
 
-function openUnitModal(courseId, unit){
+function openUnitModal(courseId, unit, onDone){
+  onDone = onDone || (()=>Admin.go("content"));
   const isEdit = !!unit;
   const m = Admin.modal(`
     <h3>${isEdit?"تعديل الوحدة":"وحدة جديدة"}</h3>
@@ -84,12 +85,13 @@ function openUnitModal(courseId, unit){
     try{
       if(isEdit) await db.from("units").update(payload).eq("id", unit.id).throwOnError();
       else await db.from("units").insert({...payload, course_id: courseId}).throwOnError();
-      CodeUp.toast("تم الحفظ", "success"); m.close(); Admin.go("content");
+      CodeUp.toast("تم الحفظ", "success"); m.close(); onDone();
     }catch(e){ msgEl.style.display="block"; msgEl.textContent = e.message; }
   };
 }
 
-function openLessonModal(unitId, lesson){
+function openLessonModal(unitId, lesson, onDone){
+  onDone = onDone || (()=>Admin.go("content"));
   const isEdit = !!lesson;
   const m = Admin.modal(`
     <h3>${isEdit?"تعديل الدرس":"درس جديد"}</h3>
@@ -112,7 +114,7 @@ function openLessonModal(unitId, lesson){
     try{
       if(isEdit) await db.from("lessons").update(payload).eq("id", lesson.id).throwOnError();
       else await db.from("lessons").insert({...payload, unit_id: unitId}).throwOnError();
-      CodeUp.toast("تم الحفظ", "success"); m.close(); Admin.go("content");
+      CodeUp.toast("تم الحفظ", "success"); m.close(); onDone();
     }catch(e){ msgEl.style.display="block"; msgEl.textContent = e.message; }
   };
 }

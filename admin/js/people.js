@@ -101,14 +101,39 @@ Admin.sections.leaders = {
   async render(body){
     const cid = Admin.currentCourseId;
     const { data: leaders } = await db.from("squad_leaders").select("*, profiles(full_name,email), squads!inner(name,course_id)").eq("squads.course_id", cid);
-    body.innerHTML = `<div class="card"><table><thead><tr><th>القائد</th><th>المجموعة</th><th></th></tr></thead>
-      <tbody>${(leaders||[]).map(l=>`
+    const PERMS = [
+      {key:"can_add_assignment", label:"إضافة واجب"},
+      {key:"can_add_content", label:"إضافة محتوى (وحدات/دروس)"},
+      {key:"can_post_announcement", label:"نشر إعلان"}
+    ];
+    body.innerHTML = `<div class="card"><table><thead><tr><th>القائد</th><th>المجموعة</th><th>الصلاحيات</th><th></th></tr></thead>
+      <tbody>${(leaders||[]).map(l=>{
+        const perms = l.permissions||{};
+        return `
         <tr>
           <td>${CodeUp.escapeHtml(l.profiles?.full_name||l.profiles?.email||"")}</td>
           <td>${CodeUp.escapeHtml(l.squads?.name||"")}</td>
+          <td>${PERMS.map(p=>`
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-bottom:4px">
+              <input type="checkbox" data-perm="${l.id}" data-key="${p.key}" ${perms[p.key]?"checked":""}>
+              ${p.label}
+            </label>`).join("")}
+          </td>
           <td><button class="btn danger" data-remove="${l.id}">إزالة القيادة</button></td>
-        </tr>`).join("") || `<tr><td colspan="3" class="emptyState">لا يوجد قادة بعد. يُعيَّن القائد تلقائيًا عند الموافقة على طلب قيادة.</td></tr>`}
+        </tr>`;
+      }).join("") || `<tr><td colspan="4" class="emptyState">لا يوجد قادة بعد. يُعيَّن القائد تلقائيًا عند الموافقة على طلب قيادة.</td></tr>`}
       </tbody></table></div>`;
+    body.querySelectorAll("[data-perm]").forEach(cb=>{
+      cb.onchange = async ()=>{
+        const leaderId = cb.dataset.perm;
+        const leader = (leaders||[]).find(l=>l.id===leaderId);
+        const newPerms = {...(leader?.permissions||{}), [cb.dataset.key]: cb.checked};
+        const { error } = await db.from("squad_leaders").update({permissions:newPerms}).eq("id", leaderId);
+        if(error){ CodeUp.toast(error.message, "error"); cb.checked = !cb.checked; return; }
+        if(leader) leader.permissions = newPerms;
+        CodeUp.toast("تم تحديث الصلاحية", "success");
+      };
+    });
     body.querySelectorAll("[data-remove]").forEach(b=>{
       b.onclick = async ()=>{
         if(!confirm("تأكيد إزالة صلاحية القيادة؟")) return;
