@@ -130,21 +130,63 @@ Admin.sections.settings = {
       <div class="card">
         <label>الاسم</label><input id="sName" value="${CodeUp.escapeHtml(course.name)}">
         <label>الوصف</label><textarea id="sDesc" rows="4">${CodeUp.escapeHtml(course.description||"")}</textarea>
+        <label>الرابط (slug) — يُستخدم لمشاركة رابط مباشر للكورس، مثل codeup.app/#/course/${CodeUp.escapeHtml(course.slug||"...")}
+        </label><input id="sSlug" value="${CodeUp.escapeHtml(course.slug||"")}" placeholder="cpp-2026">
         <label>الحالة</label>
         <select id="sStatus">
           <option value="draft" ${course.status==='draft'?'selected':''}>مسودة</option>
           <option value="published" ${course.status==='published'?'selected':''}>منشور</option>
-          <option value="archived" ${course.status==='archived'?'selected':''}>مؤرشف</option>
+          <option value="archived" ${course.status==='archived'?'selected':''}>مؤرشف (مخفي عن الطلاب، بياناته محفوظة)</option>
         </select>
         <button class="btn dark" id="sSave" style="margin-top:16px">حفظ التغييرات</button>
+      </div>
+
+      <div class="card" style="margin-top:16px;border-color:rgba(224,49,49,.4)">
+        <b style="color:#E03131">منطقة الخطر</b>
+        <p class="small" style="margin-top:6px">حذف الكورس نهائيًا يمسح كل الوحدات والدروس والواجبات وتسليمات الطلاب وملفاتهم وإعلانات الكورس — <b>بلا رجعة إطلاقًا</b>. لو تبي بس تخفيه عن الطلاب مؤقتًا مع الاحتفاظ بكل شيء، استخدم "أرشفة" من قائمة الحالة فوق بدلًا من هذا.</p>
+        <button class="btn danger" id="sDeleteBtn" style="margin-top:10px">حذف الكورس نهائيًا</button>
       </div>`;
+
     body.querySelector("#sSave").onclick = async ()=>{
-      await db.from("courses").update({
-        name: body.querySelector("#sName").value.trim(),
-        description: body.querySelector("#sDesc").value.trim(),
-        status: body.querySelector("#sStatus").value
-      }).eq("id", course.id);
-      CodeUp.toast("تم الحفظ", "success");
+      const newSlug = body.querySelector("#sSlug").value.trim();
+      try{
+        await db.from("courses").update({
+          name: body.querySelector("#sName").value.trim(),
+          description: body.querySelector("#sDesc").value.trim(),
+          slug: newSlug,
+          status: body.querySelector("#sStatus").value
+        }).eq("id", course.id).throwOnError();
+        CodeUp.toast("تم الحفظ", "success");
+      }catch(e){ CodeUp.toast(e.message.includes("duplicate")?"هذا الرابط مستخدم لكورس آخر":e.message, "error"); }
+    };
+
+    body.querySelector("#sDeleteBtn").onclick = ()=>{
+      const m = Admin.modal(`
+        <h3 style="color:#E03131">حذف "${CodeUp.escapeHtml(course.name)}" نهائيًا</h3>
+        <p class="small">هذا الإجراء لا يمكن التراجع عنه. سيُحذف كل محتوى الكورس وتسليمات الطلاب وملفاتهم بالكامل.</p>
+        <label>اكتب اسم الكورس بالضبط للتأكيد: <b>${CodeUp.escapeHtml(course.name)}</b></label>
+        <input id="dConfirm" placeholder="${CodeUp.escapeHtml(course.name)}">
+        <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
+          <button class="btn" id="dCancel">إلغاء</button>
+          <button class="btn danger" id="dConfirmBtn">حذف نهائي</button>
+        </div>`);
+      m.el.querySelector("#dCancel").onclick = m.close;
+      m.el.querySelector("#dConfirmBtn").onclick = async ()=>{
+        const typed = m.el.querySelector("#dConfirm").value.trim();
+        const btn = m.el.querySelector("#dConfirmBtn");
+        btn.disabled = true;
+        try{
+          // نمسح ملفات Storage الحية أولًا (الدالة بقاعدة البيانات ما تقدر تحذف من Storage مباشرة)
+          const { data: files } = await db.from("file_uploads").select("storage_path").eq("course_id", course.id).eq("archive_status","live");
+          const paths = (files||[]).map(f=>f.storage_path).filter(Boolean);
+          if(paths.length) await db.storage.from("submissions").remove(paths);
+
+          await db.rpc("delete_course_permanently", {p_course_id: course.id, p_confirm_name: typed}).throwOnError();
+          CodeUp.toast("تم حذف الكورس نهائيًا", "success");
+          m.close();
+          location.reload();
+        }catch(e){ CodeUp.toast(e.message||"فشل الحذف — تأكد من الاسم", "error"); btn.disabled = false; }
+      };
     };
   }
 };

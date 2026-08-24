@@ -56,6 +56,51 @@ Admin.sections.moderation = {
   }
 };
 
+Admin.sections.home_announcements = {
+  label: "إعلانات الصفحة الرئيسية (عامة لكل المنصة)",
+  async render(body){
+    const { data: anns } = await db.from("announcements").select("*").is("course_id", null).order("created_at",{ascending:false});
+    body.innerHTML = `
+      <p class="small" style="margin-bottom:10px">هذي الإعلانات تظهر لكل مستخدمي CodeUp بالصفحة الرئيسية، بغض النظر عن تسجيلهم بأي كورس.</p>
+      <div class="toolbar"><button class="btn dark" id="newHomeAnnBtn">+ إعلان عام جديد</button></div>
+      <div class="card"><table><thead><tr><th>العنوان</th><th>التاريخ</th><th></th></tr></thead>
+      <tbody>${(anns||[]).map(a=>`
+        <tr><td>${CodeUp.escapeHtml(a.title)}</td><td>${CodeUp.timeAgo(a.created_at)}</td>
+          <td><button class="btn" data-view="${a.id}">عرض</button></td></tr>
+      `).join("") || `<tr><td colspan="3" class="emptyState">لا توجد إعلانات عامة بعد.</td></tr>`}
+      </tbody></table></div>`;
+
+    body.querySelectorAll("[data-view]").forEach(b=>{
+      b.onclick = ()=>{
+        const a = (anns||[]).find(x=>x.id===b.dataset.view);
+        Admin.modal(`<h3>${CodeUp.escapeHtml(a.title)}</h3><p class="small">${CodeUp.timeAgo(a.created_at)}</p>
+          <div style="margin-top:10px;white-space:pre-wrap">${CodeUp.escapeHtml(a.content||"بدون محتوى إضافي")}</div>`);
+      };
+    });
+
+    body.querySelector("#newHomeAnnBtn").onclick = ()=>{
+      const m = Admin.modal(`
+        <h3>إعلان عام جديد</h3>
+        <label>العنوان</label><input id="haTitle">
+        <label>المحتوى</label><textarea id="haContent" rows="4"></textarea>
+        <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
+          <button class="btn" id="haCancel">إلغاء</button><button class="btn dark" id="haSave">نشر للجميع</button>
+        </div>`);
+      m.el.querySelector("#haCancel").onclick = m.close;
+      m.el.querySelector("#haSave").onclick = async ()=>{
+        const title = m.el.querySelector("#haTitle").value.trim();
+        if(!title) return;
+        const saveBtn = m.el.querySelector("#haSave");
+        saveBtn.disabled = true;
+        try{
+          await CodeUp.rpc.createAnnouncement(null, title, m.el.querySelector("#haContent").value.trim(), null);
+          CodeUp.toast("تم النشر لكل المستخدمين", "success"); m.close(); Admin.go("home_announcements");
+        }catch(e){ CodeUp.toast(e.message || "تعذّر النشر", "error"); saveBtn.disabled = false; }
+      };
+    };
+  }
+};
+
 Admin.sections.announcements = {
   label: "الإعلانات",
   async render(body){

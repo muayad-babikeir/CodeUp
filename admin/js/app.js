@@ -1,4 +1,5 @@
 // admin/js/app.js
+const HOME_SENTINEL = "__home__";
 const Admin = {
   ctx: null,          // من CodeUp.loadMyContext()
   role: null,         // 'super' | 'course_admin' | 'leader'
@@ -95,7 +96,7 @@ const Admin = {
       return counts;
     }
     const cid = this.currentCourseId;
-    if(!cid) return counts;
+    if(!cid || cid === HOME_SENTINEL) return counts;
     const [{count:jr},{count:la}] = await Promise.all([
       db.from("squad_join_requests").select("id, squads!inner(course_id)",{count:"exact",head:true}).eq("squads.course_id", cid).eq("status","pending"),
       db.from("leader_applications").select("id",{count:"exact",head:true}).eq("course_id", cid).eq("status","pending")
@@ -113,6 +114,9 @@ const Admin = {
   },
 
   navConfig(){
+    if(this.currentCourseId === HOME_SENTINEL){
+      return [{group:"الصفحة الرئيسية", items:["home_announcements"]}];
+    }
     if(this.role === "super"){
       return [
         {group:"عام", items:["dashboard"]},
@@ -142,9 +146,10 @@ const Admin = {
     }
     const cfg = this.navConfig();
     let html = "";
-    if(this.courses && this.courses.length > 1){
+    if(this.role === "super" || (this.courses && this.courses.length > 1)){
       html += `<div class="navGroup"><div class="navLabel">الكورس</div>
         <select id="courseSwitcher" style="width:100%;padding:8px;border-radius:8px;border:1px solid #333;background:#1f2740;color:#fff">
+          ${this.role==="super"?`<option value="${HOME_SENTINEL}" ${this.currentCourseId===HOME_SENTINEL?"selected":""}>🏠 الصفحة الرئيسية</option>`:""}
           ${this.courses.map(c=>`<option value="${c.id}" ${c.id===this.currentCourseId?"selected":""}>${CodeUp.escapeHtml(c.name)}</option>`).join("")}
         </select></div>`;
     }
@@ -160,7 +165,12 @@ const Admin = {
     });
     root.innerHTML = html;
     const switcher = document.getElementById("courseSwitcher");
-    if(switcher) switcher.onchange = async ()=>{ this.currentCourseId = switcher.value; await this.renderNav(); this.go(this.section); };
+    if(switcher) switcher.onchange = async ()=>{
+      this.currentCourseId = switcher.value;
+      await this.renderNav();
+      const firstSection = this.navConfig().flatMap(g=>g.items).find(k=>this.sections[k]);
+      this.go(firstSection || this.section);
+    };
     root.querySelectorAll(".navItem").forEach(el=>el.onclick=()=>this.go(el.dataset.section));
   },
 

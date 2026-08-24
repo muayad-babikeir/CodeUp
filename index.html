@@ -110,6 +110,8 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
 .videoEmbed .playBtn{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;cursor:pointer;background:rgba(0,0,0,.25)}
 .videoEmbed .playBtn svg{width:56px;height:56px;color:#fff;filter:drop-shadow(0 2px 8px rgba(0,0,0,.5))}
 .videoEmbed iframe{width:100%;height:100%;border:0;display:block}
+.progressBar{height:8px;border-radius:6px;background:rgba(239,243,244,.1);overflow:hidden;margin-top:8px}
+.progressFill{height:100%;background:var(--accent);border-radius:6px;transition:width .3s}
 .fbTabBar button.active{background:var(--ink);color:var(--bg0)}
 .joinBanner{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--surface);border:1px solid var(--accent,#4c8dff);border-radius:14px;padding:12px 16px;margin:14px 0}
 .joinBanner p{margin:0;font-size:13.5px;color:var(--ink60)}
@@ -247,10 +249,32 @@ const App = {
     document.getElementById("notifBtn").onclick = ()=>this.openNotifications();
     this.refreshNotifBadge();
     CodeUp.subscribeToMyNotifications(user.id, (n)=>{ this.refreshNotifBadge(); CodeUp.toast(n.title, "info"); });
-    this.go({name:"home"});
+    window.addEventListener("popstate", ()=> this.routeFromHash(false));
+    await this.routeFromHash(false, true);
   },
 
-  go(view){ this.view = view; this.render(); },
+  // يحوّل الرابط الحالي (#/course/<slug>/<tab>) إلى view، أو يفتح الرئيسية لو ما فيه رابط
+  async routeFromHash(pushState, isInitial){
+    const hash = location.hash.replace(/^#\/?/, "");
+    const parts = hash.split("/").filter(Boolean);
+    if(parts[0] === "course" && parts[1]){
+      const {data: course} = await db.from("courses").select("id").eq("slug", parts[1]).single();
+      if(course){ this.go({name:"course", courseId: course.id, tab: parts[2]||"learning"}, pushState); return; }
+    }
+    this.go({name:"home"}, pushState);
+  },
+
+  go(view, updateHash = true){
+    this.view = view;
+    if(updateHash){
+      if(view.name === "course" && view.courseSlug){
+        history.pushState(null, "", `#/course/${view.courseSlug}/${view.tab||"learning"}`);
+      }else if(view.name === "home"){
+        history.pushState(null, "", location.pathname);
+      }
+    }
+    this.render();
+  },
 
   crumbTrail(items){
     this.crumbs.classList.remove("hidden");
@@ -312,22 +336,40 @@ const App = {
 
   async render(){
     this.root.innerHTML = `<div class="emptyState">جارِ التحميل…</div>`;
-    if(this.view.name==="home") return this.renderHome();
+    if(this.view.name==="home") return this.renderHome(this.view.homeTab);
     if(this.view.name==="course") return this.renderCourse(this.view.courseId, this.view.tab||"learning");
   },
 
-  async renderHome(){
+  async renderHome(tab){
+    tab = tab || this.view.homeTab || "feed";
     this.crumbs.classList.add("hidden");
+
+    this.root.innerHTML = `
+      <section class="welcome"><h2>مرحباً ${CodeUp.escapeHtml(this.ctx.profile.full_name||"")}</h2><p class="mono">${CodeUp.escapeHtml(this.ctx.user.email||"")}</p></section>
+      <div class="fbTabBar">
+        <button data-hometab="feed" class="${tab==='feed'?'active':''}"><span class="tabIcon">${Icon('timeline')}</span>الرئيسية</button>
+        <button data-hometab="courses" class="${tab==='courses'?'active':''}"><span class="tabIcon">${Icon('learning')}</span>الكورسات</button>
+      </div>
+      <div id="homeBody"></div>`;
+    this.root.querySelectorAll("[data-hometab]").forEach(b=>{
+      b.onclick = ()=>{ this.view = {name:"home", homeTab:b.dataset.hometab}; this.renderHome(b.dataset.hometab); };
+    });
+
+    const body = document.getElementById("homeBody");
+    if(tab === "courses") return this.renderHomeCourses(body);
+    return this.renderHomeFeed(body);
+  },
+
+  async renderHomeCourses(body){
     const {data: courses} = await db.from("courses").select("*").eq("status","published").order("created_at");
     const enrolledIds = new Set(this.ctx.enrollments.map(e=>e.course_id));
     const myCourses = this.ctx.enrollments;
-
-    let html = `<section class="welcome"><h2>مرحباً ${CodeUp.escapeHtml(this.ctx.profile.full_name||"")}</h2><p class="mono">${CodeUp.escapeHtml(this.ctx.user.email||"")}</p></section>`;
+    let html = "";
 
     if(myCourses.length){
       html += `<div class="sectionHead"><h3 class="eyebrow">كورساتي</h3></div><div class="grid">`;
       html += myCourses.map(e=>`
-        <div class="courseCard" data-course="${e.course_id}">
+        <div class="courseCard" data-course="${e.course_id}" data-slug="${CodeUp.escapeHtml(e.courses?.slug||"")}">
           <div class="row"><h3>${CodeUp.escapeHtml(e.courses?.name||"")}</h3><span class="tag ${e.status}">${statusLabel(e.status)}</span></div>
           <p>${e.squads?CodeUp.escapeHtml(e.squads.name):"بلا مجموعة بعد"}</p>
           <p class="small mono" style="margin-top:8px">تقدم ${e.progress}% · ${e.xp} XP · streak ${e.streak}</p>
@@ -339,7 +381,7 @@ const App = {
     if(otherCourses.length){
       html += `<div class="sectionHead"><h3 class="eyebrow">كورسات متاحة</h3></div><div class="grid">`;
       html += otherCourses.map(c=>`
-        <div class="courseCard" data-course="${c.id}">
+        <div class="courseCard" data-course="${c.id}" data-slug="${CodeUp.escapeHtml(c.slug||"")}">
           <h3>${CodeUp.escapeHtml(c.name)}</h3>
           <p>${CodeUp.escapeHtml(c.description||"")}</p>
         </div>`).join("");
@@ -349,11 +391,118 @@ const App = {
     if(!myCourses.length && !otherCourses.length){
       html += `<div class="emptyState">لا توجد كورسات متاحة حاليًا.</div>`;
     }
-
-    this.root.innerHTML = html;
-    this.root.querySelectorAll(".courseCard").forEach(el=>{
-      el.onclick = ()=> this.go({name:"course", courseId: el.dataset.course, tab:"learning"});
+    body.innerHTML = html;
+    body.querySelectorAll(".courseCard").forEach(el=>{
+      el.onclick = ()=> this.go({name:"course", courseId: el.dataset.course, courseSlug: el.dataset.slug, tab:"learning"});
     });
+  },
+
+  // الرئيسية المجمّعة: إعلانات عامة + منشورات حرة + تسليمات وتعليقات ولايكات من كل الكورسات المسجّل فيها الطالب
+  async renderHomeFeed(body){
+    const PAGE_SIZE = 15;
+    const myCourseIds = this.ctx.enrollments.map(e=>e.course_id);
+    body.innerHTML = `
+      <div class="card2" style="margin-top:14px">
+        <textarea id="newPostText" rows="2" placeholder="شارك تحديثًا أو سؤالًا مع الجميع…" style="width:100%;resize:vertical"></textarea>
+        <div style="display:flex;justify-content:flex-end;margin-top:8px"><button class="btn dark" id="newPostBtn">نشر</button></div>
+      </div>
+      <div id="feedList"></div><div id="feedMore"></div>`;
+
+    document.getElementById("newPostBtn").onclick = async ()=>{
+      const ta = document.getElementById("newPostText");
+      const val = ta.value.trim(); if(!val) return;
+      try{ await db.from("posts").insert({profile_id:this.ctx.user.id, content: val}).throwOnError(); ta.value=""; loadFeed(true); CodeUp.toast("تم النشر","success"); }
+      catch(e){ CodeUp.toast(e.message,"error"); }
+    };
+
+    const list = body.querySelector("#feedList");
+    const moreBox = body.querySelector("#feedMore");
+    let page = 0;
+
+    const loadFeed = async (reset)=>{
+      if(reset){ page = 0; list.innerHTML = ""; }
+      moreBox.innerHTML = `<div class="emptyState">جارِ التحميل…</div>`;
+
+      const [{data: announcements}, {data: posts}, {data: subs}] = await Promise.all([
+        page===0 ? db.from("announcements").select("*, profiles(full_name)").is("course_id", null).order("created_at",{ascending:false}).limit(10) : Promise.resolve({data:[]}),
+        db.from("posts").select("*, profiles(full_name)").order("created_at",{ascending:false}).range(page*PAGE_SIZE, page*PAGE_SIZE+PAGE_SIZE-1),
+        myCourseIds.length ? db.from("submissions").select("*, assignments(title,course_id,courses(name)), profiles(full_name)").in("assignments.course_id", myCourseIds).in("visibility",["course","squad"]).order("created_at",{ascending:false}).range(page*PAGE_SIZE, page*PAGE_SIZE+PAGE_SIZE-1) : Promise.resolve({data:[]})
+      ]);
+      const safeSubs = (subs||[]).filter(s=>s.assignments); // استبعاد أي صف ما رجع بسبب inner join
+      const safePosts = posts || [];
+
+      if(page===0 && !safeSubs.length && !safePosts.length && !(announcements||[]).length){
+        list.innerHTML = `<div class="emptyState">لا توجد منشورات بعد. كن أول من يشارك شيئًا!</div>`; moreBox.innerHTML = ""; return;
+      }
+
+      const [{data: reactions}, {data: comments}, {data: postFiles}] = await Promise.all([
+        db.from("reactions").select("*").in("target_type",["submission","post"]).in("target_id", [...safeSubs.map(s=>s.id), ...safePosts.map(p=>p.id)]),
+        db.from("comments").select("*, profiles(full_name)").or(`submission_id.in.(${safeSubs.map(s=>s.id).join(",")||"00000000-0000-0000-0000-000000000000"}),post_id.in.(${safePosts.map(p=>p.id).join(",")||"00000000-0000-0000-0000-000000000000"})`).order("created_at"),
+        db.from("file_uploads").select("*").eq("related_type","submission").in("related_id", safeSubs.map(s=>s.id))
+      ]);
+      const filesByPost = {};
+      for(const f of (postFiles||[])) (filesByPost[f.related_id] ||= []).push(f);
+
+      const feed = [
+        ...(page===0?(announcements||[]):[]).map(a=>({type:"announcement", created_at:a.created_at, data:a})),
+        ...safePosts.map(p=>({type:"post", created_at:p.created_at, data:p})),
+        ...safeSubs.map(s=>({type:"submission", created_at:s.created_at, data:s}))
+      ].sort((x,y)=> new Date(y.created_at) - new Date(x.created_at));
+
+      const reactionsFor = (type,id)=> (reactions||[]).filter(r=>r.target_type===type && r.target_id===id);
+      const commentsFor = (type,id)=> (comments||[]).filter(c=> type==='post' ? c.post_id===id : c.submission_id===id);
+
+      const html = feed.map(item=>{
+        if(item.type==="announcement"){
+          const a = item.data;
+          return `<div class="timelinePost feedAnnouncement"><span class="feedTag">${Icon("announcement")} إعلان عام</span>
+            <div class="meta"><b style="color:var(--ink)">${CodeUp.escapeHtml(a.profiles?.full_name||"إدارة CodeUp")}</b><span class="mono">${CodeUp.timeAgo(a.created_at)}</span></div>
+            <div class="body"><b>${CodeUp.escapeHtml(a.title)}</b>${a.content?`<br>${CodeUp.escapeHtml(a.content)}`:""}</div></div>`;
+        }
+        const isPost = item.type==="post";
+        const d = item.data;
+        const myLiked = reactionsFor(item.type, d.id).some(r=>r.user_id===this.ctx.user.id);
+        const likeCount = reactionsFor(item.type, d.id).length;
+        const itemComments = commentsFor(item.type, d.id);
+        return `<div class="timelinePost" data-feeditem="${d.id}" data-type="${item.type}">
+          <span class="feedTag">${isPost?Icon("check"):Icon("check")} ${isPost?"منشور":"تسليم واجب"}${!isPost && d.assignments?.courses?.name ? " · " + CodeUp.escapeHtml(d.assignments.courses.name) : ""}</span>
+          <div class="meta"><b style="color:var(--ink)">${CodeUp.escapeHtml(d.profiles?.full_name||"طالب")}</b><span class="mono">${CodeUp.timeAgo(d.created_at)}</span></div>
+          ${!isPost?`<div class="small mono" style="margin-bottom:6px">${CodeUp.escapeHtml(d.assignments?.title||"")}</div>`:""}
+          <div class="body">${CodeUp.escapeHtml(d.content||"")}</div>
+          ${!isPost?(filesByPost[d.id]||[]).map(f=>renderFileCard(f,"submissions")).join(""):""}
+          <div class="reactBar"><button class="reactBtn ${myLiked?'active':''}" data-like="${d.id}" data-liketype="${item.type}">إعجاب ${likeCount||""}</button></div>
+          <div class="commentsList">${itemComments.map(c=>`<div class="comment"><b>${CodeUp.escapeHtml(c.profiles?.full_name||"")}</b>: ${CodeUp.escapeHtml(c.content)}</div>`).join("")}</div>
+          <div class="commentBox"><input type="text" placeholder="اكتب تعليقًا…" data-commentinput="${d.id}"><button class="btn" data-commentsend="${d.id}" data-commenttype="${item.type}">إرسال</button></div>
+        </div>`;
+      }).join("");
+      list.insertAdjacentHTML("beforeend", html);
+      wireFileCardPreviews(list);
+
+      list.querySelectorAll("[data-like]:not([data-wired])").forEach(b=>{
+        b.dataset.wired = "1";
+        b.onclick = async ()=>{ try{ await CodeUp.rpc.toggleReaction(b.dataset.liketype, b.dataset.like, "like"); loadFeed(true); }catch(e){ CodeUp.toast(e.message,"error"); } };
+      });
+      list.querySelectorAll("[data-commentsend]:not([data-wired])").forEach(b=>{
+        b.dataset.wired = "1";
+        b.onclick = async ()=>{
+          const input = list.querySelector(`[data-commentinput="${b.dataset.commentsend}"]`);
+          const val = input.value.trim(); if(!val) return;
+          try{
+            const payload = {user_id:this.ctx.user.id, content: val};
+            if(b.dataset.commenttype === "post") payload.post_id = b.dataset.commentsend;
+            else payload.submission_id = b.dataset.commentsend;
+            await db.from("comments").insert(payload).throwOnError();
+            input.value=""; loadFeed(true);
+          }catch(e){ CodeUp.toast(e.message,"error"); }
+        };
+      });
+
+      if(safeSubs.length === PAGE_SIZE || safePosts.length === PAGE_SIZE){
+        moreBox.innerHTML = `<button class="btn" id="feedMoreBtn">تحميل المزيد</button>`;
+        moreBox.querySelector("#feedMoreBtn").onclick = ()=>{ page++; loadFeed(false); };
+      }else{ moreBox.innerHTML = ""; }
+    };
+    loadFeed(true);
   },
 
   async renderCourse(courseId, tab){
@@ -384,7 +533,7 @@ const App = {
       <div id="tabBody"></div>`;
     this.root.innerHTML = html;
     this.root.querySelectorAll(".fbTabBar [data-tab]").forEach(b=>{
-      b.onclick = ()=>{ if(b.dataset.tab!==tab) this.go({name:"course",courseId,tab:b.dataset.tab}); };
+      b.onclick = ()=>{ if(b.dataset.tab!==tab) this.go({name:"course",courseId,courseSlug:course.slug,tab:b.dataset.tab}); };
     });
     const joinBtn = document.getElementById("joinCourseBtn");
     if(joinBtn) joinBtn.onclick = async ()=>{
@@ -393,7 +542,7 @@ const App = {
         await CodeUp.rpc.enrollInCourse(courseId);
         this.ctx = await CodeUp.loadMyContext();
         CodeUp.toast("تم الانضمام للكورس", "success");
-        this.go({name:"course",courseId,tab});
+        this.go({name:"course",courseId,courseSlug:course.slug,tab});
       }catch(e){ CodeUp.toast(e.message||"تعذّر الانضمام", "error"); joinBtn.disabled = false; }
     };
 
@@ -411,13 +560,32 @@ const App = {
   async renderLearning(body, course){
     const {data: units} = await db.from("units").select("*, lessons(*)").eq("course_id", course.id).order("order_index");
     if(!units || !units.length){ body.innerHTML = `<div class="emptyState">لا يوجد محتوى تعليمي منشور بعد.</div>`; return; }
-    body.innerHTML = units.map(u=>`
+
+    const allLessonIds = units.flatMap(u=>(u.lessons||[]).map(l=>l.id));
+    const {data: myProgress} = allLessonIds.length
+      ? await db.from("lesson_progress").select("lesson_id,status").eq("profile_id", this.ctx.user.id).in("lesson_id", allLessonIds)
+      : {data:[]};
+    const doneSet = new Set((myProgress||[]).filter(p=>p.status==="completed").map(p=>p.lesson_id));
+    const total = allLessonIds.length;
+    const donePct = total ? Math.round((doneSet.size/total)*100) : 0;
+
+    body.innerHTML = `
+      <div class="card2" style="margin-bottom:14px">
+        <div class="row"><b>تقدّمك بالمحتوى</b><span class="mono">${donePct}%</span></div>
+        <div class="progressBar"><div class="progressFill" style="width:${donePct}%"></div></div>
+      </div>` +
+      units.map(u=>`
       <div class="card2">
         <b>${CodeUp.escapeHtml(u.title)}</b>
         <div style="margin-top:8px">
           ${(u.lessons||[]).sort((a,b)=>a.order_index-b.order_index).map(l=>`
             <div class="lessonBlock" style="padding:8px 0;border-top:1px dashed rgba(255,255,255,.12)">
-              <div class="row"><span>${CodeUp.escapeHtml(l.title)}</span></div>
+              <div class="row">
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                  <input type="checkbox" data-lessondone="${l.id}" ${doneSet.has(l.id)?"checked":""}>
+                  <span>${CodeUp.escapeHtml(l.title)}</span>
+                </label>
+              </div>
               ${l.video_url?youtubeEmbedHtml(l.video_url):""}
               ${l.text_content?`<p class="small" style="white-space:pre-wrap;margin-top:6px">${CodeUp.escapeHtml(l.text_content)}</p>`:""}
               ${l.pdf_url?`<a class="btn" style="margin-top:6px;display:inline-block" href="${l.pdf_url}" target="_blank">فتح ملف PDF ↗</a>`:""}
@@ -425,6 +593,22 @@ const App = {
         </div>
       </div>`).join("");
     wireYoutubeEmbeds(body);
+
+    body.querySelectorAll("[data-lessondone]").forEach(cb=>{
+      cb.onchange = async ()=>{
+        const lessonId = cb.dataset.lessondone;
+        cb.disabled = true;
+        try{
+          await db.from("lesson_progress").upsert({
+            lesson_id: lessonId, profile_id: this.ctx.user.id,
+            status: cb.checked ? "completed" : "not_started",
+            completed_at: cb.checked ? new Date().toISOString() : null
+          }, {onConflict: "lesson_id,profile_id"}).throwOnError();
+          this.renderLearning(body, course); // إعادة رسم لتحديث نسبة التقدم
+        }catch(e){ CodeUp.toast(e.message,"error"); cb.checked = !cb.checked; }
+        finally{ cb.disabled = false; }
+      };
+    });
   },
 
   async renderAssignments(body, course, myEnrollment){
