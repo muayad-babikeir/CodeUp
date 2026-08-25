@@ -23,8 +23,20 @@ Admin.sections.assignments = {
   }
 };
 
-function openAssignmentModal(courseId, a){
+async function openAssignmentModal(courseId, a){
   const isEdit = !!a;
+  const { data: squads } = await db.from("squads").select("id,name").eq("course_id", courseId).eq("status","active");
+  let targetedSquadIds = [];
+  if(isEdit){
+    const { data: links } = await db.from("assignment_squads").select("squad_id").eq("assignment_id", a.id);
+    targetedSquadIds = (links||[]).map(l=>l.squad_id);
+  }
+  let existingFiles = [];
+  if(isEdit){
+    const { data: files } = await db.from("file_uploads").select("*").eq("related_type","assignment").eq("related_id", a.id);
+    existingFiles = files || [];
+  }
+
   const m = Admin.modal(`
     <h3>${isEdit?"تعديل الواجب":"واجب جديد"}</h3>
     <label>العنوان</label><input id="aTitle" value="${a?CodeUp.escapeHtml(a.title):""}">
@@ -32,12 +44,50 @@ function openAssignmentModal(courseId, a){
     <label>النوع</label>
     <select id="aType"><option value="weekly" ${!a||a.type==='weekly'?'selected':''}>أسبوعي</option><option value="daily" ${a?.type==='daily'?'selected':''}>يومي</option></select>
     <label>الموعد النهائي</label><input id="aDeadline" type="date" value="${a?.deadline||""}">
+    <label>يظهر لـ</label>
+    <div style="display:flex;flex-direction:column;gap:6px;margin:6px 0">
+      <label style="display:flex;align-items:center;gap:6px;font-size:13px">
+        <input type="radio" name="aTargetMode" id="aTargetAll" ${!targetedSquadIds.length?"checked":""}> كل طلاب الكورس
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:13px">
+        <input type="radio" name="aTargetMode" id="aTargetSome" ${targetedSquadIds.length?"checked":""}> مجموعات محددة فقط
+      </label>
+    </div>
+    <div id="aSquadList" style="display:${targetedSquadIds.length?"block":"none"};margin-bottom:8px">
+      ${(squads||[]).map(s=>`<label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-bottom:4px">
+        <input type="checkbox" data-squadcheck value="${s.id}" ${targetedSquadIds.includes(s.id)?"checked":""}> ${CodeUp.escapeHtml(s.name)}
+      </label>`).join("") || `<p class="small">لا توجد مجموعات نشطة بهذا الكورس بعد.</p>`}
+    </div>
+    <label>المرفقات (اختياري)</label>
+    <div id="aExistingFiles">${existingFiles.map(f=>renderFileCard(f,"course-assets")).join("")}</div>
+    <input type="file" id="aNewFile" accept="image/*,application/pdf,.doc,.docx,.txt,.zip">
     <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
       <button class="btn" id="aCancel">إلغاء</button><button class="btn dark" id="aSave">حفظ</button>
     </div><div id="aMsg" class="emptyState" style="display:none;padding:8px;color:#F2555F"></div>
   `);
+  wireFileCardPreviews(m.el);
+  m.el.querySelector("#aExistingFiles").querySelectorAll("[data-filecard]").forEach(card=>{
+    const delBtn = document.createElement("button");
+    delBtn.className = "btn danger"; delBtn.textContent = "حذف المرفق"; delBtn.style.marginInlineStart = "6px";
+    delBtn.onclick = async ()=>{
+      const fileId = card.dataset.filecard;
+      const f = existingFiles.find(x=>x.id===fileId);
+      try{
+        await db.storage.from("course-assets").remove([f.storage_path]);
+        await db.from("file_uploads").delete().eq("id", fileId).throwOnError();
+        card.remove();
+        CodeUp.toast("تم حذف المرفق","success");
+      }catch(e){ CodeUp.toast(e.message,"error"); }
+    };
+    card.appendChild(delBtn);
+  });
+  m.el.querySelector("#aTargetAll").onchange = ()=>{ m.el.querySelector("#aSquadList").style.display = "none"; };
+  m.el.querySelector("#aTargetSome").onchange = ()=>{ m.el.querySelector("#aSquadList").style.display = "block"; };
   m.el.querySelector("#aCancel").onclick = m.close;
   m.el.querySelector("#aSave").onclick = async ()=>{
+    const saveBtn = m.el.querySelector("#aSave");
+    if(saveBtn.disabled) return;
+    saveBtn.disabled = true; saveBtn.textContent = "جارِ الحفظ…";
     const msgEl = m.el.querySelector("#aMsg");
     const payload = {
       title: m.el.querySelector("#aTitle").value.trim(),
@@ -45,12 +95,44 @@ function openAssignmentModal(courseId, a){
       type: m.el.querySelector("#aType").value,
       deadline: m.el.querySelector("#aDeadline").value || null
     };
-    if(!payload.title){ msgEl.style.display="block"; msgEl.textContent="العنوان إلزامي"; return; }
+    if(!payload.title){ msgEl.style.display="block"; msgEl.textContent="العنوان إلزامي"; saveBtn.disabled=false; saveBtn.textContent="حفظ"; return; }
     try{
-      if(isEdit) await db.from("assignments").update({...payload, updated_at: new Date().toISOString()}).eq("id", a.id).throwOnError();
-      else await db.from("assignments").insert({...payload, course_id: courseId, created_by: Admin.ctx.user.id}).throwOnError();
+      let assignmentId = a?.id;
+      if(isEdit){
+        await db.from("assignments").update({...payload, updated_at: new Date().toISOString()}).eq("id", a.id).throwOnError();
+      }else{
+        const {data, error} = await db.from("assignments").insert({...payload, course_id: courseId, created_by: Admin.ctx.user.id}).select().single();
+        if(error) throw error;
+        assignmentId = data.id;
+      }
+
+      // تحديث استهداف المجموعات
+      await db.from("assignment_squads").delete().eq("assignment_id", assignmentId);
+      const targetAll = m.el.querySelector("#aTargetAll").checked;
+      if(!targetAll){
+        const checkedIds = [...m.el.querySelectorAll("[data-squadcheck]:checked")].map(cb=>cb.value);
+        if(checkedIds.length){
+          await db.from("assignment_squads").insert(checkedIds.map(sid=>({assignment_id: assignmentId, squad_id: sid}))).throwOnError();
+        }
+      }
+
+      // رفع مرفق جديد إن وُجد (bucket منفصل تمامًا عن ملفات الطلاب — لا يدخل نظام الأرشفة إطلاقًا)
+      const fileInput = m.el.querySelector("#aNewFile");
+      if(fileInput.files[0]){
+        const file = fileInput.files[0];
+        const cleanName = file.name.replace(/[^\w.\-]+/g, "_");
+        const path = `${courseId}/${assignmentId}/${Date.now()}_${cleanName}`;
+        const { error: upErr } = await db.storage.from("course-assets").upload(path, file, { upsert:false });
+        if(upErr) throw upErr;
+        await db.from("file_uploads").insert({
+          course_id: courseId, uploader_id: Admin.ctx.user.id, related_type:"assignment",
+          related_id: assignmentId, storage_path: path, file_name: file.name, mime_type: file.type, file_size: file.size,
+          archive_status: "live"
+        }).throwOnError();
+      }
+
       CodeUp.toast("تم الحفظ", "success"); m.close(); Admin.go("assignments");
-    }catch(e){ msgEl.style.display="block"; msgEl.textContent = e.message; }
+    }catch(e){ msgEl.style.display="block"; msgEl.textContent = e.message; saveBtn.disabled=false; saveBtn.textContent="حفظ"; }
   };
 }
 

@@ -1,15 +1,100 @@
 // admin/js/audit.js
 
 Admin.sections.files = {
-  label: "الملفات",
+  label: "الملفات والأرشفة",
   async render(body){
     const cid = Admin.currentCourseId;
-    const { data } = await db.from("file_uploads").select("*, profiles(full_name)").eq("course_id", cid).order("created_at",{ascending:false}).limit(80);
-    body.innerHTML = `<div class="card"><table><thead><tr><th>الملف</th><th>رفعه</th><th>النوع</th><th>التاريخ</th></tr></thead>
-      <tbody>${(data||[]).map(f=>`
-        <tr><td>${CodeUp.escapeHtml(f.file_name||"—")}</td><td>${CodeUp.escapeHtml(f.profiles?.full_name||"")}</td><td>${CodeUp.escapeHtml(f.related_type||"")}</td><td>${CodeUp.timeAgo(f.created_at)}</td></tr>
-      `).join("") || `<tr><td colspan="4" class="emptyState">لا توجد ملفات مرفوعة بعد.</td></tr>`}
-      </tbody></table></div>`;
+    const isSuper = Admin.role === "super";
+
+    // إعدادات المدة (عامة + خاصة بهذا الكورس)
+    const { data: settings } = await db.from("archive_settings").select("*").in("scope_type", isSuper?["global","course"]:["course"]).or(cid?`scope_id.eq.${cid},scope_id.is.null`:"scope_id.is.null");
+    const globalSetting = (settings||[]).find(s=>s.scope_type==='global');
+    const courseSetting = (settings||[]).find(s=>s.scope_type==='course' && s.scope_id===cid);
+
+    const { data: files } = await db.from("file_uploads").select("*, profiles(full_name)").eq("course_id", cid).eq("related_type","submission").order("created_at",{ascending:false}).limit(60);
+
+    const statusLabelAr = {live:"بالتخزين — لسه ما اترسل", sending:"جارِ الإرسال…", sent:"أُرسل لتيليجرام (بالتخزين لسه)", failed:"فشل الإرسال — سيُعاد المحاولة", archived:"أُرشف (اتحذف من التخزين)"};
+
+    body.innerHTML = `
+      ${isSuper?`
+      <div class="card">
+        <b>المدة الافتراضية لكل المنصة</b>
+        <div class="row" style="margin-top:8px;gap:8px">
+          <input id="globalDays" type="number" min="1" value="${globalSetting?.retention_days??7}" style="width:100px">
+          <span class="small">يوم — قبل حذف نسخة Supabase (تيليجرام يحتفظ بنسخته للأبد بغض النظر)</span>
+        </div>
+        <button class="btn dark" id="saveGlobalBtn" style="margin-top:10px">حفظ المدة العامة</button>
+      </div>`:""}
+
+      <div class="card" style="margin-top:14px">
+        <b>مدة خاصة بهذا الكورس (اختياري — تتجاوز العامة)</b>
+        <div class="row" style="margin-top:8px;gap:8px">
+          <input id="courseDays" type="number" min="1" placeholder="اتركه فاضي لاستخدام الإعداد العام" value="${courseSetting?.retention_days??""}" style="width:220px">
+        </div>
+        <button class="btn dark" id="saveCourseBtn" style="margin-top:10px">حفظ لهذا الكورس</button>
+        ${courseSetting?`<button class="btn" id="clearCourseBtn" style="margin-top:10px">إلغاء التخصيص (رجوع للعام)</button>`:""}
+      </div>
+
+      <div class="card" style="margin-top:14px">
+        <b>ملفات تسليمات الطلاب — الحالة</b>
+        <table style="margin-top:10px"><thead><tr><th>الملف</th><th>رفعه</th><th>الحالة</th><th>موعد الحذف</th><th></th></tr></thead>
+        <tbody>${(files||[]).map(f=>`
+          <tr data-filerow="${f.id}">
+            <td>${CodeUp.escapeHtml(f.file_name||"—")}</td>
+            <td>${CodeUp.escapeHtml(f.profiles?.full_name||"")}</td>
+            <td>${statusLabelAr[f.archive_status]||f.archive_status}${f.archive_error?`<br><span class="small" style="color:#E03131">${CodeUp.escapeHtml(f.archive_error)}</span>`:""}</td>
+            <td class="mono small">${f.archive_status==='archived'?"—":(f.scheduled_delete_at?CodeUp.formatDate(f.scheduled_delete_at):"—")}</td>
+            <td>
+              ${f.archive_status!=='archived'?`<button class="btn" data-archivenow="${f.id}">أرشف الآن</button>
+              <button class="btn" data-postpone="${f.id}">تأجيل</button>`:`<span class="small">—</span>`}
+            </td>
+          </tr>
+        `).join("") || `<tr><td colspan="5" class="emptyState">لا توجد ملفات تسليمات بعد.</td></tr>`}
+        </tbody></table>
+      </div>`;
+
+    const globalBtn = body.querySelector("#saveGlobalBtn");
+    if(globalBtn) globalBtn.onclick = async ()=>{
+      const days = parseInt(body.querySelector("#globalDays").value);
+      if(!days || days<1){ CodeUp.toast("أدخل رقمًا صحيحًا أكبر من صفر","error"); return; }
+      try{
+        await db.from("archive_settings").upsert({scope_type:"global", scope_id:null, retention_days:days, created_by:Admin.ctx.user.id}, {onConflict:"scope_type,scope_id"}).throwOnError();
+        CodeUp.toast("تم الحفظ","success");
+      }catch(e){ CodeUp.toast(e.message,"error"); }
+    };
+
+    body.querySelector("#saveCourseBtn").onclick = async ()=>{
+      const val = body.querySelector("#courseDays").value.trim();
+      if(!val){ CodeUp.toast("أدخل رقم أيام أو استخدم زر الإلغاء","error"); return; }
+      const days = parseInt(val);
+      if(!days || days<1){ CodeUp.toast("أدخل رقمًا صحيحًا أكبر من صفر","error"); return; }
+      try{
+        await db.from("archive_settings").upsert({scope_type:"course", scope_id:cid, retention_days:days, created_by:Admin.ctx.user.id}, {onConflict:"scope_type,scope_id"}).throwOnError();
+        CodeUp.toast("تم الحفظ لهذا الكورس","success"); Admin.go("files");
+      }catch(e){ CodeUp.toast(e.message,"error"); }
+    };
+
+    const clearBtn = body.querySelector("#clearCourseBtn");
+    if(clearBtn) clearBtn.onclick = async ()=>{
+      try{ await db.from("archive_settings").delete().eq("scope_type","course").eq("scope_id",cid).throwOnError(); Admin.go("files"); }
+      catch(e){ CodeUp.toast(e.message,"error"); }
+    };
+
+    body.querySelectorAll("[data-archivenow]").forEach(b=>{
+      b.onclick = async ()=>{
+        try{ await db.rpc("set_file_delete_schedule",{p_file_id:b.dataset.archivenow, p_new_time:new Date().toISOString()}).throwOnError(); CodeUp.toast("سيُحذف من التخزين بأول تشغيل للمهمة اليومية (بعد التأكد من نجاح الإرسال لتيليجرام)","success"); Admin.go("files"); }
+        catch(e){ CodeUp.toast(e.message,"error"); }
+      };
+    });
+    body.querySelectorAll("[data-postpone]").forEach(b=>{
+      b.onclick = async ()=>{
+        const days = prompt("أجّل الحذف كم يوم من الآن؟", "7");
+        if(!days) return;
+        const newDate = new Date(Date.now() + parseInt(days)*24*60*60*1000).toISOString();
+        try{ await db.rpc("set_file_delete_schedule",{p_file_id:b.dataset.postpone, p_new_time:newDate}).throwOnError(); CodeUp.toast("تم التأجيل","success"); Admin.go("files"); }
+        catch(e){ CodeUp.toast(e.message,"error"); }
+      };
+    });
   }
 };
 

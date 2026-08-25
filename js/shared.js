@@ -249,5 +249,19 @@ const CodeUp = (() => {
       .subscribe();
   }
 
-  return { toast, escapeHtml, timeAgo, formatDate, debounce, requireSession, loadMyContext, rpc, call, uploadSubmissionFile, getSignedUrl, subscribeToMyNotifications };
+  // إرسال فوري لملف تسليم إلى تيليجرام (لا يوقف عملية التسليم لو فشل — تعالج المحاولة لاحقًا تلقائيًا)
+  async function triggerTelegramSend(fileId) {
+    try {
+      const { data: sessionData } = await db.auth.getSession();
+      const token = sessionData?.session?.access_token;
+      if (!token) return;
+      await fetch(`${SUPABASE_URL}/functions/v1/telegram-send-immediate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+        body: JSON.stringify({ file_id: fileId })
+      });
+    } catch (e) { /* فشل صامت — الملف بأمان بـ Supabase، والمحاولة تُعاد تلقائيًا بالمهمة اليومية */ }
+  }
+
+  return { toast, escapeHtml, timeAgo, formatDate, debounce, requireSession, loadMyContext, rpc, call, uploadSubmissionFile, getSignedUrl, subscribeToMyNotifications, triggerTelegramSend };
 })();

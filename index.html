@@ -617,6 +617,9 @@ const App = {
 
     const {data: mySubs} = await db.from("submissions").select("*").eq("profile_id", this.ctx.user.id).in("assignment_id", assignments.map(a=>a.id));
     const subByAssignment = Object.fromEntries((mySubs||[]).map(s=>[s.assignment_id, s]));
+    const {data: attachments} = await db.from("file_uploads").select("*").eq("related_type","assignment").in("related_id", assignments.map(a=>a.id));
+    const attachByAssignment = {};
+    for(const f of (attachments||[])) (attachByAssignment[f.related_id] ||= []).push(f);
 
     body.innerHTML = assignments.map(a=>{
       const sub = subByAssignment[a.id];
@@ -626,12 +629,14 @@ const App = {
         <div class="row"><b>${CodeUp.escapeHtml(a.title)}</b><span class="tag ${status}">${statusLabel(status)}</span></div>
         <p class="small">${CodeUp.escapeHtml(a.description||"")}</p>
         <p class="small mono">deadline: ${CodeUp.formatDate(a.deadline)}</p>
+        ${(attachByAssignment[a.id]||[]).map(f=>renderFileCard(f,"course-assets")).join("")}
         <div class="row" style="margin-top:8px">
           <span class="small">${sub?`قدّمت ${CodeUp.timeAgo(sub.submitted_at)}${sub.grade!=null?` · الدرجة ${sub.grade}`:""}`:"لم تُقدّم بعد"}</span>
           <button class="btn dark" data-submit="${a.id}">${sub?"تعديل التسليم":"تسليم الواجب"}</button>
         </div>
       </div>`;
     }).join("");
+    wireFileCardPreviews(body);
 
     body.querySelectorAll("[data-submit]").forEach(b=>{
       b.onclick = async ()=>{
@@ -677,36 +682,40 @@ const App = {
         previewBox.innerHTML = `<div class="small mono">${CodeUp.escapeHtml(f.name)} — ${sizeKb} كيلوبايت</div>`;
       }
     };
+    let submitIdempotencyKey = crypto.randomUUID();
     m.el.querySelector("#subSubmitBtn").onclick = async ()=>{
       const msgEl = m.el.querySelector("#subMsg");
       const submitBtn = m.el.querySelector("#subSubmitBtn");
+      if(submitBtn.disabled) return; // منع تكرار فعلي حتى لو انضغط الزر مرتين بنفس اللحظة
       submitBtn.disabled = true;
+      submitBtn.textContent = "جارِ الإرسال…";
       try{
         const content = m.el.querySelector("#subContent").value.trim();
         const visibility = m.el.querySelector("#subVisibility").value;
         const fileInput = m.el.querySelector("#subFile");
 
-        let submissionId = existing?.id;
         const payload = {
           assignment_id: assignment.id, profile_id: this.ctx.user.id,
           content, visibility, status: "submitted", submitted_at: new Date().toISOString()
         };
-
-        if(submissionId){
-          await db.from("submissions").update(payload).eq("id", submissionId);
-        }else{
-          const {data, error} = await db.from("submissions").insert(payload).select().single();
-          if(error) throw error;
-          submissionId = data.id;
-        }
+        // Upsert بدل insert/update منفصلين: القيد الفريد (assignment_id, profile_id) بقاعدة البيانات
+        // يمنع أي تسليم مكرر حتى لو تكرر الطلب فعليًا على مستوى الـ Backend، مو بس الواجهة.
+        const {data, error} = await db.from("submissions")
+          .upsert(payload, {onConflict:"assignment_id,profile_id"}).select().single();
+        if(error) throw error;
+        const submissionId = data.id;
 
         if(fileInput.files[0]){
           const uploaded = await CodeUp.uploadSubmissionFile(fileInput.files[0], this.ctx.user.id, submissionId);
-          await db.from("file_uploads").insert({
-            course_id: course.id, uploader_id: this.ctx.user.id, related_type:"submission",
-            related_id: submissionId, submission_id: submissionId, storage_path: uploaded.path,
-            file_name: uploaded.name, mime_type: uploaded.type, file_size: uploaded.size
-          });
+          const {data: fileRow, error: fErr} = await db.from("file_uploads")
+            .upsert({
+              course_id: course.id, uploader_id: this.ctx.user.id, related_type:"submission",
+              related_id: submissionId, submission_id: submissionId, storage_path: uploaded.path,
+              file_name: uploaded.name, mime_type: uploaded.type, file_size: uploaded.size,
+              idempotency_key: submitIdempotencyKey
+            }, {onConflict:"submission_id,idempotency_key"}).select().single();
+          if(fErr) throw fErr;
+          CodeUp.triggerTelegramSend(fileRow.id); // إرسال فوري لتيليجرام — لا ننتظره، ولا يوقف نجاح التسليم لو فشل
         }
 
         CodeUp.toast("تم إرسال التسليم بنجاح", "success");
@@ -714,7 +723,9 @@ const App = {
         this.render();
       }catch(e){
         msgEl.className = "message show error"; msgEl.textContent = e.message || "حدث خطأ أثناء التسليم";
-      }finally{ submitBtn.disabled = false; }
+        submitBtn.disabled = false;
+        submitBtn.textContent = "إرسال";
+      }
     };
   },
 
