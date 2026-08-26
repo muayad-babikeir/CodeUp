@@ -112,6 +112,17 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
 .videoEmbed iframe{width:100%;height:100%;border:0;display:block}
 .progressBar{height:8px;border-radius:6px;background:rgba(239,243,244,.1);overflow:hidden;margin-top:8px}
 .progressFill{height:100%;background:var(--accent);border-radius:6px;transition:width .3s}
+.commentsToggle{background:transparent;border:0;color:var(--ink60);font-size:12.5px;cursor:pointer;padding:6px 0;display:block}
+.commentsList.hidden{display:none}
+.commentHead{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:2px}
+.roleBadge{font-size:10.5px;font-weight:700;padding:1px 7px;border-radius:20px}
+.roleBadge.admin{background:rgba(0,186,124,.15);color:#00BA7C}
+.roleBadge.leader{background:rgba(29,155,240,.15);color:var(--accent)}
+.roleBadge.squadmate{background:rgba(239,243,244,.1);color:var(--ink60)}
+.commentAttachRow{display:flex;gap:6px;align-items:center;margin-top:6px}
+.commentAttachRow button{flex-shrink:0}
+.recordingDot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#E03131;margin-inline-end:4px;animation:pulseRec 1s infinite}
+@keyframes pulseRec{0%,100%{opacity:1}50%{opacity:.3}}
 .fbTabBar button.active{background:var(--ink);color:var(--bg0)}
 .joinBanner{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--surface);border:1px solid var(--accent,#4c8dff);border-radius:14px;padding:12px 16px;margin:14px 0}
 .joinBanner p{margin:0;font-size:13.5px;color:var(--ink60)}
@@ -442,6 +453,8 @@ const App = {
       ]);
       const filesByPost = {};
       for(const f of (postFiles||[])) (filesByPost[f.related_id] ||= []).push(f);
+      const {data: commentFiles} = await db.from("file_uploads").select("*").eq("related_type","comment").in("related_id", (comments||[]).map(c=>c.id));
+      const filesByComment = Object.fromEntries((commentFiles||[]).map(f=>[f.related_id, f]));
 
       const feed = [
         ...(page===0?(announcements||[]):[]).map(a=>({type:"announcement", created_at:a.created_at, data:a})),
@@ -465,18 +478,19 @@ const App = {
         const likeCount = reactionsFor(item.type, d.id).length;
         const itemComments = commentsFor(item.type, d.id);
         return `<div class="timelinePost" data-feeditem="${d.id}" data-type="${item.type}">
-          <span class="feedTag">${isPost?Icon("check"):Icon("check")} ${isPost?"منشور":"تسليم واجب"}${!isPost && d.assignments?.courses?.name ? " · " + CodeUp.escapeHtml(d.assignments.courses.name) : ""}</span>
+          <span class="feedTag">${Icon("check")} ${isPost?"منشور":"تسليم واجب"}${!isPost && d.assignments?.courses?.name ? " · " + CodeUp.escapeHtml(d.assignments.courses.name) : ""}</span>
           <div class="meta"><b style="color:var(--ink)">${CodeUp.escapeHtml(d.profiles?.full_name||"طالب")}</b><span class="mono">${CodeUp.timeAgo(d.created_at)}</span></div>
           ${!isPost?`<div class="small mono" style="margin-bottom:6px">${CodeUp.escapeHtml(d.assignments?.title||"")}</div>`:""}
           <div class="body">${CodeUp.escapeHtml(d.content||"")}</div>
           ${!isPost?(filesByPost[d.id]||[]).map(f=>renderFileCard(f,"submissions")).join(""):""}
           <div class="reactBar"><button class="reactBtn ${myLiked?'active':''}" data-like="${d.id}" data-liketype="${item.type}">إعجاب ${likeCount||""}</button></div>
-          <div class="commentsList">${itemComments.map(c=>`<div class="comment"><b>${CodeUp.escapeHtml(c.profiles?.full_name||"")}</b>: ${CodeUp.escapeHtml(c.content)}</div>`).join("")}</div>
-          <div class="commentBox"><input type="text" placeholder="اكتب تعليقًا…" data-commentinput="${d.id}"><button class="btn" data-commentsend="${d.id}" data-commenttype="${item.type}">إرسال</button></div>
+          ${CodeUp.buildCommentsBlock(itemComments, {filesByComment})}
+          ${commentComposerHtml(d.id, isPost?"post":"submission")}
         </div>`;
       }).join("");
       list.insertAdjacentHTML("beforeend", html);
       wireFileCardPreviews(list);
+      CodeUp.wireCommentsToggle(list);
 
       list.querySelectorAll("[data-like]:not([data-wired])").forEach(b=>{
         b.dataset.wired = "1";
@@ -484,16 +498,33 @@ const App = {
       });
       list.querySelectorAll("[data-commentsend]:not([data-wired])").forEach(b=>{
         b.dataset.wired = "1";
+        const targetId = b.dataset.commentsend;
+        const commentType = b.dataset.commenttype;
+        const cardEl = b.closest(".timelinePost");
+        const getPendingFile = wireCommentComposer(cardEl, targetId);
         b.onclick = async ()=>{
-          const input = list.querySelector(`[data-commentinput="${b.dataset.commentsend}"]`);
-          const val = input.value.trim(); if(!val) return;
+          const input = list.querySelector(`[data-commentinput="${targetId}"]`);
+          const val = input.value.trim();
+          const attach = getPendingFile();
+          if(!val && !attach) return;
+          b.disabled = true;
           try{
-            const payload = {user_id:this.ctx.user.id, content: val};
-            if(b.dataset.commenttype === "post") payload.post_id = b.dataset.commentsend;
-            else payload.submission_id = b.dataset.commentsend;
-            await db.from("comments").insert(payload).throwOnError();
+            const payload = {user_id:this.ctx.user.id, content: val || "📎"};
+            if(commentType === "post") payload.post_id = targetId;
+            else payload.submission_id = targetId;
+            const {data: row, error} = await db.from("comments").insert(payload).select().single();
+            if(error) throw error;
+            if(attach){
+              const course_id_for_file = safeSubs.find(s=>s.id===targetId)?.assignments?.course_id || null;
+              const uploaded = await CodeUp.uploadCommentAttachment(attach, this.ctx.user.id, row.id);
+              await db.from("file_uploads").insert({
+                course_id: course_id_for_file, uploader_id: this.ctx.user.id, related_type:"comment",
+                related_id: row.id, storage_path: uploaded.path, file_name: uploaded.name,
+                mime_type: uploaded.type, file_size: uploaded.size
+              });
+            }
             input.value=""; loadFeed(true);
-          }catch(e){ CodeUp.toast(e.message,"error"); }
+          }catch(e){ CodeUp.toast(e.message,"error"); b.disabled = false; }
         };
       });
 
@@ -739,10 +770,22 @@ const App = {
 
     const list = body.querySelector("#timelineList");
     const moreBox = body.querySelector("#timelineMore");
-    let currentFilter = "all", page = 0, doneAnnouncements = false;
+    let currentFilter = "all", page = 0;
+
+    // خرائط الدور/المجموعة على مستوى الكورس (تُحسب مرة وحدة، تُستخدم لكل التعليقات بهذي الصفحة)
+    const [{data: admins}, {data: squadLeaders}] = await Promise.all([
+      db.from("course_admins").select("profile_id").eq("course_id", course.id),
+      db.from("squad_leaders").select("profile_id, squads!inner(course_id)").eq("squads.course_id", course.id)
+    ]);
+    const roleById = {};
+    (squadLeaders||[]).forEach(l=> roleById[l.profile_id] = "leader");
+    (admins||[]).forEach(a=> roleById[a.profile_id] = "admin"); // الأدمن له أولوية على شارة القائد لو الاثنين ينطبقوا
+    const {data: courseEnrollments} = await db.from("enrollments").select("profile_id, squad_id").eq("course_id", course.id);
+    const squadById = Object.fromEntries((courseEnrollments||[]).map(e=>[e.profile_id, e.squad_id]));
+    const mySquadId = myEnrollment?.squad_id || null;
 
     const load = async (filter, reset)=>{
-      if(reset){ page = 0; list.innerHTML = ""; doneAnnouncements = false; }
+      if(reset){ page = 0; list.innerHTML = ""; }
       moreBox.innerHTML = `<div class="emptyState">جارِ التحميل…</div>`;
 
       let q = db.from("submissions").select("*, assignments!inner(title,course_id), profiles(full_name,avatar_url)")
@@ -766,8 +809,10 @@ const App = {
       const {data: reactions} = await db.from("reactions").select("*").eq("target_type","submission").in("target_id", safePosts.map(p=>p.id));
       const {data: comments} = await db.from("comments").select("*, profiles(full_name)").in("submission_id", safePosts.map(p=>p.id)).order("created_at");
       const {data: postFiles} = await db.from("file_uploads").select("*").eq("related_type","submission").in("related_id", safePosts.map(p=>p.id));
+      const {data: commentFiles} = await db.from("file_uploads").select("*").eq("related_type","comment").in("related_id", (comments||[]).map(c=>c.id));
       const filesByPost = {};
       for(const f of (postFiles||[])) (filesByPost[f.related_id] ||= []).push(f);
+      const filesByComment = Object.fromEntries((commentFiles||[]).map(f=>[f.related_id, f]));
 
       const feed = [
         ...announcements.map(a=>({type:"announcement", created_at:a.created_at, data:a})),
@@ -798,17 +843,13 @@ const App = {
           <div class="reactBar">
             <button class="reactBtn ${myLiked?'active':''}" data-like="${p.id}">إعجاب ${likeCount||""}</button>
           </div>
-          <div class="commentsList">
-            ${postComments.map(c=>`<div class="comment"><b>${CodeUp.escapeHtml(c.profiles?.full_name||"")}</b>: ${CodeUp.escapeHtml(c.content)}</div>`).join("")}
-          </div>
-          <div class="commentBox">
-            <input type="text" placeholder="اكتب تعليقًا…" data-commentinput="${p.id}">
-            <button class="btn" data-commentsend="${p.id}">إرسال</button>
-          </div>
+          ${CodeUp.buildCommentsBlock(postComments, {roleById, mySquadId, squadById, filesByComment})}
+          ${commentComposerHtml(p.id)}
         </div>`;
       }).join("");
       list.insertAdjacentHTML("beforeend", html);
       wireFileCardPreviews(list);
+      CodeUp.wireCommentsToggle(list);
 
       const requireJoin = async ()=>{
         if(myEnrollment) return true;
@@ -826,12 +867,29 @@ const App = {
       });
       list.querySelectorAll("[data-commentsend]:not([data-wired])").forEach(b=>{
         b.dataset.wired = "1";
+        const targetId = b.dataset.commentsend;
+        const postCard = b.closest(".timelinePost");
+        const getPendingFile = wireCommentComposer(postCard, targetId);
         b.onclick = async ()=>{
           if(!(await requireJoin())) return;
-          const input = list.querySelector(`[data-commentinput="${b.dataset.commentsend}"]`);
-          const val = input.value.trim(); if(!val) return;
-          try{ await CodeUp.rpc.addComment(b.dataset.commentsend, val); input.value=""; load(currentFilter, true); }
-          catch(e){ CodeUp.toast(e.message,"error"); }
+          const input = list.querySelector(`[data-commentinput="${targetId}"]`);
+          const val = input.value.trim();
+          const attach = getPendingFile();
+          if(!val && !attach) return;
+          b.disabled = true;
+          try{
+            const row = await CodeUp.rpc.addComment(targetId, val || "📎");
+            if(attach){
+              const uploaded = await CodeUp.uploadCommentAttachment(attach, this.ctx.user.id, row.id);
+              await db.from("file_uploads").insert({
+                course_id: course.id, uploader_id: this.ctx.user.id, related_type:"comment",
+                related_id: row.id, storage_path: uploaded.path, file_name: uploaded.name,
+                mime_type: uploaded.type, file_size: uploaded.size
+              });
+            }
+            input.value="";
+            load(currentFilter, true);
+          }catch(e){ CodeUp.toast(e.message,"error"); b.disabled = false; }
         };
       });
 

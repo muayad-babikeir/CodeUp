@@ -59,6 +59,64 @@ function wireFileCardPreviews(container){
   });
 }
 
+function commentComposerHtml(targetId, targetType = "submission"){
+  return `<div class="commentBox">
+    <input type="text" placeholder="اكتب تعليقًا…" data-commentinput="${targetId}">
+    <input type="file" accept="image/*" data-commentimage="${targetId}" style="display:none">
+    <button class="btn" data-commentattachbtn="${targetId}" title="إرفاق صورة">📎</button>
+    <button class="btn" data-commentrecordbtn="${targetId}" title="تسجيل صوتي">🎙️</button>
+    <button class="btn" data-commentsend="${targetId}" data-commenttype="${targetType}">إرسال</button>
+  </div><div class="commentAttachPreview" data-commentpreview="${targetId}"></div>`;
+}
+
+// يربط أزرار الإرفاق/التسجيل بمربع تعليق معيّن، ويرجع دالة تجيب الملف الجاهز (لو فيه) وقت الإرسال
+function wireCommentComposer(container, targetId){
+  let pendingFile = null;
+  const previewBox = container.querySelector(`[data-commentpreview="${targetId}"]`);
+  const fileInput = container.querySelector(`[data-commentimage="${targetId}"]`);
+  const attachBtn = container.querySelector(`[data-commentattachbtn="${targetId}"]`);
+  const recordBtn = container.querySelector(`[data-commentrecordbtn="${targetId}"]`);
+
+  if(attachBtn) attachBtn.onclick = () => fileInput.click();
+  if(fileInput) fileInput.onchange = () => {
+    const f = fileInput.files[0];
+    if(!f) return;
+    pendingFile = f;
+    previewBox.innerHTML = `<span class="small">📎 ${CodeUp.escapeHtml(f.name)}</span> <button class="btn" data-clearattach>إزالة</button>`;
+    previewBox.querySelector("[data-clearattach]").onclick = () => { pendingFile = null; previewBox.innerHTML = ""; fileInput.value = ""; };
+  };
+
+  if(recordBtn && navigator.mediaDevices?.getUserMedia){
+    let mediaRecorder = null, chunks = [];
+    recordBtn.onclick = async () => {
+      if(mediaRecorder && mediaRecorder.state === "recording"){
+        mediaRecorder.stop();
+        return;
+      }
+      try{
+        const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+        chunks = [];
+        mediaRecorder = new MediaRecorder(stream);
+        mediaRecorder.ondataavailable = e => chunks.push(e.data);
+        mediaRecorder.onstop = () => {
+          stream.getTracks().forEach(t=>t.stop());
+          const blob = new Blob(chunks, {type:"audio/webm"});
+          pendingFile = new File([blob], `voice_${Date.now()}.webm`, {type:"audio/webm"});
+          previewBox.innerHTML = `<span class="small">🎙️ تسجيل صوتي جاهز</span> <button class="btn" data-clearattach>إزالة</button>`;
+          previewBox.querySelector("[data-clearattach]").onclick = () => { pendingFile = null; previewBox.innerHTML = ""; };
+          recordBtn.innerHTML = "🎙️";
+        };
+        mediaRecorder.start();
+        recordBtn.innerHTML = `<span class="recordingDot"></span>إيقاف`;
+      }catch(e){ CodeUp.toast("تعذّر الوصول للميكروفون", "error"); }
+    };
+  } else if(recordBtn){
+    recordBtn.style.display = "none";
+  }
+
+  return () => pendingFile; // استدعِها وقت الإرسال لتجيب الملف المرفق الحالي (لو فيه)
+}
+
 function youtubeIdFromUrl(url){
   const m = String(url||"").match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/))([\w-]{11})/);
   return m ? m[1] : null;
@@ -263,5 +321,44 @@ const CodeUp = (() => {
     } catch (e) { /* فشل صامت — الملف بأمان بـ Supabase، والمحاولة تُعاد تلقائيًا بالمهمة اليومية */ }
   }
 
-  return { toast, escapeHtml, timeAgo, formatDate, debounce, requireSession, loadMyContext, rpc, call, uploadSubmissionFile, getSignedUrl, subscribeToMyNotifications, triggerTelegramSend };
+  // إرفاق صورة/صوت بتعليق — نفس bucket التسليمات، مسار منفصل تحت comments/
+  async function uploadCommentAttachment(file, userId, commentId) {
+    const processed = file.type.startsWith("image/") ? await compressImageIfNeeded(file) : file;
+    const cleanName = processed.name.replace(/[^\w.\-]+/g, "_");
+    const path = `${userId}/comments/${commentId}/${Date.now()}_${cleanName}`;
+    const { error } = await db.storage.from("submissions").upload(path, processed, { upsert: false });
+    if (error) throw error;
+    return { path, size: processed.size, type: processed.type, name: processed.name };
+  }
+
+  // يبني بطاقة تعليقات قابلة للطي، مع اسم الكاتب + شارة الدور (اختياري) + إشارة "من مجموعتك" + مرفق (معاينة عند الطلب)
+  function buildCommentsBlock(itemComments, opts = {}) {
+    const { roleById = {}, mySquadId = null, squadById = {}, filesByComment = {} } = opts;
+    const count = itemComments.length;
+    const rows = itemComments.map(c => {
+      const role = roleById[c.user_id];
+      const sameSquad = mySquadId && squadById[c.user_id] && squadById[c.user_id] === mySquadId;
+      const badge = role === "admin" ? `<span class="roleBadge admin">مشرف</span>` : role === "leader" ? `<span class="roleBadge leader">قائد المجموعة</span>` : "";
+      const squadTag = sameSquad ? `<span class="roleBadge squadmate">من مجموعتك</span>` : "";
+      const file = filesByComment[c.id];
+      return `<div class="comment">
+        <div class="commentHead"><b>${escapeHtml(c.profiles?.full_name || "مستخدم")}</b>${badge}${squadTag}</div>
+        <div>${escapeHtml(c.content || "")}</div>
+        ${file ? renderFileCard(file, "submissions") : ""}
+      </div>`;
+    }).join("");
+    return `<button class="commentsToggle" data-toggleComments>💬 ${count} تعليق</button>
+      <div class="commentsList hidden">${rows || `<p class="small" style="padding:6px 0">لا توجد تعليقات بعد.</p>`}</div>`;
+  }
+
+  function wireCommentsToggle(container) {
+    container.querySelectorAll("[data-toggleComments]").forEach(btn => {
+      btn.onclick = () => {
+        const list = btn.nextElementSibling;
+        list.classList.toggle("hidden");
+      };
+    });
+  }
+
+  return { toast, escapeHtml, timeAgo, formatDate, debounce, requireSession, loadMyContext, rpc, call, uploadSubmissionFile, uploadCommentAttachment, getSignedUrl, subscribeToMyNotifications, triggerTelegramSend, buildCommentsBlock, wireCommentsToggle };
 })();
