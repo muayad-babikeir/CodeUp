@@ -121,6 +121,7 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
 .roleBadge.squadmate{background:rgba(239,243,244,.1);color:var(--ink60)}
 .commentAttachRow{display:flex;gap:6px;align-items:center;margin-top:6px}
 .commentAttachRow button{flex-shrink:0}
+.iconBtn svg{width:15px;height:15px}
 .recordingDot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#E03131;margin-inline-end:4px;animation:pulseRec 1s infinite}
 @keyframes pulseRec{0%,100%{opacity:1}50%{opacity:.3}}
 .fbTabBar button.active{background:var(--ink);color:var(--bg0)}
@@ -415,15 +416,71 @@ const App = {
     body.innerHTML = `
       <div class="card2" style="margin-top:14px">
         <textarea id="newPostText" rows="2" placeholder="شارك تحديثًا أو سؤالًا مع الجميع…" style="width:100%;resize:vertical"></textarea>
-        <div style="display:flex;justify-content:flex-end;margin-top:8px"><button class="btn dark" id="newPostBtn">نشر</button></div>
+        <div class="commentAttachRow" style="margin-top:8px">
+          <input type="file" accept="image/*" id="newPostImage" style="display:none">
+          <button class="btn iconBtn" id="newPostAttachBtn" title="إرفاق صورة">${Icon("paperclip")}</button>
+          <button class="btn iconBtn" id="newPostRecordBtn" title="تسجيل صوتي">${Icon("mic")}</button>
+          <div style="flex:1"></div>
+          <button class="btn dark" id="newPostBtn">نشر</button>
+        </div>
+        <div id="newPostPreview" style="margin-top:6px"></div>
       </div>
       <div id="feedList"></div><div id="feedMore"></div>`;
 
+    let pendingPostFile = null;
+    const postPreview = document.getElementById("newPostPreview");
+    document.getElementById("newPostAttachBtn").onclick = ()=> document.getElementById("newPostImage").click();
+    document.getElementById("newPostImage").onchange = (e)=>{
+      const f = e.target.files[0]; if(!f) return;
+      pendingPostFile = f;
+      postPreview.innerHTML = `<span class="small">📎 ${CodeUp.escapeHtml(f.name)}</span> <button class="btn" id="clearPostAttach">إزالة</button>`;
+      document.getElementById("clearPostAttach").onclick = ()=>{ pendingPostFile=null; postPreview.innerHTML=""; };
+    };
+    const postRecordBtn = document.getElementById("newPostRecordBtn");
+    if(navigator.mediaDevices?.getUserMedia){
+      let mediaRecorder=null, chunks=[];
+      postRecordBtn.onclick = async ()=>{
+        if(mediaRecorder && mediaRecorder.state==="recording"){ mediaRecorder.stop(); return; }
+        try{
+          const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+          chunks=[]; mediaRecorder = new MediaRecorder(stream);
+          mediaRecorder.ondataavailable = e=>chunks.push(e.data);
+          mediaRecorder.onstop = ()=>{
+            stream.getTracks().forEach(t=>t.stop());
+            const blob = new Blob(chunks,{type:"audio/webm"});
+            pendingPostFile = new File([blob], `voice_${Date.now()}.webm`, {type:"audio/webm"});
+            postPreview.innerHTML = `<span class="small">🎙️ تسجيل صوتي جاهز</span> <button class="btn" id="clearPostAttach">إزالة</button>`;
+            document.getElementById("clearPostAttach").onclick = ()=>{ pendingPostFile=null; postPreview.innerHTML=""; };
+            postRecordBtn.innerHTML = Icon("mic");
+          };
+          mediaRecorder.start();
+          postRecordBtn.innerHTML = `<span class="recordingDot"></span>${Icon("stop")}`;
+        }catch(e){ CodeUp.toast("تعذّر الوصول للميكروفون","error"); }
+      };
+    }else{ postRecordBtn.style.display="none"; }
+
     document.getElementById("newPostBtn").onclick = async ()=>{
       const ta = document.getElementById("newPostText");
-      const val = ta.value.trim(); if(!val) return;
-      try{ await db.from("posts").insert({profile_id:this.ctx.user.id, content: val}).throwOnError(); ta.value=""; loadFeed(true); CodeUp.toast("تم النشر","success"); }
-      catch(e){ CodeUp.toast(e.message,"error"); }
+      const val = ta.value.trim();
+      if(!val && !pendingPostFile) return;
+      const btn = document.getElementById("newPostBtn");
+      btn.disabled = true;
+      try{
+        const {data: row, error} = await db.from("posts").insert({profile_id:this.ctx.user.id, content: val || "📎"}).select().single();
+        if(error) throw error;
+        if(pendingPostFile){
+          const uploaded = await CodeUp.uploadCommentAttachment(pendingPostFile, this.ctx.user.id, row.id); // نفس منطق الرفع، مسار عام تحت posts
+          await db.from("file_uploads").insert({
+            uploader_id: this.ctx.user.id, related_type:"post", related_id: row.id,
+            storage_path: uploaded.path, file_name: uploaded.name, mime_type: uploaded.type, file_size: uploaded.size
+          });
+          const fileRow = await db.from("file_uploads").select("id").eq("related_type","post").eq("related_id", row.id).single();
+          if(fileRow.data) CodeUp.triggerTelegramSend(fileRow.data.id);
+        }
+        ta.value=""; pendingPostFile=null; postPreview.innerHTML="";
+        loadFeed(true); CodeUp.toast("تم النشر","success");
+      }catch(e){ CodeUp.toast(e.message,"error"); }
+      finally{ btn.disabled = false; }
     };
 
     const list = body.querySelector("#feedList");
@@ -517,11 +574,12 @@ const App = {
             if(attach){
               const course_id_for_file = safeSubs.find(s=>s.id===targetId)?.assignments?.course_id || null;
               const uploaded = await CodeUp.uploadCommentAttachment(attach, this.ctx.user.id, row.id);
-              await db.from("file_uploads").insert({
+              const {data: fileRow} = await db.from("file_uploads").insert({
                 course_id: course_id_for_file, uploader_id: this.ctx.user.id, related_type:"comment",
                 related_id: row.id, storage_path: uploaded.path, file_name: uploaded.name,
                 mime_type: uploaded.type, file_size: uploaded.size
-              });
+              }).select().single();
+              if(fileRow) CodeUp.triggerTelegramSend(fileRow.id);
             }
             input.value=""; loadFeed(true);
           }catch(e){ CodeUp.toast(e.message,"error"); b.disabled = false; }
@@ -799,12 +857,16 @@ const App = {
       const safePosts = posts || [];
 
       let announcements = [];
+      let proposals = [];
       if(page===0 && filter!=="mine"){
         const {data: annData} = await db.from("announcements").select("*, profiles(full_name)").eq("course_id", course.id).order("created_at",{ascending:false}).limit(15);
         announcements = (annData||[]).filter(a => filter!=="squad" || !a.target_squad_id || a.target_squad_id===myEnrollment?.squad_id);
+        const {data: propData} = await db.from("squad_proposals").select("*, profiles(full_name)").eq("course_id", course.id).eq("status","open").order("created_at",{ascending:false}).limit(10);
+        proposals = propData || [];
       }
+      const {data: propVotes} = proposals.length ? await db.from("squad_proposal_votes").select("*").in("proposal_id", proposals.map(p=>p.id)) : {data:[]};
 
-      if(page===0 && (error || !safePosts.length) && !announcements.length){ list.innerHTML = `<div class="emptyState">لا توجد منشورات بعد.</div>`; moreBox.innerHTML = ""; return; }
+      if(page===0 && (error || !safePosts.length) && !announcements.length && !proposals.length){ list.innerHTML = `<div class="emptyState">لا توجد منشورات بعد.</div>`; moreBox.innerHTML = ""; return; }
 
       const {data: reactions} = await db.from("reactions").select("*").eq("target_type","submission").in("target_id", safePosts.map(p=>p.id));
       const {data: comments} = await db.from("comments").select("*, profiles(full_name)").in("submission_id", safePosts.map(p=>p.id)).order("created_at");
@@ -816,9 +878,11 @@ const App = {
 
       const feed = [
         ...announcements.map(a=>({type:"announcement", created_at:a.created_at, data:a})),
+        ...proposals.map(p=>({type:"proposal", created_at:p.created_at, data:p})),
         ...safePosts.map(p=>({type:"submission", created_at:p.created_at, data:p}))
       ].sort((x,y)=> new Date(y.created_at) - new Date(x.created_at));
 
+      const DAY_LABELS = {sat:"سبت",sun:"أحد",mon:"اثنين",tue:"ثلاثاء",wed:"أربعاء",thu:"خميس",fri:"جمعة"};
       const html = feed.map(item=>{
         if(item.type==="announcement"){
           const a = item.data;
@@ -827,6 +891,23 @@ const App = {
             <span class="feedTag">${Icon("announcement")} إعلان</span>
             <div class="meta"><b style="color:var(--ink)">${CodeUp.escapeHtml(a.profiles?.full_name||"إدارة الكورس")}</b><span class="mono">${CodeUp.timeAgo(a.created_at)}</span></div>
             <div class="body"><b>${CodeUp.escapeHtml(a.title)}</b>${a.content?`<br>${CodeUp.escapeHtml(a.content)}`:""}</div>
+          </div>`;
+        }
+        if(item.type==="proposal"){
+          const p = item.data;
+          const votes = (propVotes||[]).filter(v=>v.proposal_id===p.id);
+          const iVoted = votes.some(v=>v.profile_id===this.ctx.user.id);
+          const daysLabel = (p.schedule_days||[]).map(d=>DAY_LABELS[d]||d).join("، ") || "غير محدد";
+          const timeLabel = p.time_from && p.time_to ? `${p.time_from.slice(0,5)} - ${p.time_to.slice(0,5)}` : "";
+          return `
+          <div class="timelinePost feedAnnouncement" data-proposal="${p.id}">
+            <span class="feedTag">${Icon("group")} اقتراح مجموعة جديدة</span>
+            <div class="meta"><b style="color:var(--ink)">${CodeUp.escapeHtml(p.profiles?.full_name||"طالب")}</b><span class="mono">${CodeUp.timeAgo(p.created_at)}</span></div>
+            <div class="body"><b>${CodeUp.escapeHtml(p.name)}</b><br><span class="small">${CodeUp.escapeHtml(daysLabel)}${timeLabel?" · "+timeLabel:""}</span></div>
+            <div class="row" style="margin-top:8px">
+              <span class="small mono">${votes.length}/${p.min_approvals} موافقين</span>
+              <button class="btn ${iVoted?'':'dark'}" data-votepropose="${p.id}" ${iVoted?"disabled":""}>${iVoted?"وافقت ✓":"موافق"}</button>
+            </div>
           </div>`;
         }
         const p = item.data;
@@ -857,6 +938,19 @@ const App = {
         try{ await CodeUp.rpc.enrollInCourse(course.id); this.ctx = await CodeUp.loadMyContext(); myEnrollment = this.ctx.enrollments.find(e=>e.course_id===course.id); return true; }
         catch(e){ CodeUp.toast(e.message||"تعذّر الانضمام", "error"); return false; }
       };
+      list.querySelectorAll("[data-votepropose]:not([data-wired])").forEach(b=>{
+        b.dataset.wired = "1";
+        b.onclick = async ()=>{
+          if(!(await requireJoin())) return;
+          b.disabled = true;
+          try{
+            const {data} = await db.rpc("vote_squad_proposal", {p_proposal_id: b.dataset.votepropose});
+            if(data?.status === "approved") CodeUp.toast("وصلت المجموعة للحد المطلوب — تكوّنت تلقائيًا! 🎉", "success");
+            else CodeUp.toast("تم تسجيل موافقتك", "success");
+            load(currentFilter, true);
+          }catch(e){ CodeUp.toast(e.message,"error"); b.disabled = false; }
+        };
+      });
       list.querySelectorAll("[data-like]:not([data-wired])").forEach(b=>{
         b.dataset.wired = "1";
         b.onclick = async ()=>{
@@ -881,11 +975,12 @@ const App = {
             const row = await CodeUp.rpc.addComment(targetId, val || "📎");
             if(attach){
               const uploaded = await CodeUp.uploadCommentAttachment(attach, this.ctx.user.id, row.id);
-              await db.from("file_uploads").insert({
+              const {data: fileRow} = await db.from("file_uploads").insert({
                 course_id: course.id, uploader_id: this.ctx.user.id, related_type:"comment",
                 related_id: row.id, storage_path: uploaded.path, file_name: uploaded.name,
                 mime_type: uploaded.type, file_size: uploaded.size
-              });
+              }).select().single();
+              if(fileRow) CodeUp.triggerTelegramSend(fileRow.id);
             }
             input.value="";
             load(currentFilter, true);
@@ -916,6 +1011,8 @@ const App = {
     if(!myEnrollment?.squad_id){
       html += `<div class="card2"><div class="row"><b>تريد قيادة مجموعة؟</b><button class="btn dark" id="applyLeaderBtn">تقديم طلب قيادة</button></div></div>`;
     }
+    html += `<div class="card2"><div class="row"><b>ما لقيت مجموعة تناسبك؟</b><button class="btn dark" id="proposeSquadBtn">اقترح مجموعة جديدة</button></div>
+      <p class="small" style="margin-top:6px">يظهر اقتراحك بالتايم لاين، ولو وافق عليه 5 طلاب على الأقل، تتكوّن المجموعة تلقائيًا وتصير قائدها.</p></div>`;
 
     html += `<div class="grid">` + (squads||[]).map(sq=>{
       const isMine = myEnrollment?.squad_id === sq.id;
@@ -936,6 +1033,7 @@ const App = {
 
     const applyBtn = body.querySelector("#applyLeaderBtn");
     if(applyBtn) applyBtn.onclick = ()=> this.openLeaderApplicationModal(course);
+    body.querySelector("#proposeSquadBtn").onclick = ()=> this.openProposeSquadModal(course, myEnrollment);
 
     body.querySelectorAll("[data-join]").forEach(b=>{
       b.onclick = async ()=>{
@@ -971,6 +1069,47 @@ const App = {
         CodeUp.toast("تم إرسال طلب القيادة", "success");
         m.close();
       }catch(e){ box.className="message show error"; box.textContent = e.message; }
+    };
+  },
+
+  openProposeSquadModal(course, myEnrollment){
+    const DAYS = [["sat","سبت"],["sun","أحد"],["mon","اثنين"],["tue","ثلاثاء"],["wed","أربعاء"],["thu","خميس"],["fri","جمعة"]];
+    const m = this.modal(`
+      <h3>اقتراح مجموعة جديدة</h3>
+      <label>اسم المجموعة</label>
+      <input id="propName" placeholder="مثلاً: مجموعة المساء">
+      <label>أيام اللقاء</label>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin:6px 0">
+        ${DAYS.map(([key,label])=>`<label style="display:flex;align-items:center;gap:4px;font-size:13px">
+          <input type="checkbox" data-propday value="${key}"> ${label}
+        </label>`).join("")}
+      </div>
+      <label>من الساعة</label><input id="propFrom" type="time">
+      <label>إلى الساعة</label><input id="propTo" type="time">
+      <p class="small" style="margin-top:8px">هيظهر اقتراحك بالتايم لاين، ولو وافق عليه 5 طلاب على الأقل، تتكوّن المجموعة تلقائيًا وتصير قائدها. أنت أول موافق تلقائيًا.</p>
+      <button class="primary" id="propSendBtn">نشر الاقتراح</button>
+      <div id="propMsgBox" class="message"></div>
+    `);
+    m.el.querySelector("#propSendBtn").onclick = async ()=>{
+      const box = m.el.querySelector("#propMsgBox");
+      const name = m.el.querySelector("#propName").value.trim();
+      if(!name){ box.className="message show error"; box.textContent="اسم المجموعة إلزامي"; return; }
+      if(!myEnrollment){ box.className="message show error"; box.textContent="لازم تكون منضم للكورس أولًا"; return; }
+      const days = [...m.el.querySelectorAll("[data-propday]:checked")].map(cb=>cb.value);
+      const btn = m.el.querySelector("#propSendBtn");
+      btn.disabled = true;
+      try{
+        const {data: prop, error} = await db.from("squad_proposals").insert({
+          course_id: course.id, proposed_by: this.ctx.user.id, name,
+          schedule_days: days, time_from: m.el.querySelector("#propFrom").value || null,
+          time_to: m.el.querySelector("#propTo").value || null
+        }).select().single();
+        if(error) throw error;
+        await db.rpc("vote_squad_proposal", {p_proposal_id: prop.id});
+        CodeUp.toast("تم نشر الاقتراح — شاركه مع زملائك!", "success");
+        m.close();
+        this.go({name:"course", courseId: course.id, courseSlug: course.slug, tab:"timeline"});
+      }catch(e){ box.className="message show error"; box.textContent = e.message; btn.disabled=false; }
     };
   },
 

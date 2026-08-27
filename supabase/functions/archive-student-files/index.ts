@@ -41,7 +41,7 @@ Deno.serve(async (req: Request) => {
       .from("file_uploads")
       .select("id, storage_path, file_name, mime_type, created_at, course_id, submission_id, uploader_id")
       .eq("archive_status", "failed")
-      .eq("related_type", "submission")
+      .in("related_type", ["submission","post","comment"])
       .limit(20);
 
     for (const f of failedFiles || []) {

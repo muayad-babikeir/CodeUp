@@ -27,7 +27,7 @@ Deno.serve(async (req: Request) => {
 
     // فقط صاحب الملف نفسه يقدر يطلب إرساله (منع استغلال الدالة لملفات غيره)
     if (f.uploader_id !== userData.user.id) return new Response(JSON.stringify({ error: "forbidden" }), { status: 403 });
-    if (f.related_type !== "submission") return new Response(JSON.stringify({ error: "not a submission file" }), { status: 400 });
+    if (!["submission","post","comment"].includes(f.related_type)) return new Response(JSON.stringify({ error: "not an archivable file" }), { status: 400 });
 
     // Idempotent: لو اترسل قبل كده (أو قيد الإرسال)، ما نكرر
     if (f.telegram_message_id || f.archive_status === "sending" || f.archive_status === "sent" || f.archive_status === "archived") {

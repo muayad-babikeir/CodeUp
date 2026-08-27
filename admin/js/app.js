@@ -50,15 +50,30 @@ const Admin = {
     document.getElementById("backToApp").href = "../index.html";
     document.getElementById("signOut").onclick = async (e)=>{ e.preventDefault(); await db.auth.signOut(); window.location.href="../index.html"; };
     document.getElementById("notifBtn").onclick = ()=>this.openNotifications();
-    this.refreshNotifBadge();
     CodeUp.subscribeToMyNotifications(this.ctx.user.id, (n)=>{ this.refreshNotifBadge(); CodeUp.toast(n.title, "info"); });
 
     await this.loadAccessibleCourses();
+    this.refreshNotifBadge();
     await this.renderNav();
     this.go(this.role === "leader" ? "mysquad" : "dashboard");
   },
 
   async refreshNotifBadge(){
+    if(this.role === "super" || this.role === "admin"){
+      const courseIds = (this.courses||[]).map(c=>c.id);
+      let joinCount = 0, leaderCount = 0;
+      if(courseIds.length){
+        const { count: jc } = await db.from("squad_join_requests").select("id, squads!inner(course_id)", {count:"exact",head:true}).eq("status","pending").in("squads.course_id", courseIds);
+        const { count: lc } = await db.from("leader_applications").select("id",{count:"exact",head:true}).eq("status","pending").in("course_id", courseIds);
+        joinCount = jc||0; leaderCount = lc||0;
+      }
+      const total = joinCount + leaderCount;
+      const badge = document.getElementById("notifBadge");
+      if(!badge) return;
+      if(total>0){ badge.textContent = total>9?"9+":total; badge.classList.remove("hidden"); }
+      else badge.classList.add("hidden");
+      return;
+    }
     const {count} = await db.from("notifications").select("id",{count:"exact",head:true}).eq("profile_id", this.ctx.user.id).eq("is_read", false);
     const badge = document.getElementById("notifBadge");
     if(!badge) return;
@@ -67,6 +82,36 @@ const Admin = {
   },
 
   async openNotifications(){
+    if(this.role === "super" || this.role === "admin"){
+      const courseIds = (this.courses||[]).map(c=>c.id);
+      const [{data: joinReqs}, {data: leaderApps}] = await Promise.all([
+        courseIds.length ? db.from("squad_join_requests").select("*, squads!inner(name,course_id), profiles(full_name)").eq("status","pending").in("squads.course_id", courseIds).order("created_at",{ascending:false}) : Promise.resolve({data:[]}),
+        courseIds.length ? db.from("leader_applications").select("*, profiles(full_name)").eq("status","pending").in("course_id", courseIds).order("created_at",{ascending:false}) : Promise.resolve({data:[]})
+      ]);
+      const items = [
+        ...(joinReqs||[]).map(r=>({type:"join", created_at:r.created_at, courseId:r.squads.course_id,
+          label:`طلب انضمام: ${r.profiles?.full_name||""} → ${r.squads?.name||""}`, section:"join_requests"})),
+        ...(leaderApps||[]).map(a=>({type:"leader", created_at:a.created_at, courseId:a.course_id,
+          label:`طلب قيادة: ${a.profiles?.full_name||""}`, section:"leader_applications"}))
+      ].sort((x,y)=> new Date(y.created_at) - new Date(x.created_at));
+
+      const list = items.map(it=>`
+        <div class="card notifClickable" data-notifcourse="${it.courseId}" data-notifsection="${it.section}" style="cursor:pointer">
+          <div style="display:flex;justify-content:space-between;gap:8px"><b style="font-size:13.5px">${CodeUp.escapeHtml(it.label)}</b><span class="who">${CodeUp.timeAgo(it.created_at)}</span></div>
+        </div>`).join("") || `<div class="emptyState">لا توجد طلبات جديدة بأي كورس.</div>`;
+
+      const m = this.modal(`<h3>الطلبات الجديدة (كل الكورسات)</h3><div style="max-height:60vh;overflow-y:auto;margin-top:10px">${list}</div>`);
+      m.el.querySelectorAll("[data-notifcourse]").forEach(el=>{
+        el.onclick = async ()=>{
+          m.close();
+          this.currentCourseId = el.dataset.notifcourse;
+          await this.renderNav();
+          this.go(el.dataset.notifsection);
+        };
+      });
+      return;
+    }
+
     const {data} = await db.from("notifications").select("*").eq("profile_id", this.ctx.user.id).order("created_at",{ascending:false}).limit(20);
     const list = (data||[]).map(n=>`
       <div class="card" style="${n.is_read?'':'background:rgba(138,111,201,.14)'}">

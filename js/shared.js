@@ -14,7 +14,12 @@ function Icon(name){
     check: '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/>',
     file: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/>',
     eye: '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>',
-    archive: '<path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/>'
+    archive: '<path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/>',
+    paperclip: '<path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>',
+    mic: '<path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>',
+    stop: '<rect x="6" y="6" width="12" height="12" rx="1.5"/>',
+    group: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+    bell: '<path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>'
   };
   return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${paths[name]||''}</svg>`;
 }
@@ -63,8 +68,8 @@ function commentComposerHtml(targetId, targetType = "submission"){
   return `<div class="commentBox">
     <input type="text" placeholder="اكتب تعليقًا…" data-commentinput="${targetId}">
     <input type="file" accept="image/*" data-commentimage="${targetId}" style="display:none">
-    <button class="btn" data-commentattachbtn="${targetId}" title="إرفاق صورة">📎</button>
-    <button class="btn" data-commentrecordbtn="${targetId}" title="تسجيل صوتي">🎙️</button>
+    <button class="btn iconBtn" data-commentattachbtn="${targetId}" title="إرفاق صورة">${Icon("paperclip")}</button>
+    <button class="btn iconBtn" data-commentrecordbtn="${targetId}" title="تسجيل صوتي">${Icon("mic")}</button>
     <button class="btn" data-commentsend="${targetId}" data-commenttype="${targetType}">إرسال</button>
   </div><div class="commentAttachPreview" data-commentpreview="${targetId}"></div>`;
 }
@@ -104,10 +109,10 @@ function wireCommentComposer(container, targetId){
           pendingFile = new File([blob], `voice_${Date.now()}.webm`, {type:"audio/webm"});
           previewBox.innerHTML = `<span class="small">🎙️ تسجيل صوتي جاهز</span> <button class="btn" data-clearattach>إزالة</button>`;
           previewBox.querySelector("[data-clearattach]").onclick = () => { pendingFile = null; previewBox.innerHTML = ""; };
-          recordBtn.innerHTML = "🎙️";
+          recordBtn.innerHTML = Icon("mic");
         };
         mediaRecorder.start();
-        recordBtn.innerHTML = `<span class="recordingDot"></span>إيقاف`;
+        recordBtn.innerHTML = `<span class="recordingDot"></span>${Icon("stop")}`;
       }catch(e){ CodeUp.toast("تعذّر الوصول للميكروفون", "error"); }
     };
   } else if(recordBtn){
