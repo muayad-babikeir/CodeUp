@@ -114,11 +114,21 @@ const Admin = {
 
     const {data} = await db.from("notifications").select("*").eq("profile_id", this.ctx.user.id).order("created_at",{ascending:false}).limit(20);
     const list = (data||[]).map(n=>`
-      <div class="card" style="${n.is_read?'':'background:rgba(138,111,201,.14)'}">
+      <div class="card notifRow" data-notifid="${n.id}" data-notifcourse="${n.course_id||''}" style="${n.is_read?'':'background:rgba(138,111,201,.14)'};cursor:pointer">
         <div style="display:flex;justify-content:space-between;gap:8px"><b style="font-size:13.5px">${CodeUp.escapeHtml(n.title)}</b><span class="who">${CodeUp.timeAgo(n.created_at)}</span></div>
         <div class="who" style="margin-top:6px">${CodeUp.escapeHtml(n.body||"")}</div>
       </div>`).join("") || `<div class="emptyState">لا توجد إشعارات بعد.</div>`;
     const m = this.modal(`<h3>الإشعارات</h3><div>${list}</div><div style="margin-top:16px;text-align:end"><button class="btn" id="notifCloseBtn">إغلاق</button></div>`);
+    m.el.querySelectorAll("[data-notifid]").forEach(row=>{
+      row.onclick = async ()=>{
+        await db.from("notifications").update({is_read:true}).eq("id", row.dataset.notifid);
+        const courseId = row.dataset.notifcourse;
+        m.close();
+        this.refreshNotifBadge();
+        if(courseId && courseId === this.currentCourseId){ this.go("mysquad"); }
+        else if(courseId){ CodeUp.toast("هذا الإشعار يخص كورس آخر — بدّل الكورس من القائمة فوق لمتابعته", "info"); }
+      };
+    });
     m.el.querySelector("#notifCloseBtn").onclick = async ()=>{
       const ids = (data||[]).filter(n=>!n.is_read).map(n=>n.id);
       if(ids.length) await db.from("notifications").update({is_read:true}).in("id", ids);

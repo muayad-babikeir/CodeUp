@@ -46,6 +46,8 @@ body{
 .brand h1{margin:0 0 4px;font-size:26px;font-weight:700;letter-spacing:-.02em}
 .brand p{margin:0;color:var(--ink60);font-size:14px}
 .tabs{display:grid;grid-template-columns:1fr 1fr;background:rgba(255,255,255,.04);padding:4px;border-radius:12px;margin-bottom:22px;border:1px solid var(--line)}
+.linklike{background:none;border:0;color:var(--accent);font-size:13px;cursor:pointer;font-family:inherit;padding:2px 0}
+.linklike:hover{text-decoration:underline}
 .tabs button{border:0;background:transparent;padding:11px;border-radius:9px;cursor:pointer;color:var(--ink60);font-family:inherit;font-size:14px}
 .tabs button.active{background:var(--ink);color:var(--bg0);box-shadow:0 1px 3px rgba(0,0,0,.3);font-weight:600}
 label{display:block;font-size:13px;font-weight:600;margin:14px 0 6px;color:var(--ink)}
@@ -186,9 +188,26 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
 <svg class="eyeOff" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a21.6 21.6 0 0 1 5.06-6.06M9.9 4.24A10.94 10.94 0 0 1 12 4c7 0 11 8 11 8a21.5 21.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><path d="M1 1l22 22"/></svg>
 </button>
 </div>
+<div id="forgotPwdRow" style="text-align:end;margin:-6px 0 4px"><button type="button" id="forgotPwdLink" class="linklike">نسيت كلمة المرور؟</button></div>
 <button id="submitBtn" class="primary" type="submit"><span class="btnText">تسجيل الدخول</span><span class="spinner"></span></button>
 </form>
 <div id="message" class="message"></div>
+
+<form id="resetRequestForm" class="hidden">
+<p class="small" style="margin-bottom:10px">اكتب بريدك الإلكتروني وسنرسل لك رابط استعادة كلمة المرور.</p>
+<label>البريد الإلكتروني</label><input id="resetEmail" type="email" required style="direction:ltr;text-align:left" placeholder="example@email.com">
+<button id="resetSendBtn" class="primary" type="submit"><span class="btnText">إرسال رابط الاستعادة</span><span class="spinner"></span></button>
+<button type="button" id="backToLoginLink" class="linklike" style="margin-top:10px">رجوع لتسجيل الدخول</button>
+</form>
+<div id="resetRequestMsg" class="message"></div>
+
+<form id="newPasswordForm" class="hidden">
+<p class="small" style="margin-bottom:10px">اكتب كلمة مرور جديدة لحسابك.</p>
+<label>كلمة المرور الجديدة</label><input id="newPassword" type="password" minlength="6" required style="direction:ltr;text-align:left" placeholder="••••••••">
+<label>تأكيد كلمة المرور</label><input id="newPassword2" type="password" minlength="6" required style="direction:ltr;text-align:left" placeholder="••••••••">
+<button id="newPasswordBtn" class="primary" type="submit"><span class="btnText">حفظ كلمة المرور الجديدة</span><span class="spinner"></span></button>
+</form>
+<div id="newPasswordMsg" class="message"></div>
 </main>
 </div>
 
@@ -243,7 +262,67 @@ form.onsubmit=async e=>{
   finally{btn.disabled=false;btn.classList.remove("loading")}
 };
 logoutBtn.onclick=async()=>{await db.auth.signOut();dash.classList.add("hidden");authApp.classList.remove("hidden");setMode("login");App.ctx=null};
-(async()=>{let{data}=await db.auth.getSession();if(data.session)await bootApp(data.session.user)})();
+
+// ===== استعادة كلمة المرور (لا تمس signInWithPassword/signUp أعلاه إطلاقًا) =====
+const resetRequestForm=document.getElementById("resetRequestForm"),newPasswordForm=document.getElementById("newPasswordForm");
+const resetRequestMsg=document.getElementById("resetRequestMsg"),newPasswordMsg=document.getElementById("newPasswordMsg");
+const resetSendBtn=document.getElementById("resetSendBtn"),newPasswordBtn=document.getElementById("newPasswordBtn");
+
+function showAuthScreen(which){
+  form.classList.toggle("hidden", which!=="login");
+  document.getElementById("forgotPwdRow").classList.toggle("hidden", which!=="login");
+  document.querySelector(".tabs").classList.toggle("hidden", which!=="login");
+  msg.className="message";
+  resetRequestForm.classList.toggle("hidden", which!=="reset");
+  resetRequestMsg.className="message";
+  newPasswordForm.classList.toggle("hidden", which!=="newpassword");
+  newPasswordMsg.className="message";
+}
+document.getElementById("forgotPwdLink").onclick=()=>showAuthScreen("reset");
+document.getElementById("backToLoginLink").onclick=()=>showAuthScreen("login");
+
+resetRequestForm.onsubmit=async e=>{
+  e.preventDefault();
+  resetSendBtn.disabled=true;resetSendBtn.classList.add("loading");resetRequestMsg.className="message";
+  try{
+    const email=cleanEmail(document.getElementById("resetEmail").value);
+    await db.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin + window.location.pathname });
+  }catch(e){ /* نتجاهل الخطأ بصمت عمدًا — ما نكشف هل البريد مسجّل أم لا */ }
+  // نفس الرسالة دايمًا بغض النظر عن وجود البريد من عدمه (أمان)
+  resetRequestMsg.textContent="لو هذا البريد مسجّل عندنا، وصلته رسالة فيها رابط استعادة كلمة المرور.";
+  resetRequestMsg.className="message show success";
+  resetSendBtn.disabled=false;resetSendBtn.classList.remove("loading");
+};
+
+newPasswordForm.onsubmit=async e=>{
+  e.preventDefault();
+  const p1=document.getElementById("newPassword").value, p2=document.getElementById("newPassword2").value;
+  if(p1!==p2){ newPasswordMsg.textContent="كلمتا المرور غير متطابقتين"; newPasswordMsg.className="message show error"; return; }
+  newPasswordBtn.disabled=true;newPasswordBtn.classList.add("loading");newPasswordMsg.className="message";
+  try{
+    const {error}=await db.auth.updateUser({password:p1});
+    if(error) throw error;
+    await db.auth.signOut();
+    showAuthScreen("login");
+    message("تم تغيير كلمة المرور بنجاح — سجّل الدخول بكلمة المرور الجديدة.","success");
+  }catch(e){ newPasswordMsg.textContent=e.message||"تعذّر تحديث كلمة المرور"; newPasswordMsg.className="message show error"; }
+  finally{ newPasswordBtn.disabled=false;newPasswordBtn.classList.remove("loading"); }
+};
+
+// Supabase يفعّل جلسة استعادة مؤقتة ويطلق هذا الحدث لما الطالب يفتح رابط الاستعادة من بريده
+let isPasswordRecoveryFlow = location.hash.includes("type=recovery");
+db.auth.onAuthStateChange((event, session)=>{
+  if(event === "PASSWORD_RECOVERY"){
+    isPasswordRecoveryFlow = true;
+    authApp.classList.remove("hidden"); dash.classList.add("hidden");
+    showAuthScreen("newpassword");
+  }
+});
+
+(async()=>{
+  let{data}=await db.auth.getSession();
+  if(data.session && !isPasswordRecoveryFlow) await bootApp(data.session.user);
+})();
 
 async function bootApp(user){
   authApp.classList.add("hidden");dash.classList.remove("hidden");
@@ -309,13 +388,33 @@ const App = {
   async openNotifications(){
     const {data} = await db.from("notifications").select("*").eq("profile_id", this.ctx.user.id).order("created_at",{ascending:false}).limit(20);
     const list = (data||[]).map(n=>`
-      <div class="card2" style="${n.is_read?'':'background:rgba(255,255,255,.08)'}">
+      <div class="card2 notifRow" data-notifid="${n.id}" data-notiftype="${n.related_type||''}" data-notifcourse="${n.course_id||''}" style="${n.is_read?'':'background:rgba(255,255,255,.08)'};cursor:pointer">
         <div class="row"><b style="font-size:13.5px">${CodeUp.escapeHtml(n.title)}</b><span class="small mono">${CodeUp.timeAgo(n.created_at)}</span></div>
+        ${n.body?`<p class="small" style="margin-top:4px">${CodeUp.escapeHtml(n.body)}</p>`:""}
       </div>`).join("") || `<div class="emptyState">لا توجد إشعارات بعد.</div>`;
-    this.modal(`<h3>الإشعارات</h3><div>${list}</div>`, async ()=>{
+    const m = this.modal(`<h3>الإشعارات</h3><div>${list}</div>`, async ()=>{
       const ids=(data||[]).filter(n=>!n.is_read).map(n=>n.id);
       if(ids.length) await db.from("notifications").update({is_read:true}).in("id", ids);
       this.refreshNotifBadge();
+    });
+
+    // خرائط نوع الإشعار → التبويب المناسب داخل الكورس
+    const TAB_BY_TYPE = { announcement:"timeline", submission:"assignments", squad_join_request:"squads", leader_application:"squads" };
+
+    m.el.querySelectorAll("[data-notifid]").forEach(row=>{
+      row.onclick = async ()=>{
+        const id = row.dataset.notifid;
+        await db.from("notifications").update({is_read:true}).eq("id", id);
+        const courseId = row.dataset.notifcourse;
+        const tab = TAB_BY_TYPE[row.dataset.notiftype] || "timeline";
+        m.close();
+        this.refreshNotifBadge();
+
+        if(!courseId){ this.go({name:"home", homeTab:"feed"}); return; } // إعلان عام لكل المنصة
+        const {data: course} = await db.from("courses").select("id,slug").eq("id", courseId).single();
+        if(!course){ CodeUp.toast("هذا العنصر لم يعد موجودًا", "error"); return; }
+        this.go({name:"course", courseId: course.id, courseSlug: course.slug, tab});
+      };
     });
   },
 
