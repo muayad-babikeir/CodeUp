@@ -22,7 +22,7 @@ body{
 .adminShell{display:grid;grid-template-columns:250px 1fr;min-height:100vh}
 .sidebar{background:linear-gradient(180deg,#0A0B10,#020204);color:#C7C9D6;padding:18px 12px;position:sticky;top:0;height:100vh;overflow:auto;border-inline-end:1px solid var(--line)}
 .sidebar .brand{display:flex;align-items:center;gap:9px;color:#fff;font-weight:700;padding:8px 10px 20px}
-.sidebar .brand .mark{width:30px;height:30px;border-radius:9px;background:linear-gradient(155deg,var(--indigo),var(--violet));color:var(--accent-ink);display:grid;place-items:center;font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:13px;overflow:hidden}
+.sidebar .brand .mark{width:30px;height:30px;border-radius:9px;background:var(--surface);border:1px solid var(--line);color:var(--accent-ink);display:grid;place-items:center;font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:13px;overflow:hidden}
 .sidebar .brand .mark img{width:68%;height:68%;object-fit:contain}
 .navGroup{margin-bottom:14px}
 .navGroup .navLabel{font-family:'IBM Plex Mono',monospace;font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink40);padding:6px 10px}

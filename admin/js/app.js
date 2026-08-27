@@ -194,7 +194,7 @@ const Admin = {
     if(this.role === "super" || (this.courses && this.courses.length > 1)){
       html += `<div class="navGroup"><div class="navLabel">الكورس</div>
         <select id="courseSwitcher" style="width:100%;padding:8px;border-radius:8px;border:1px solid #333;background:#1f2740;color:#fff">
-          ${this.role==="super"?`<option value="${HOME_SENTINEL}" ${this.currentCourseId===HOME_SENTINEL?"selected":""}>🏠 الصفحة الرئيسية</option>`:""}
+          ${this.role==="super"?`<option value="${HOME_SENTINEL}" ${this.currentCourseId===HOME_SENTINEL?"selected":""}>الصفحة الرئيسية</option>`:""}
           ${this.courses.map(c=>`<option value="${c.id}" ${c.id===this.currentCourseId?"selected":""}>${CodeUp.escapeHtml(c.name)}</option>`).join("")}
         </select></div>`;
     }

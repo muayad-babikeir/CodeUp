@@ -19,7 +19,8 @@ function Icon(name){
     mic: '<path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>',
     stop: '<rect x="6" y="6" width="12" height="12" rx="1.5"/>',
     group: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
-    bell: '<path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>'
+    bell: '<path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>',
+    comment: '<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>'
   };
   return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${paths[name]||''}</svg>`;
 }
@@ -87,7 +88,7 @@ function wireCommentComposer(container, targetId){
     const f = fileInput.files[0];
     if(!f) return;
     pendingFile = f;
-    previewBox.innerHTML = `<span class="small">📎 ${CodeUp.escapeHtml(f.name)}</span> <button class="btn" data-clearattach>إزالة</button>`;
+    previewBox.innerHTML = `<span class="small">${Icon("paperclip")} ${CodeUp.escapeHtml(f.name)}</span> <button class="btn" data-clearattach>إزالة</button>`;
     previewBox.querySelector("[data-clearattach]").onclick = () => { pendingFile = null; previewBox.innerHTML = ""; fileInput.value = ""; };
   };
 
@@ -107,7 +108,7 @@ function wireCommentComposer(container, targetId){
           stream.getTracks().forEach(t=>t.stop());
           const blob = new Blob(chunks, {type:"audio/webm"});
           pendingFile = new File([blob], `voice_${Date.now()}.webm`, {type:"audio/webm"});
-          previewBox.innerHTML = `<span class="small">🎙️ تسجيل صوتي جاهز</span> <button class="btn" data-clearattach>إزالة</button>`;
+          previewBox.innerHTML = `<span class="small">${Icon("mic")} تسجيل صوتي جاهز</span> <button class="btn" data-clearattach>إزالة</button>`;
           previewBox.querySelector("[data-clearattach]").onclick = () => { pendingFile = null; previewBox.innerHTML = ""; };
           recordBtn.innerHTML = Icon("mic");
         };
@@ -352,7 +353,7 @@ const CodeUp = (() => {
         ${file ? renderFileCard(file, "submissions") : ""}
       </div>`;
     }).join("");
-    return `<button class="commentsToggle" data-toggleComments>💬 ${count} تعليق</button>
+    return `<button class="commentsToggle" data-toggleComments><span class="tabIcon">${Icon("comment")}</span> ${count} تعليق</button>
       <div class="commentsList hidden">${rows || `<p class="small" style="padding:6px 0">لا توجد تعليقات بعد.</p>`}</div>`;
   }
 

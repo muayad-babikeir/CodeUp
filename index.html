@@ -41,7 +41,7 @@ body{
 .app{min-height:100vh;display:grid;place-items:center;padding:18px}
 .card{width:min(440px,100%);background:var(--surface);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);border-radius:24px;padding:32px;box-shadow:var(--shadow)}
 .brand{text-align:center;margin-bottom:26px}
-.brand .mark{width:52px;height:52px;border-radius:16px;background:linear-gradient(155deg,var(--accent),var(--accent-deep));color:var(--accent-ink);display:grid;place-items:center;margin:0 auto 14px;font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:19px;overflow:hidden}
+.brand .mark{width:52px;height:52px;border-radius:16px;background:var(--surface-solid);border:1px solid var(--line);color:var(--accent-ink);display:grid;place-items:center;margin:0 auto 14px;font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:19px;overflow:hidden}
 .brand .mark img{width:68%;height:68%;object-fit:contain}
 .brand h1{margin:0 0 4px;font-size:26px;font-weight:700;letter-spacing:-.02em}
 .brand p{margin:0;color:var(--ink60);font-size:14px}
@@ -69,7 +69,7 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
 .wrap{max-width:1080px;margin:0 auto}
 .topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--surface);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);border-radius:18px;padding:12px 16px;position:sticky;top:10px;z-index:20}
 .topbrand{display:flex;align-items:center;gap:9px;font-weight:700;flex-shrink:0}
-.topbrand .mark{width:30px;height:30px;border-radius:10px;background:linear-gradient(155deg,var(--accent),var(--accent-deep));color:var(--accent-ink);display:grid;place-items:center;font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:13px;overflow:hidden}
+.topbrand .mark{width:30px;height:30px;border-radius:10px;background:var(--surface-solid);border:1px solid var(--line);color:var(--accent-ink);display:grid;place-items:center;font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:13px;overflow:hidden}
 .topbrand .mark img{width:68%;height:68%;object-fit:contain}
 .topRight{display:flex;align-items:center;gap:8px;flex-shrink:0}
 .iconBtn{position:relative;border:1px solid var(--line);background:rgba(255,255,255,.03);border-radius:10px;width:38px;height:38px;display:grid;place-items:center;cursor:pointer;color:var(--ink)}
@@ -112,7 +112,8 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
 .videoEmbed iframe{width:100%;height:100%;border:0;display:block}
 .progressBar{height:8px;border-radius:6px;background:rgba(239,243,244,.1);overflow:hidden;margin-top:8px}
 .progressFill{height:100%;background:var(--accent);border-radius:6px;transition:width .3s}
-.commentsToggle{background:transparent;border:0;color:var(--ink60);font-size:12.5px;cursor:pointer;padding:6px 0;display:block}
+.commentsToggle{background:transparent;border:0;color:var(--ink60);font-size:12.5px;cursor:pointer;padding:6px 0;display:flex;align-items:center;gap:5px}
+.commentsToggle .tabIcon svg{width:14px;height:14px}
 .commentsList.hidden{display:none}
 .commentHead{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:2px}
 .roleBadge{font-size:10.5px;font-weight:700;padding:1px 7px;border-radius:20px}
@@ -433,7 +434,7 @@ const App = {
     document.getElementById("newPostImage").onchange = (e)=>{
       const f = e.target.files[0]; if(!f) return;
       pendingPostFile = f;
-      postPreview.innerHTML = `<span class="small">📎 ${CodeUp.escapeHtml(f.name)}</span> <button class="btn" id="clearPostAttach">إزالة</button>`;
+      postPreview.innerHTML = `<span class="small">${Icon("paperclip")} ${CodeUp.escapeHtml(f.name)}</span> <button class="btn" id="clearPostAttach">إزالة</button>`;
       document.getElementById("clearPostAttach").onclick = ()=>{ pendingPostFile=null; postPreview.innerHTML=""; };
     };
     const postRecordBtn = document.getElementById("newPostRecordBtn");
@@ -449,7 +450,7 @@ const App = {
             stream.getTracks().forEach(t=>t.stop());
             const blob = new Blob(chunks,{type:"audio/webm"});
             pendingPostFile = new File([blob], `voice_${Date.now()}.webm`, {type:"audio/webm"});
-            postPreview.innerHTML = `<span class="small">🎙️ تسجيل صوتي جاهز</span> <button class="btn" id="clearPostAttach">إزالة</button>`;
+            postPreview.innerHTML = `<span class="small">${Icon("mic")} تسجيل صوتي جاهز</span> <button class="btn" id="clearPostAttach">إزالة</button>`;
             document.getElementById("clearPostAttach").onclick = ()=>{ pendingPostFile=null; postPreview.innerHTML=""; };
             postRecordBtn.innerHTML = Icon("mic");
           };
