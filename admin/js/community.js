@@ -66,7 +66,7 @@ Admin.sections.home_announcements = {
       <div class="card"><table><thead><tr><th>العنوان</th><th>التاريخ</th><th></th></tr></thead>
       <tbody>${(anns||[]).map(a=>`
         <tr><td>${CodeUp.escapeHtml(a.title)}</td><td>${CodeUp.timeAgo(a.created_at)}</td>
-          <td><button class="btn" data-view="${a.id}">عرض</button></td></tr>
+          <td><button class="btn" data-view="${a.id}">عرض</button> <button class="btn danger" data-delann="${a.id}">حذف</button></td></tr>
       `).join("") || `<tr><td colspan="3" class="emptyState">لا توجد إعلانات عامة بعد.</td></tr>`}
       </tbody></table></div>`;
 
@@ -75,6 +75,13 @@ Admin.sections.home_announcements = {
         const a = (anns||[]).find(x=>x.id===b.dataset.view);
         Admin.modal(`<h3>${CodeUp.escapeHtml(a.title)}</h3><p class="small">${CodeUp.timeAgo(a.created_at)}</p>
           <div style="margin-top:10px;white-space:pre-wrap">${CodeUp.escapeHtml(a.content||"بدون محتوى إضافي")}</div>`);
+      };
+    });
+    body.querySelectorAll("[data-delann]").forEach(b=>{
+      b.onclick = async ()=>{
+        if(!confirm("حذف هذا الإعلان نهائيًا من الصفحة الرئيسية لكل المستخدمين؟")) return;
+        try{ await db.from("announcements").delete().eq("id", b.dataset.delann).throwOnError(); CodeUp.toast("تم الحذف","success"); Admin.go("home_announcements"); }
+        catch(e){ CodeUp.toast(e.message,"error"); }
       };
     });
 
@@ -98,6 +105,33 @@ Admin.sections.home_announcements = {
         }catch(e){ CodeUp.toast(e.message || "تعذّر النشر", "error"); saveBtn.disabled = false; }
       };
     };
+  }
+};
+
+Admin.sections.home_posts = {
+  label: "منشورات المستجدات (إشراف عام)",
+  async render(body){
+    const { data: posts } = await db.from("posts").select("*, profiles(full_name)").order("created_at",{ascending:false}).limit(100);
+    body.innerHTML = `
+      <p class="small" style="margin-bottom:10px">كل المنشورات الحرة اللي ينشرها الطلاب بالصفحة الرئيسية (تايم لاين المنصة) — تقدر تحذف أي منشور غير مناسب.</p>
+      <div class="card"><table><thead><tr><th>الكاتب</th><th>المحتوى</th><th>التاريخ</th><th></th></tr></thead>
+      <tbody>${(posts||[]).map(p=>`
+        <tr>
+          <td>${CodeUp.escapeHtml(p.profiles?.full_name||"")}</td>
+          <td style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${CodeUp.escapeHtml(p.content||"")}</td>
+          <td>${CodeUp.timeAgo(p.created_at)}</td>
+          <td><button class="btn danger" data-delpost="${p.id}">حذف</button></td>
+        </tr>
+      `).join("") || `<tr><td colspan="4" class="emptyState">لا توجد منشورات بعد.</td></tr>`}
+      </tbody></table></div>`;
+
+    body.querySelectorAll("[data-delpost]").forEach(b=>{
+      b.onclick = async ()=>{
+        if(!confirm("حذف هذا المنشور نهائيًا؟")) return;
+        try{ await db.from("posts").delete().eq("id", b.dataset.delpost).throwOnError(); CodeUp.toast("تم الحذف","success"); Admin.go("home_posts"); }
+        catch(e){ CodeUp.toast(e.message,"error"); }
+      };
+    });
   }
 };
 

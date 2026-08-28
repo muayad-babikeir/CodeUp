@@ -170,7 +170,7 @@ const Admin = {
 
   navConfig(){
     if(this.currentCourseId === HOME_SENTINEL){
-      return [{group:"الصفحة الرئيسية", items:["home_announcements"]}];
+      return [{group:"الإعدادات العامة", items:["home_announcements","home_posts"]}];
     }
     if(this.role === "super"){
       return [
