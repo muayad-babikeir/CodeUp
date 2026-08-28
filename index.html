@@ -48,6 +48,8 @@ body{
 .tabs{display:grid;grid-template-columns:1fr 1fr;background:rgba(255,255,255,.04);padding:4px;border-radius:12px;margin-bottom:22px;border:1px solid var(--line)}
 .linklike{background:none;border:0;color:var(--accent);font-size:13px;cursor:pointer;font-family:inherit;padding:2px 0}
 .linklike:hover{text-decoration:underline}
+.successIcon{width:64px;height:64px;border-radius:50%;background:rgba(0,186,124,.15);color:#00BA7C;display:flex;align-items:center;justify-content:center;margin:0 auto}
+.successIcon svg{width:34px;height:34px}
 .tabs button{border:0;background:transparent;padding:11px;border-radius:9px;cursor:pointer;color:var(--ink60);font-family:inherit;font-size:14px}
 .tabs button.active{background:var(--ink);color:var(--bg0);box-shadow:0 1px 3px rgba(0,0,0,.3);font-weight:600}
 label{display:block;font-size:13px;font-weight:600;margin:14px 0 6px;color:var(--ink)}
@@ -208,6 +210,20 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
 <button id="newPasswordBtn" class="primary" type="submit"><span class="btnText">حفظ كلمة المرور الجديدة</span><span class="spinner"></span></button>
 </form>
 <div id="newPasswordMsg" class="message"></div>
+
+<div id="confirmedScreen" class="hidden" style="text-align:center;padding:10px 0">
+<div class="successIcon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg></div>
+<h2 style="margin:14px 0 6px">تم تأكيد حسابك بنجاح!</h2>
+<p class="small" style="margin-bottom:20px">حسابك جاهز الآن — تقدر تبدأ تستخدم CodeUp مباشرة.</p>
+<button id="goToAppBtn" class="primary" type="button">الدخول إلى CodeUp</button>
+</div>
+
+<div id="pwdChangedScreen" class="hidden" style="text-align:center;padding:10px 0">
+<div class="successIcon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg></div>
+<h2 style="margin:14px 0 6px">تم تغيير كلمة المرور</h2>
+<p class="small" style="margin-bottom:20px">سجّل الدخول الآن بكلمة المرور الجديدة.</p>
+<button id="goToLoginAfterResetBtn" class="primary" type="button">تسجيل الدخول</button>
+</div>
 </main>
 </div>
 
@@ -277,9 +293,12 @@ function showAuthScreen(which){
   resetRequestMsg.className="message";
   newPasswordForm.classList.toggle("hidden", which!=="newpassword");
   newPasswordMsg.className="message";
+  document.getElementById("confirmedScreen").classList.toggle("hidden", which!=="confirmed");
+  document.getElementById("pwdChangedScreen").classList.toggle("hidden", which!=="pwdchanged");
 }
 document.getElementById("forgotPwdLink").onclick=()=>showAuthScreen("reset");
 document.getElementById("backToLoginLink").onclick=()=>showAuthScreen("login");
+document.getElementById("goToLoginAfterResetBtn").onclick=()=>showAuthScreen("login");
 
 resetRequestForm.onsubmit=async e=>{
   e.preventDefault();
@@ -303,14 +322,14 @@ newPasswordForm.onsubmit=async e=>{
     const {error}=await db.auth.updateUser({password:p1});
     if(error) throw error;
     await db.auth.signOut();
-    showAuthScreen("login");
-    message("تم تغيير كلمة المرور بنجاح — سجّل الدخول بكلمة المرور الجديدة.","success");
+    showAuthScreen("pwdchanged");
   }catch(e){ newPasswordMsg.textContent=e.message||"تعذّر تحديث كلمة المرور"; newPasswordMsg.className="message show error"; }
   finally{ newPasswordBtn.disabled=false;newPasswordBtn.classList.remove("loading"); }
 };
 
 // Supabase يفعّل جلسة استعادة مؤقتة ويطلق هذا الحدث لما الطالب يفتح رابط الاستعادة من بريده
 let isPasswordRecoveryFlow = location.hash.includes("type=recovery");
+const isSignupConfirmFlow = location.hash.includes("type=signup") || location.hash.includes("type=email_change") || location.hash.includes("type=invite");
 db.auth.onAuthStateChange((event, session)=>{
   if(event === "PASSWORD_RECOVERY"){
     isPasswordRecoveryFlow = true;
@@ -319,9 +338,20 @@ db.auth.onAuthStateChange((event, session)=>{
   }
 });
 
+document.getElementById("goToAppBtn").onclick=async()=>{
+  const {data}=await db.auth.getSession();
+  if(data.session) await bootApp(data.session.user);
+  else showAuthScreen("login");
+};
+
 (async()=>{
   let{data}=await db.auth.getSession();
-  if(data.session && !isPasswordRecoveryFlow) await bootApp(data.session.user);
+  if(data.session && isSignupConfirmFlow && !isPasswordRecoveryFlow){
+    showAuthScreen("confirmed");
+    history.replaceState(null,"",window.location.pathname);
+  }else if(data.session && !isPasswordRecoveryFlow){
+    await bootApp(data.session.user);
+  }
 })();
 
 async function bootApp(user){
