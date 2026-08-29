@@ -470,12 +470,22 @@ document.getElementById("goToAppBtn").onclick=async()=>{
 };
 
 (async()=>{
-  let{data}=await db.auth.getSession();
-  if(data.session && isSignupConfirmFlow && !isPasswordRecoveryFlow){
-    showAuthScreen("confirmed");
-    history.replaceState(null,"",window.location.pathname);
-  }else if(data.session && !isPasswordRecoveryFlow){
-    await bootApp(data.session.user);
+  try{
+    let{data}=await db.auth.getSession();
+    if(data.session && isSignupConfirmFlow && !isPasswordRecoveryFlow){
+      showAuthScreen("confirmed");
+      history.replaceState(null,"",window.location.pathname);
+    }else if(data.session && !isPasswordRecoveryFlow){
+      await bootApp(data.session.user);
+    }else if(!isPasswordRecoveryFlow){
+      // لا توجد جلسة دخول محفوظة — لازم نعرض شاشة تسجيل الدخول ونخفي splash
+      showAuthScreen("login");
+    }
+    // لو isPasswordRecoveryFlow=true، حدث PASSWORD_RECOVERY فوق بيتكفل بإخفاء splash
+  }catch(err){
+    // أي خطأ (شبكة، إعدادات Supabase...) لازم برضو يوقف splash بدل ما يعلّق الصفحة للأبد
+    console.error("boot error:", err);
+    showAuthScreen("login");
   }
 })();
 
@@ -1747,6 +1757,12 @@ function statusLabel(s){
 }
 
 document.getElementById("splashScreen").classList.add("play");
+// شبكة إنترنت بطيئة أو غير مستقرة قد تجعل getSession() يتأخر كثيرًا —
+// كحل احتياطي أخير، لو ظلت splash أكثر من 10 ثوانٍ، نخفيها ونعرض شاشة الدخول بالقوة
+setTimeout(()=>{
+  const s = document.getElementById("splashScreen");
+  if(s && !s.classList.contains("fade-out")) showAuthScreen("login");
+}, 10000);
 function hideSplash(){
   const s = document.getElementById("splashScreen");
   if(!s) return;
