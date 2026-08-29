@@ -65,6 +65,13 @@ body{
   .bottomNav{display:flex}
   .wrap{padding-bottom:70px}
 }
+/* ===== زر النشر العائم ونافذة تحديثات الرئيسية (نمط X) ===== */
+.feedFab{position:fixed;bottom:24px;inset-inline-end:20px;width:52px;height:52px;border-radius:50%;background:var(--accent);color:#fff;border:0;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 4px 14px rgba(29,155,240,.4);z-index:110}
+.feedFab svg{width:24px;height:24px}
+@media (max-width:720px){ .feedFab{bottom:82px} }
+.feedGate{text-align:center;cursor:pointer;padding:14px;transition:background .15s}
+.feedGate:hover{background:var(--surface)}
+.feedGate b{color:var(--accent)}
 /* ===== الدردشة (نمط X) ===== */
 .chatShell{display:grid;grid-template-columns:320px 1fr;gap:0;height:calc(100vh - 160px);min-height:480px;border:1px solid var(--line);border-radius:16px;overflow:hidden;margin-top:14px;position:relative}
 .chatList{border-inline-end:1px solid var(--line);display:flex;flex-direction:column;position:relative;overflow-y:auto}
@@ -214,9 +221,64 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
 /* شارات XP/Streak — تستخدم Lime كلون نجاح/طاقة مميز عن باقي الحالات */
 .xpPill{display:inline-flex;align-items:center;gap:4px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-weight:700;color:var(--green-ink);background:var(--green);padding:3px 9px;border-radius:999px}
 .btn.success{background:var(--green-soft);color:var(--green);border-color:rgba(61,209,111,.35)}
+/* ===== Splash screen (فتح التطبيق) ===== */
+#splashScreen{
+  position:fixed;inset:0;z-index:9999;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;
+  background:var(--bg0,#000);
+  transition:opacity .35s ease;
+}
+#splashScreen.fade-out{opacity:0;pointer-events:none}
+#splashScreen .mark{width:112px;height:112px}
+#splashScreen .mark rect{fill:var(--accent,#1D9BF0);transform-origin:center;opacity:0}
+#splashScreen.play .sq1{animation:splashPop .32s cubic-bezier(.2,1.4,.4,1) .03s forwards}
+#splashScreen.play .sq2{animation:splashPop .32s cubic-bezier(.2,1.4,.4,1) .11s forwards}
+#splashScreen.play .sq3{animation:splashPop .32s cubic-bezier(.2,1.4,.4,1) .19s forwards}
+#splashScreen.play .barH{animation:splashFadeIn .22s ease .32s forwards}
+#splashScreen.play .barV{animation:splashFadeIn .22s ease .40s forwards}
+@keyframes splashPop{from{opacity:0;transform:scale(.4)}to{opacity:1;transform:scale(1)}}
+@keyframes splashFadeIn{from{opacity:0}to{opacity:1}}
+#splashScreen .word{font-family:'IBM Plex Mono',monospace;font-size:44px;font-weight:700;letter-spacing:.01em;display:flex}
+#splashScreen .word span{display:inline-block;opacity:0;transform:translateY(14px)}
+#splashScreen.play .word .c1{animation:splashRise .32s cubic-bezier(.16,1,.3,1) .55s forwards}
+#splashScreen.play .word .c2{animation:splashRise .32s cubic-bezier(.16,1,.3,1) .60s forwards}
+#splashScreen.play .word .c3{animation:splashRise .32s cubic-bezier(.16,1,.3,1) .65s forwards}
+#splashScreen.play .word .c4{animation:splashRise .32s cubic-bezier(.16,1,.3,1) .70s forwards}
+#splashScreen.play .word .u1{animation:splashRise .32s cubic-bezier(.16,1,.3,1) .76s forwards}
+#splashScreen.play .word .u2{animation:splashRise .32s cubic-bezier(.16,1,.3,1) .81s forwards}
+#splashScreen .word .c1,#splashScreen .word .c2,#splashScreen .word .c3,#splashScreen .word .c4{color:var(--accent-ink,#fff)}
+#splashScreen .word .u1,#splashScreen .word .u2{color:var(--accent,#1D9BF0)}
+@keyframes splashRise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+#splashScreen .splashLoaderWrap{height:22px;display:flex;align-items:center;justify-content:center;opacity:0}
+#splashScreen.play .splashLoaderWrap{animation:splashFadeIn .25s ease 1.2s forwards}
+#splashScreen .splashLoader{width:22px;height:22px}
+#splashScreen .splashLoader rect{transform-origin:center;animation:splashBreathe 1.2s ease-in-out infinite}
+#splashScreen .splashLoader .lsq1{fill:var(--accent,#1D9BF0);animation-delay:0s}
+#splashScreen .splashLoader .lsq2{fill:var(--accent,#1D9BF0);animation-delay:.15s}
+#splashScreen .splashLoader .lsq3{fill:var(--accent-ink,#fff);animation-delay:.3s}
+@keyframes splashBreathe{0%,100%{opacity:.25;transform:scale(.45)}50%{opacity:1;transform:scale(1)}}
 </style>
 </head>
 <body>
+<div id="splashScreen">
+  <svg class="mark" viewBox="0 0 800 800" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect class="sq1" x="120" y="220" width="180" height="180" rx="40"/>
+    <rect class="sq2" x="470" y="220" width="180" height="180" rx="40"/>
+    <rect class="sq3" x="470" y="520" width="180" height="180" rx="40"/>
+    <rect class="barH" x="300" y="285" width="170" height="45"/>
+    <rect class="barV" x="535" y="400" width="45" height="120"/>
+  </svg>
+  <div class="word" dir="ltr" aria-label="CodeUp">
+    <span class="c1">C</span><span class="c2">o</span><span class="c3">d</span><span class="c4">e</span><span class="u1">U</span><span class="u2">p</span>
+  </div>
+  <div class="splashLoaderWrap">
+    <svg class="splashLoader" viewBox="0 0 800 800" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect class="lsq1" x="120" y="220" width="180" height="180" rx="40"/>
+      <rect class="lsq2" x="470" y="220" width="180" height="180" rx="40"/>
+      <rect class="lsq3" x="470" y="520" width="180" height="180" rx="40"/>
+    </svg>
+  </div>
+</div>
 <div id="authApp" class="app">
 <main class="card">
 <div class="brand">
@@ -342,6 +404,7 @@ const resetRequestMsg=document.getElementById("resetRequestMsg"),newPasswordMsg=
 const resetSendBtn=document.getElementById("resetSendBtn"),newPasswordBtn=document.getElementById("newPasswordBtn");
 
 function showAuthScreen(which){
+  hideSplash();
   form.classList.toggle("hidden", which!=="login");
   document.getElementById("forgotPwdRow").classList.toggle("hidden", which!=="login");
   document.querySelector(".tabs").classList.toggle("hidden", which!=="login");
@@ -417,6 +480,7 @@ document.getElementById("goToAppBtn").onclick=async()=>{
 })();
 
 async function bootApp(user){
+  hideSplash();
   authApp.classList.add("hidden");dash.classList.remove("hidden");
   await App.init(user);
 }
@@ -653,7 +717,7 @@ const App = {
 
     pane.innerHTML = `
       <div class="chatThreadHead">
-        ${window.innerWidth<720?`<button id="chatBackBtn" class="iconBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></button>`:""}
+        <button id="chatBackBtn" class="iconBtn" title="رجوع" aria-label="رجوع"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></button>
         <div class="convAvatar">${CodeUp.escapeHtml((other.full_name||"?")[0])}</div>
         <b>${CodeUp.escapeHtml(other.full_name||"مستخدم")}</b>
       </div>
@@ -886,7 +950,6 @@ const App = {
     this.crumbs.classList.add("hidden");
 
     this.root.innerHTML = `
-      <section class="welcome"><h2>مرحباً ${CodeUp.escapeHtml(this.ctx.profile.full_name||"")}</h2><p class="mono">${CodeUp.escapeHtml(this.ctx.user.email||"")}</p></section>
       <div class="fbTabBar">
         <button data-hometab="feed" class="${tab==='feed'?'active':''}"><span class="tabIcon">${Icon('timeline')}</span>الرئيسية</button>
         <button data-hometab="courses" class="${tab==='courses'?'active':''}"><span class="tabIcon">${Icon('learning')}</span>الكورسات</button>
@@ -943,8 +1006,20 @@ const App = {
     const PAGE_SIZE = 15;
     const myCourseIds = this.ctx.enrollments.map(e=>e.course_id);
     body.innerHTML = `
-      <div class="card2" style="margin-top:14px">
-        <textarea id="newPostText" rows="2" placeholder="شارك تحديثًا أو سؤالًا مع الجميع…" style="width:100%;resize:vertical"></textarea>
+      <div id="feedGate" class="card2 feedGate" style="margin-top:14px">
+        <b>عرض آخر التحديثات</b>
+        <p class="small" style="margin-top:4px">إعلانات، منشورات، وتسليمات من كورساتك</p>
+      </div>
+      <div id="feedList"></div><div id="feedMore"></div>
+      <button id="feedComposeFab" class="feedFab" title="تحديث جديد" aria-label="تحديث جديد">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+      </button>`;
+
+    const openComposer = ()=>{
+      let pendingPostFile = null;
+      const m = this.modal(`
+        <h3>تحديث جديد</h3>
+        <textarea id="newPostText" rows="4" placeholder="شارك تحديثًا أو سؤالًا مع الجميع…" style="width:100%;resize:vertical" autofocus></textarea>
         <div class="commentAttachRow" style="margin-top:8px">
           <input type="file" accept="image/*" id="newPostImage" style="display:none">
           <button class="btn iconBtn" id="newPostAttachBtn" title="إرفاق صورة">${Icon("paperclip")}</button>
@@ -952,71 +1027,73 @@ const App = {
           <div style="flex:1"></div>
           <button class="btn dark" id="newPostBtn">نشر</button>
         </div>
-        <div id="newPostPreview" style="margin-top:6px"></div>
-      </div>
-      <div id="feedList"></div><div id="feedMore"></div>`;
+        <div id="newPostPreview" style="margin-top:6px"></div>`);
 
-    let pendingPostFile = null;
-    const postPreview = document.getElementById("newPostPreview");
-    document.getElementById("newPostAttachBtn").onclick = ()=> document.getElementById("newPostImage").click();
-    document.getElementById("newPostImage").onchange = (e)=>{
-      const f = e.target.files[0]; if(!f) return;
-      pendingPostFile = f;
-      postPreview.innerHTML = `<span class="small">${Icon("paperclip")} ${CodeUp.escapeHtml(f.name)}</span> <button class="btn" id="clearPostAttach">إزالة</button>`;
-      document.getElementById("clearPostAttach").onclick = ()=>{ pendingPostFile=null; postPreview.innerHTML=""; };
-    };
-    const postRecordBtn = document.getElementById("newPostRecordBtn");
-    if(navigator.mediaDevices?.getUserMedia){
-      let mediaRecorder=null, chunks=[];
-      postRecordBtn.onclick = async ()=>{
-        if(mediaRecorder && mediaRecorder.state==="recording"){ mediaRecorder.stop(); return; }
-        try{
-          const stream = await navigator.mediaDevices.getUserMedia({audio:true});
-          chunks=[]; mediaRecorder = new MediaRecorder(stream);
-          mediaRecorder.ondataavailable = e=>chunks.push(e.data);
-          mediaRecorder.onstop = ()=>{
-            stream.getTracks().forEach(t=>t.stop());
-            const blob = new Blob(chunks,{type:"audio/webm"});
-            pendingPostFile = new File([blob], `voice_${Date.now()}.webm`, {type:"audio/webm"});
-            postPreview.innerHTML = `<span class="small">${Icon("mic")} تسجيل صوتي جاهز</span> <button class="btn" id="clearPostAttach">إزالة</button>`;
-            document.getElementById("clearPostAttach").onclick = ()=>{ pendingPostFile=null; postPreview.innerHTML=""; };
-            postRecordBtn.innerHTML = Icon("mic");
-          };
-          mediaRecorder.start();
-          postRecordBtn.innerHTML = `<span class="recordingDot"></span>${Icon("stop")}`;
-        }catch(e){ CodeUp.toast("تعذّر الوصول للميكروفون","error"); }
+      const postPreview = m.el.querySelector("#newPostPreview");
+      m.el.querySelector("#newPostAttachBtn").onclick = ()=> m.el.querySelector("#newPostImage").click();
+      m.el.querySelector("#newPostImage").onchange = (e)=>{
+        const f = e.target.files[0]; if(!f) return;
+        pendingPostFile = f;
+        postPreview.innerHTML = `<span class="small">${Icon("paperclip")} ${CodeUp.escapeHtml(f.name)}</span> <button class="btn" id="clearPostAttach">إزالة</button>`;
+        m.el.querySelector("#clearPostAttach").onclick = ()=>{ pendingPostFile=null; postPreview.innerHTML=""; };
       };
-    }else{ postRecordBtn.style.display="none"; }
+      const postRecordBtn = m.el.querySelector("#newPostRecordBtn");
+      if(navigator.mediaDevices?.getUserMedia){
+        let mediaRecorder=null, chunks=[];
+        postRecordBtn.onclick = async ()=>{
+          if(mediaRecorder && mediaRecorder.state==="recording"){ mediaRecorder.stop(); return; }
+          try{
+            const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+            chunks=[]; mediaRecorder = new MediaRecorder(stream);
+            mediaRecorder.ondataavailable = e=>chunks.push(e.data);
+            mediaRecorder.onstop = ()=>{
+              stream.getTracks().forEach(t=>t.stop());
+              const blob = new Blob(chunks,{type:"audio/webm"});
+              pendingPostFile = new File([blob], `voice_${Date.now()}.webm`, {type:"audio/webm"});
+              postPreview.innerHTML = `<span class="small">${Icon("mic")} تسجيل صوتي جاهز</span> <button class="btn" id="clearPostAttach">إزالة</button>`;
+              m.el.querySelector("#clearPostAttach").onclick = ()=>{ pendingPostFile=null; postPreview.innerHTML=""; };
+              postRecordBtn.innerHTML = Icon("mic");
+            };
+            mediaRecorder.start();
+            postRecordBtn.innerHTML = `<span class="recordingDot"></span>${Icon("stop")}`;
+          }catch(e){ CodeUp.toast("تعذّر الوصول للميكروفون","error"); }
+        };
+      }else{ postRecordBtn.style.display="none"; }
 
-    document.getElementById("newPostBtn").onclick = async ()=>{
-      const ta = document.getElementById("newPostText");
-      const val = ta.value.trim();
-      if(!val && !pendingPostFile) return;
-      const btn = document.getElementById("newPostBtn");
-      btn.disabled = true;
-      try{
-        const {data: row, error} = await db.from("posts").insert({profile_id:this.ctx.user.id, content: val || "📎"}).select().single();
-        if(error) throw error;
-        if(pendingPostFile){
-          const uploaded = await CodeUp.uploadCommentAttachment(pendingPostFile, this.ctx.user.id, row.id); // نفس منطق الرفع، مسار عام تحت posts
-          await db.from("file_uploads").insert({
-            uploader_id: this.ctx.user.id, related_type:"post", related_id: row.id,
-            storage_path: uploaded.path, file_name: uploaded.name, mime_type: uploaded.type, file_size: uploaded.size
-          });
-          const fileRow = await db.from("file_uploads").select("id").eq("related_type","post").eq("related_id", row.id).single();
-          if(fileRow.data) CodeUp.triggerTelegramSend(fileRow.data.id);
-        }
-        ta.value=""; pendingPostFile=null; postPreview.innerHTML="";
-        loadFeed(true); CodeUp.toast("تم النشر","success");
-      }catch(e){ CodeUp.toast(e.message,"error"); }
-      finally{ btn.disabled = false; }
+      m.el.querySelector("#newPostBtn").onclick = async ()=>{
+        const ta = m.el.querySelector("#newPostText");
+        const val = ta.value.trim();
+        if(!val && !pendingPostFile) return;
+        const btn = m.el.querySelector("#newPostBtn");
+        btn.disabled = true;
+        try{
+          const {data: row, error} = await db.from("posts").insert({profile_id:this.ctx.user.id, content: val || "📎"}).select().single();
+          if(error) throw error;
+          if(pendingPostFile){
+            const uploaded = await CodeUp.uploadCommentAttachment(pendingPostFile, this.ctx.user.id, row.id); // نفس منطق الرفع، مسار عام تحت posts
+            await db.from("file_uploads").insert({
+              uploader_id: this.ctx.user.id, related_type:"post", related_id: row.id,
+              storage_path: uploaded.path, file_name: uploaded.name, mime_type: uploaded.type, file_size: uploaded.size
+            });
+            const fileRow = await db.from("file_uploads").select("id").eq("related_type","post").eq("related_id", row.id).single();
+            if(fileRow.data) CodeUp.triggerTelegramSend(fileRow.data.id);
+          }
+          m.close();
+          CodeUp.toast("تم النشر","success");
+          loadFeed(true);
+        }catch(e){ CodeUp.toast(e.message,"error"); }
+        finally{ btn.disabled = false; }
+      };
     };
+    document.getElementById("feedComposeFab").onclick = openComposer;
 
     const list = body.querySelector("#feedList");
     const moreBox = body.querySelector("#feedMore");
+    const gate = body.querySelector("#feedGate");
     let page = 0;
 
     const loadFeed = async (reset)=>{
+      gate.style.display = "none";
       if(reset){ page = 0; list.innerHTML = ""; }
       moreBox.innerHTML = `<div class="emptyState">جارِ التحميل…</div>`;
 
@@ -1120,7 +1197,7 @@ const App = {
         moreBox.querySelector("#feedMoreBtn").onclick = ()=>{ page++; loadFeed(false); };
       }else{ moreBox.innerHTML = ""; }
     };
-    loadFeed(true);
+    gate.onclick = ()=> loadFeed(true);
   },
 
   async renderCourse(courseId, tab){
@@ -1667,6 +1744,14 @@ const App = {
 function statusLabel(s){
   return {on_track:"على المسار",at_risk:"في خطر",behind:"متأخر",inactive:"غير نشط",
     submitted:"تم التسليم",late:"متأخر",missing:"لم يُسلَّم",reviewed:"تمت المراجعة"}[s] || s;
+}
+
+document.getElementById("splashScreen").classList.add("play");
+function hideSplash(){
+  const s = document.getElementById("splashScreen");
+  if(!s) return;
+  s.classList.add("fade-out");
+  setTimeout(()=> s.remove(), 400);
 }
 </script>
 </body>
