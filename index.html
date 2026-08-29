@@ -56,6 +56,45 @@ body{
 .linklike:hover{text-decoration:underline}
 .successIcon{width:64px;height:64px;border-radius:50%;background:rgba(0,186,124,.15);color:#00BA7C;display:flex;align-items:center;justify-content:center;margin:0 auto}
 .successIcon svg{width:34px;height:34px}
+.bottomNav{position:fixed;bottom:0;inset-inline:0;z-index:120;display:none;background:var(--surface-solid);border-top:1px solid var(--line);padding:6px 4px calc(6px + env(safe-area-inset-bottom))}
+.bottomNav button{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;background:none;border:0;color:var(--ink60);font-size:10.5px;font-family:inherit;padding:6px 0;position:relative;cursor:pointer}
+.bottomNav button svg{width:22px;height:22px}
+.bottomNav button.active{color:var(--accent)}
+.bottomBadge{position:absolute;top:2px;inset-inline-end:22%;background:var(--accent);color:#fff;border-radius:20px;min-width:15px;height:15px;font-size:9px;display:flex;align-items:center;justify-content:center;padding:0 3px}
+@media (max-width:720px){
+  .bottomNav{display:flex}
+  .wrap{padding-bottom:70px}
+}
+/* ===== الدردشة (نمط X) ===== */
+.chatShell{display:grid;grid-template-columns:320px 1fr;gap:0;height:calc(100vh - 160px);min-height:480px;border:1px solid var(--line);border-radius:16px;overflow:hidden;margin-top:14px;position:relative}
+.chatList{border-inline-end:1px solid var(--line);display:flex;flex-direction:column;position:relative;overflow-y:auto}
+.chatListHead{padding:16px;border-bottom:1px solid var(--line)}
+.chatListHead h2{margin:0 0 4px}
+.chatSearchInput{width:100%;margin-top:10px;padding:9px 12px;border-radius:20px;border:1px solid var(--line);background:var(--surface);color:var(--ink)}
+.convList{flex:1;overflow-y:auto}
+.convRow{display:flex;align-items:center;gap:10px;padding:12px 16px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,.04)}
+.convRow:hover,.convRow.active{background:var(--surface)}
+.convAvatar{width:40px;height:40px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0}
+.convInfo{flex:1;display:flex;flex-direction:column;min-width:0}
+.convInfo b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chatFab{position:absolute;bottom:16px;inset-inline-end:16px;width:48px;height:48px;border-radius:50%;background:var(--accent);color:#fff;border:0;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 4px 14px rgba(29,155,240,.4)}
+.chatFab svg{width:22px;height:22px}
+.chatThread{display:flex;flex-direction:column;height:100%;overflow:hidden}
+.chatThreadHead{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line)}
+.chatMessages{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:8px}
+.chatBubble{max-width:75%;padding:9px 13px;border-radius:16px;background:var(--surface-solid);border:1px solid var(--line);align-self:flex-start;display:flex;flex-direction:column;gap:2px}
+.chatBubble.mine{align-self:flex-end;background:var(--accent);color:#fff;border-color:transparent}
+.chatBubble .small{opacity:.65;font-size:10px}
+.chatComposer{display:flex;gap:8px;padding:12px 16px;border-top:1px solid var(--line)}
+.chatComposer input{flex:1;padding:10px 14px;border-radius:20px;border:1px solid var(--line);background:var(--surface);color:var(--ink)}
+@media (max-width:720px){
+  .chatShell{grid-template-columns:1fr;height:calc(100vh - 130px)}
+  .chatShell .chatList,.chatShell .chatThread{display:none}
+  .chatShell.showList .chatList{display:flex}
+  .chatShell.showThread .chatThread{display:flex}
+}
+.profileHead{display:flex;align-items:center;gap:14px;margin-top:10px}
+.profileHead h2{margin:0}
 .tabs button{border:0;background:transparent;padding:11px;border-radius:9px;cursor:pointer;color:var(--ink60);font-family:inherit;font-size:14px}
 .tabs button.active{background:var(--ink);color:var(--bg0);box-shadow:0 1px 3px rgba(0,0,0,.3);font-weight:600}
 label{display:block;font-size:13px;font-weight:600;margin:14px 0 6px;color:var(--ink)}
@@ -235,8 +274,12 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
 
 <div id="dashboardApp" class="dashboard hidden">
 <div class="topbar wrap">
-<div class="topbrand"><div class="mark"><img src="codeup-logo.svg" alt="CodeUp"></div><span>CodeUp</span></div>
+<div class="topbrand"><div class="mark"><img src="codeup-logo.svg" alt="CodeUp"></div></div>
 <div class="topRight">
+<button class="iconBtn" id="messagesBtn" title="الرسائل" aria-label="الرسائل">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+<span id="msgBadge" class="badge hidden">0</span>
+</button>
 <button class="iconBtn" id="notifBtn" title="الإشعارات" aria-label="الإشعارات">
 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
 <span id="notifBadge" class="badge hidden">0</span>
@@ -249,6 +292,14 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
 <div id="crumbs" class="crumbs hidden"><button id="crumbHome">الرئيسية</button></div>
 <div id="viewRoot"></div>
 </div>
+
+<nav id="bottomNav" class="bottomNav">
+  <button data-bottomnav="home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12l9-9 9 9"/><path d="M5 10v10a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1v-4a1 1 0 0 1 1-1h0a1 1 0 0 1 1 1v4a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1V10"/></svg><span>الرئيسية</span></button>
+  <button data-bottomnav="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.3-4.3"/></svg><span>بحث</span></button>
+  <button data-bottomnav="courses"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg><span>الكورسات</span></button>
+  <button data-bottomnav="messages"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span>الرسائل</span><span id="bottomMsgBadge" class="bottomBadge hidden"></span></button>
+  <button data-bottomnav="profile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span>حسابي</span></button>
+</nav>
 </div>
 
 <script src="js/supabase.js"></script>
@@ -380,10 +431,28 @@ const App = {
     this.ctx = await CodeUp.loadMyContext();
     document.getElementById("crumbHome").onclick = ()=>{this.go({name:"home"})};
     document.getElementById("notifBtn").onclick = ()=>this.openNotifications();
+    document.getElementById("messagesBtn").onclick = ()=>this.go({name:"messages"});
     this.refreshNotifBadge();
-    CodeUp.subscribeToMyNotifications(user.id, (n)=>{ this.refreshNotifBadge(); CodeUp.toast(n.title, "info"); });
+    this.refreshMsgBadge();
+    CodeUp.subscribeToMyNotifications(user.id, (n)=>{ this.refreshNotifBadge(); if(n.related_type!=="message") CodeUp.toast(n.title, "info"); if(n.related_type==="message") this.refreshMsgBadge(); });
+    document.querySelectorAll("#bottomNav [data-bottomnav]").forEach(b=>{
+      b.onclick = ()=>{
+        const dest = b.dataset.bottomnav;
+        if(dest==="home") this.go({name:"home"});
+        else if(dest==="courses") this.go({name:"home", homeTab:"courses"});
+        else if(dest==="search") this.go({name:"search"});
+        else if(dest==="messages") this.go({name:"messages"});
+        else if(dest==="profile") this.go({name:"profile", profileId:this.ctx.user.id});
+      };
+    });
     window.addEventListener("popstate", ()=> this.routeFromHash(false));
     await this.routeFromHash(false, true);
+  },
+
+  updateBottomNavActive(){
+    const map = {home:"home", search:"search", messages:"messages", profile:"profile"};
+    let active = this.view.name==="course" && this.view.homeTab==="courses" ? "courses" : (this.view.name==="home" && this.view.homeTab==="courses" ? "courses" : map[this.view.name] || "home");
+    document.querySelectorAll("#bottomNav [data-bottomnav]").forEach(b=> b.classList.toggle("active", b.dataset.bottomnav===active));
   },
 
   // يحوّل الرابط الحالي (#/course/<slug>/<tab>) إلى view، أو يفتح الرئيسية لو ما فيه رابط
@@ -426,10 +495,24 @@ const App = {
     if(count>0){badge.textContent=count>9?"9+":count;badge.classList.remove("hidden")}else badge.classList.add("hidden");
   },
 
+  // العداد يعتمد على رسائل غير مقروءة فعليًا بجدول messages (مصدر الحقيقة)، مو على notifications
+  async refreshMsgBadge(){
+    const {data: convs} = await db.from("conversations").select("id").or(`user_a.eq.${this.ctx.user.id},user_b.eq.${this.ctx.user.id}`);
+    const ids = (convs||[]).map(c=>c.id);
+    let count = 0;
+    if(ids.length){
+      const {count: c} = await db.from("messages").select("id",{count:"exact",head:true}).in("conversation_id", ids).eq("is_read", false).neq("sender_id", this.ctx.user.id);
+      count = c || 0;
+    }
+    const badge = document.getElementById("msgBadge"), bottomBadge = document.getElementById("bottomMsgBadge");
+    if(count>0){ badge.textContent = count>9?"9+":count; badge.classList.remove("hidden"); bottomBadge.textContent = count>9?"9+":count; bottomBadge.classList.remove("hidden"); }
+    else{ badge.classList.add("hidden"); bottomBadge.classList.add("hidden"); }
+  },
+
   async openNotifications(){
     const {data} = await db.from("notifications").select("*").eq("profile_id", this.ctx.user.id).order("created_at",{ascending:false}).limit(20);
     const list = (data||[]).map(n=>`
-      <div class="card2 notifRow" data-notifid="${n.id}" data-notiftype="${n.related_type||''}" data-notifcourse="${n.course_id||''}" style="${n.is_read?'':'background:rgba(255,255,255,.08)'};cursor:pointer">
+      <div class="card2 notifRow" data-notifid="${n.id}" data-notiftype="${n.related_type||''}" data-notifcourse="${n.course_id||''}" data-notifrelated="${n.related_id||''}" style="${n.is_read?'':'background:rgba(255,255,255,.08)'};cursor:pointer">
         <div class="row"><b style="font-size:13.5px">${CodeUp.escapeHtml(n.title)}</b><span class="small mono">${CodeUp.timeAgo(n.created_at)}</span></div>
         ${n.body?`<p class="small" style="margin-top:4px">${CodeUp.escapeHtml(n.body)}</p>`:""}
       </div>`).join("") || `<div class="emptyState">لا توجد إشعارات بعد.</div>`;
@@ -447,16 +530,317 @@ const App = {
         const id = row.dataset.notifid;
         await db.from("notifications").update({is_read:true}).eq("id", id);
         const courseId = row.dataset.notifcourse;
-        const tab = TAB_BY_TYPE[row.dataset.notiftype] || "timeline";
+        const notifType = row.dataset.notiftype;
         m.close();
         this.refreshNotifBadge();
 
+        if(notifType === "message"){
+          this.go({name:"messages", conversationId: row.dataset.notifrelated});
+          return;
+        }
+        const tab = TAB_BY_TYPE[notifType] || "timeline";
         if(!courseId){ this.go({name:"home", homeTab:"feed"}); return; } // إعلان عام لكل المنصة
         const {data: course} = await db.from("courses").select("id,slug").eq("id", courseId).single();
         if(!course){ CodeUp.toast("هذا العنصر لم يعد موجودًا", "error"); return; }
         this.go({name:"course", courseId: course.id, courseSlug: course.slug, tab});
       };
     });
+  },
+
+  async renderMessages(conversationId){
+    this.crumbs.classList.add("hidden");
+    const isMobile = window.innerWidth < 720;
+    this.root.innerHTML = `
+      <div class="chatShell ${isMobile && conversationId ? 'showThread' : ''} ${isMobile && !conversationId ? 'showList' : ''}">
+        <div class="chatList">
+          <div class="chatListHead">
+            <h2>الدردشة</h2>
+            <p class="small" id="chatStatusLine">تواصل مع طلاب CodeUp</p>
+            <input type="text" id="chatSearchInput" placeholder="بحث عن محادثة أو شخص…" class="chatSearchInput">
+          </div>
+          <div id="convList"><div class="emptyState">جارِ التحميل…</div></div>
+          <button id="newChatFab" class="chatFab" title="محادثة جديدة" aria-label="محادثة جديدة">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+          </button>
+        </div>
+        <div class="chatThread" id="chatThreadPane">
+          <div class="emptyState" style="margin-top:60px">اختر محادثة أو ابدأ وحدة جديدة</div>
+        </div>
+      </div>`;
+
+    if(this._msgRealtimeChannel){ db.removeChannel(this._msgRealtimeChannel); this._msgRealtimeChannel = null; }
+
+    const loadConvList = async ()=>{
+      const {data: convs} = await db.from("conversations")
+        .select("*, a:profiles!conversations_user_a_fkey(id,full_name), b:profiles!conversations_user_b_fkey(id,full_name)")
+        .or(`user_a.eq.${this.ctx.user.id},user_b.eq.${this.ctx.user.id}`)
+        .order("last_message_at",{ascending:false});
+
+      const {data: unread} = await db.from("messages").select("conversation_id").eq("is_read", false).neq("sender_id", this.ctx.user.id)
+        .in("conversation_id", (convs||[]).map(c=>c.id).length ? (convs||[]).map(c=>c.id) : ["00000000-0000-0000-0000-000000000000"]);
+      const unreadByConv = {};
+      (unread||[]).forEach(m=> unreadByConv[m.conversation_id] = (unreadByConv[m.conversation_id]||0)+1);
+
+      const listBox = document.getElementById("convList");
+      listBox.innerHTML = (convs||[]).map(c=>{
+        const other = c.a.id === this.ctx.user.id ? c.b : c.a;
+        const unreadCount = unreadByConv[c.id]||0;
+        return `<div class="convRow ${c.id===conversationId?'active':''}" data-conv="${c.id}" data-othername="${CodeUp.escapeHtml(other.full_name||'')}">
+          <div class="convAvatar">${CodeUp.escapeHtml((other.full_name||"?")[0])}</div>
+          <div class="convInfo"><b>${CodeUp.escapeHtml(other.full_name||"مستخدم")}</b><span class="small mono">${CodeUp.timeAgo(c.last_message_at)}</span></div>
+          ${unreadCount?`<span class="bottomBadge" style="position:static">${unreadCount}</span>`:""}
+        </div>`;
+      }).join("") || `<div class="emptyState">لا توجد محادثات بعد. ابدأ وحدة جديدة بزر +.</div>`;
+
+      listBox.querySelectorAll("[data-conv]").forEach(row=>{
+        row.onclick = ()=> this.go({name:"messages", conversationId: row.dataset.conv});
+      });
+    };
+    await loadConvList();
+
+    document.getElementById("chatSearchInput").oninput = CodeUp.debounce(async (e)=>{
+      const q = e.target.value.trim();
+      document.querySelectorAll(".convRow").forEach(row=>{
+        row.style.display = !q || row.dataset.othername.toLowerCase().includes(q.toLowerCase()) ? "" : "none";
+      });
+    }, 250);
+
+    document.getElementById("newChatFab").onclick = ()=> this.openNewChatPicker();
+
+    if(conversationId) await this.renderChatThread(conversationId);
+
+    window.onresize = CodeUp.debounce(()=>{
+      const nowMobile = window.innerWidth < 720;
+      const shell = document.querySelector(".chatShell");
+      if(!shell) return;
+      shell.classList.toggle("showThread", nowMobile && !!conversationId);
+      shell.classList.toggle("showList", nowMobile && !conversationId);
+    }, 200);
+  },
+
+  async openNewChatPicker(){
+    const m = this.modal(`<h3>محادثة جديدة</h3>
+      <input type="text" id="newChatSearch" placeholder="ابحث عن طالب بالاسم…" autofocus>
+      <div id="newChatResults" style="margin-top:10px;max-height:50vh;overflow-y:auto"></div>`);
+    const results = m.el.querySelector("#newChatResults");
+    m.el.querySelector("#newChatSearch").oninput = CodeUp.debounce(async (e)=>{
+      const q = e.target.value.trim();
+      if(q.length < 2){ results.innerHTML = `<p class="small">اكتب حرفين على الأقل للبحث.</p>`; return; }
+      const {data} = await db.from("profiles").select("id,full_name").ilike("full_name", `%${q}%`).neq("id", this.ctx.user.id).limit(15);
+      results.innerHTML = (data||[]).map(p=>`<div class="convRow" data-user="${p.id}"><div class="convAvatar">${CodeUp.escapeHtml((p.full_name||"?")[0])}</div><div class="convInfo"><b>${CodeUp.escapeHtml(p.full_name||"")}</b></div></div>`).join("") || `<p class="small">لا نتائج.</p>`;
+      results.querySelectorAll("[data-user]").forEach(row=>{
+        row.onclick = async ()=>{
+          try{
+            const {data: conv, error} = await db.rpc("get_or_create_conversation", {p_other_user: row.dataset.user}).single();
+            if(error) throw error;
+            m.close();
+            this.go({name:"messages", conversationId: conv.id});
+          }catch(e){ CodeUp.toast(e.message,"error"); }
+        };
+      });
+    }, 300);
+  },
+
+  async renderChatThread(conversationId){
+    const pane = document.getElementById("chatThreadPane");
+    pane.innerHTML = `<div class="emptyState">جارِ التحميل…</div>`;
+
+    const {data: conv} = await db.from("conversations")
+      .select("*, a:profiles!conversations_user_a_fkey(id,full_name), b:profiles!conversations_user_b_fkey(id,full_name)")
+      .eq("id", conversationId).single();
+    if(!conv){ pane.innerHTML = `<div class="emptyState">هذه المحادثة لم تعد موجودة.</div>`; return; }
+    const other = conv.a.id === this.ctx.user.id ? conv.b : conv.a;
+
+    pane.innerHTML = `
+      <div class="chatThreadHead">
+        ${window.innerWidth<720?`<button id="chatBackBtn" class="iconBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></button>`:""}
+        <div class="convAvatar">${CodeUp.escapeHtml((other.full_name||"?")[0])}</div>
+        <b>${CodeUp.escapeHtml(other.full_name||"مستخدم")}</b>
+      </div>
+      <div class="chatMessages" id="chatMessages"><div class="emptyState">جارِ التحميل…</div></div>
+      <form class="chatComposer" id="chatComposerForm">
+        <input type="text" id="chatMsgInput" placeholder="اكتب رسالة…" maxlength="2000" autocomplete="off">
+        <button type="submit" class="btn dark">إرسال</button>
+      </form>`;
+
+    const backBtn = document.getElementById("chatBackBtn");
+    if(backBtn) backBtn.onclick = ()=> this.go({name:"messages"});
+
+    const msgBox = document.getElementById("chatMessages");
+    const PAGE = 30;
+    let oldestLoaded = null;
+
+    const renderMsgs = (msgs, prepend)=>{
+      const html = msgs.map(m=>`<div class="chatBubble ${m.sender_id===this.ctx.user.id?'mine':''}">${CodeUp.escapeHtml(m.content)}<span class="small mono">${CodeUp.timeAgo(m.created_at)}</span></div>`).join("");
+      if(prepend) msgBox.insertAdjacentHTML("afterbegin", html);
+      else msgBox.insertAdjacentHTML("beforeend", html);
+    };
+
+    const {data: initialMsgs} = await db.from("messages").select("*").eq("conversation_id", conversationId).order("created_at",{ascending:false}).limit(PAGE);
+    const ordered = (initialMsgs||[]).slice().reverse();
+    msgBox.innerHTML = "";
+    if(!ordered.length) msgBox.innerHTML = `<div class="emptyState">ابدأ المحادثة الآن.</div>`;
+    else{ renderMsgs(ordered, false); oldestLoaded = ordered[0]?.created_at; }
+    msgBox.scrollTop = msgBox.scrollHeight;
+
+    msgBox.onscroll = CodeUp.debounce(async ()=>{
+      if(msgBox.scrollTop > 40 || !oldestLoaded) return;
+      const {data: older} = await db.from("messages").select("*").eq("conversation_id", conversationId).lt("created_at", oldestLoaded).order("created_at",{ascending:false}).limit(PAGE);
+      if(older && older.length){
+        const prevHeight = msgBox.scrollHeight;
+        renderMsgs(older.slice().reverse(), true);
+        oldestLoaded = older[older.length-1].created_at;
+        msgBox.scrollTop = msgBox.scrollHeight - prevHeight;
+      }
+    }, 150);
+
+    await db.rpc("mark_conversation_read", {p_conversation_id: conversationId});
+    this.refreshMsgBadge();
+
+    // Realtime محصور بهذي المحادثة بس — مو اشتراك عام على كل الرسائل
+    this._msgRealtimeChannel = db.channel(`conv-${conversationId}`)
+      .on("postgres_changes", {event:"INSERT", schema:"public", table:"messages", filter:`conversation_id=eq.${conversationId}`}, async (payload)=>{
+        renderMsgs([payload.new], false);
+        msgBox.scrollTop = msgBox.scrollHeight;
+        if(payload.new.sender_id !== this.ctx.user.id){
+          await db.rpc("mark_conversation_read", {p_conversation_id: conversationId});
+          this.refreshMsgBadge();
+        }
+      }).subscribe();
+
+    document.getElementById("chatComposerForm").onsubmit = async (e)=>{
+      e.preventDefault();
+      const input = document.getElementById("chatMsgInput");
+      const val = input.value.trim();
+      if(!val) return;
+      input.disabled = true;
+      try{
+        await db.rpc("send_message", {p_conversation_id: conversationId, p_content: val});
+        input.value = "";
+      }catch(err){ CodeUp.toast(err.message,"error"); }
+      finally{ input.disabled = false; input.focus(); }
+    };
+  },
+
+  async renderProfile(profileId){
+    this.crumbs.classList.add("hidden");
+    const isMe = profileId === this.ctx.user.id;
+    const {data: profile} = await db.from("profiles").select("*").eq("id", profileId).single();
+    if(!profile){ this.root.innerHTML = `<div class="emptyState">المستخدم غير موجود.</div>`; return; }
+
+    const [{data: posts}, {data: subs}] = await Promise.all([
+      db.from("posts").select("*").eq("profile_id", profileId).order("created_at",{ascending:false}).limit(30),
+      db.from("submissions").select("*, assignments(title)").eq("profile_id", profileId).order("created_at",{ascending:false}).limit(30)
+    ]);
+
+    this.root.innerHTML = `
+      <div class="profileHead">
+        <div class="convAvatar" style="width:64px;height:64px;font-size:24px">${CodeUp.escapeHtml((profile.full_name||"?")[0])}</div>
+        <div><h2>${CodeUp.escapeHtml(profile.full_name||"")}</h2>${isMe?`<p class="small mono">${CodeUp.escapeHtml(this.ctx.user.email||"")}</p>`:""}</div>
+        ${isMe?`<button class="btn" id="profileSettingsBtn" style="margin-inline-start:auto">الإعدادات</button>`
+              :`<button class="btn dark" id="profileMsgBtn" style="margin-inline-start:auto">مراسلة</button>`}
+      </div>
+      <div class="fbTabBar" style="margin-top:14px">
+        <button data-ptab="posts" class="active">المنشورات</button>
+        <button data-ptab="submissions">التسليمات</button>
+      </div>
+      <div id="profileBody"></div>`;
+
+    if(isMe) document.getElementById("profileSettingsBtn").onclick = ()=> this.openAccountSettings();
+    else document.getElementById("profileMsgBtn").onclick = async ()=>{
+      try{ const {data: conv} = await db.rpc("get_or_create_conversation", {p_other_user: profileId}).single(); this.go({name:"messages", conversationId: conv.id}); }
+      catch(e){ CodeUp.toast(e.message,"error"); }
+    };
+
+    const body = document.getElementById("profileBody");
+    const showPosts = ()=>{
+      body.innerHTML = (posts||[]).map(p=>`
+        <div class="card2" data-postid="${p.id}">
+          <div class="body">${CodeUp.escapeHtml(p.content||"")}</div>
+          <span class="small mono">${CodeUp.timeAgo(p.created_at)}</span>
+          ${isMe?`<div class="row" style="margin-top:8px"><button class="btn" data-editpost="${p.id}">تعديل</button><button class="btn danger" data-delpost="${p.id}">حذف</button></div>`:""}
+        </div>`).join("") || `<div class="emptyState">لا توجد منشورات بعد.</div>`;
+      if(isMe){
+        body.querySelectorAll("[data-delpost]").forEach(b=> b.onclick = async ()=>{
+          if(!confirm("حذف هذا المنشور نهائيًا؟")) return;
+          try{ await db.from("posts").delete().eq("id", b.dataset.delpost).eq("profile_id", this.ctx.user.id).throwOnError(); this.renderProfile(profileId); }
+          catch(e){ CodeUp.toast(e.message,"error"); }
+        });
+        body.querySelectorAll("[data-editpost]").forEach(b=> b.onclick = async ()=>{
+          const p = (posts||[]).find(x=>x.id===b.dataset.editpost);
+          const newVal = prompt("عدّل نص المنشور:", p.content);
+          if(newVal===null || !newVal.trim()) return;
+          try{ await db.from("posts").update({content:newVal.trim()}).eq("id", p.id).eq("profile_id", this.ctx.user.id).throwOnError(); this.renderProfile(profileId); }
+          catch(e){ CodeUp.toast(e.message,"error"); }
+        });
+      }
+    };
+    const showSubs = ()=>{
+      body.innerHTML = (subs||[]).map(s=>`
+        <div class="card2">
+          <div class="small mono">${CodeUp.escapeHtml(s.assignments?.title||"")}</div>
+          <div class="body">${CodeUp.escapeHtml(s.content||"")}</div>
+          <span class="small mono">${CodeUp.timeAgo(s.created_at)}</span>
+        </div>`).join("") || `<div class="emptyState">لا توجد تسليمات بعد.</div>`;
+    };
+    showPosts();
+    this.root.querySelectorAll("[data-ptab]").forEach(b=>{
+      b.onclick = ()=>{
+        this.root.querySelectorAll("[data-ptab]").forEach(x=>x.classList.remove("active")); b.classList.add("active");
+        b.dataset.ptab==="posts" ? showPosts() : showSubs();
+      };
+    });
+  },
+
+  openAccountSettings(){
+    const m = this.modal(`
+      <h3>إعدادات الحساب</h3>
+      <div class="card" style="margin-top:10px;border-color:rgba(224,49,49,.4)">
+        <b style="color:#E03131">حذف الحساب نهائيًا</b>
+        <p class="small" style="margin-top:6px">هذا الإجراء لا يمكن التراجع عنه — سيُحذف حسابك وكل بياناتك المرتبطة به بشكل نهائي.</p>
+        <button class="btn danger" id="deleteAccountStep1" style="margin-top:10px">حذف حسابي نهائيًا</button>
+      </div>`);
+    m.el.querySelector("#deleteAccountStep1").onclick = ()=>{
+      if(!confirm("هذا الإجراء نهائي ولا يمكن التراجع عنه — هل أنت متأكد؟")) return;
+      const typed = prompt('للتأكيد النهائي، اكتب كلمة "حذف" بالضبط:');
+      if(typed !== "حذف"){ CodeUp.toast("لم يتطابق النص — تم الإلغاء", "info"); return; }
+      (async ()=>{
+        try{
+          const {data:{session}} = await db.auth.getSession();
+          const res = await fetch(`${SUPABASE_URL}/functions/v1/delete-account`, {
+            method:"POST", headers:{"Authorization":`Bearer ${session.access_token}`}
+          });
+          const json = await res.json();
+          if(!res.ok || json.error) throw new Error(json.error||"تعذّر حذف الحساب");
+          await db.auth.signOut();
+          window.location.reload();
+        }catch(e){ CodeUp.toast(e.message,"error"); }
+      })();
+    };
+  },
+
+  async renderSearch(){
+    this.crumbs.classList.add("hidden");
+    this.root.innerHTML = `
+      <div class="card2" style="margin-top:14px">
+        <input type="text" id="globalSearchInput" placeholder="ابحث عن منشور أو شخص…" style="width:100%">
+      </div>
+      <div id="searchResults" style="margin-top:14px"><div class="emptyState">اكتب للبحث.</div></div>`;
+    document.getElementById("globalSearchInput").oninput = CodeUp.debounce(async (e)=>{
+      const q = e.target.value.trim();
+      const box = document.getElementById("searchResults");
+      if(q.length < 2){ box.innerHTML = `<div class="emptyState">اكتب حرفين على الأقل.</div>`; return; }
+      const [{data: people}, {data: posts}] = await Promise.all([
+        db.from("profiles").select("id,full_name").ilike("full_name", `%${q}%`).limit(10),
+        db.from("posts").select("*, profiles(full_name)").ilike("content", `%${q}%`).order("created_at",{ascending:false}).limit(15)
+      ]);
+      box.innerHTML = `
+        ${(people||[]).length?`<h3 class="eyebrow">أشخاص</h3>${(people||[]).map(p=>`<div class="convRow" data-goprofile="${p.id}"><div class="convAvatar">${CodeUp.escapeHtml((p.full_name||"?")[0])}</div><div class="convInfo"><b>${CodeUp.escapeHtml(p.full_name||"")}</b></div></div>`).join("")}`:""}
+        ${(posts||[]).length?`<h3 class="eyebrow" style="margin-top:14px">منشورات</h3>${(posts||[]).map(p=>`<div class="card2"><b>${CodeUp.escapeHtml(p.profiles?.full_name||"")}</b><div class="body">${CodeUp.escapeHtml(p.content||"")}</div></div>`).join("")}`:""}
+        ${!(people||[]).length && !(posts||[]).length ? `<div class="emptyState">لا نتائج.</div>` : ""}
+      `;
+      box.querySelectorAll("[data-goprofile]").forEach(row=> row.onclick = ()=> this.go({name:"profile", profileId: row.dataset.goprofile}));
+    }, 300);
   },
 
   openTabDrawer(tabs, activeTab, onSelect){
@@ -489,8 +873,12 @@ const App = {
 
   async render(){
     this.root.innerHTML = `<div class="emptyState">جارِ التحميل…</div>`;
+    this.updateBottomNavActive();
     if(this.view.name==="home") return this.renderHome(this.view.homeTab);
     if(this.view.name==="course") return this.renderCourse(this.view.courseId, this.view.tab||"learning");
+    if(this.view.name==="messages") return this.renderMessages(this.view.conversationId);
+    if(this.view.name==="profile") return this.renderProfile(this.view.profileId);
+    if(this.view.name==="search") return this.renderSearch();
   },
 
   async renderHome(tab){
