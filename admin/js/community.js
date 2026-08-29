@@ -195,28 +195,3 @@ Admin.sections.announcements = {
     };
   }
 };
-
-Admin.sections.message_settings = {
-  label: "مدة الاحتفاظ بالرسائل الخاصة",
-  async render(body){
-    const { data: setting } = await db.from("app_settings").select("*").eq("key","message_retention_days").single();
-    const current = parseInt(setting?.value || "5");
-    const OPTIONS = [1,3,5,7,14,30];
-    body.innerHTML = `
-      <div class="card">
-        <b>مدة الاحتفاظ بالرسائل الخاصة قبل الحذف التلقائي</b>
-        <p class="small" style="margin-top:6px">أي رسالة أقدم من المدة المحددة تُحذف تلقائيًا يوميًا (مهمة مجدولة، بدون أي تدخل من المستخدمين).</p>
-        <select id="retentionSelect" style="margin-top:10px">
-          ${OPTIONS.map(d=>`<option value="${d}" ${d===current?"selected":""}>${d} ${d===1?"يوم":"أيام"}</option>`).join("")}
-        </select>
-        <button class="btn dark" id="retentionSaveBtn" style="margin-top:10px">حفظ</button>
-      </div>`;
-    body.querySelector("#retentionSaveBtn").onclick = async ()=>{
-      const val = body.querySelector("#retentionSelect").value;
-      try{
-        await db.from("app_settings").upsert({key:"message_retention_days", value:val, updated_by:Admin.ctx.user.id, updated_at:new Date().toISOString()}, {onConflict:"key"}).throwOnError();
-        CodeUp.toast("تم الحفظ — يُطبَّق تلقائيًا من الآن", "success");
-      }catch(e){ CodeUp.toast(e.message,"error"); }
-    };
-  }
-};
