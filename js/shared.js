@@ -259,6 +259,35 @@ const CodeUp = (() => {
     createAnnouncement: (courseId, title, content, targetSquadId) => call("create_announcement", { p_course_id: courseId, p_title: title, p_content: content || null, p_target_squad_id: targetSquadId || null })
   };
 
+  // ---------- Loading state لأي زر ----------
+  // يشتغل بدون تعديل الـ HTML لأي زر: يضيف كلاس isLoading (اللي يتكفّل الـ CSS
+  // برسم سبينر مكان النص ويعطّل الضغط)، ويحفظ حالة disabled الأصلية عشان
+  // يرجّعها زي ما كانت لو الزر كان متعطّل لسبب ثاني أصلًا.
+  function setBtnLoading(btn, loading) {
+    if (!btn) return;
+    if (loading) {
+      if (btn.dataset.loading === "1") return;
+      btn.dataset.loading = "1";
+      btn.dataset.prevDisabled = btn.disabled ? "1" : "0";
+      btn.disabled = true;
+      btn.classList.add("isLoading");
+    } else {
+      btn.dataset.loading = "0";
+      btn.disabled = btn.dataset.prevDisabled === "1";
+      btn.classList.remove("isLoading");
+    }
+  }
+
+  // يلف أي عملية async بحالة تحميل على الزر تلقائيًا، ويضمن إرجاعها حتى لو صار خطأ
+  async function withBtnLoading(btn, fn) {
+    setBtnLoading(btn, true);
+    try {
+      return await fn();
+    } finally {
+      setBtnLoading(btn, false);
+    }
+  }
+
   // ---------- Storage helpers ----------
   // ضغط وتصغير الصور قبل الرفع (WebP، أقصى بُعد 1600px، جودة 80%)
   async function compressImageIfNeeded(file) {
@@ -366,5 +395,5 @@ const CodeUp = (() => {
     });
   }
 
-  return { toast, escapeHtml, timeAgo, formatDate, debounce, requireSession, loadMyContext, rpc, call, uploadSubmissionFile, uploadCommentAttachment, getSignedUrl, subscribeToMyNotifications, triggerTelegramSend, buildCommentsBlock, wireCommentsToggle };
+  return { toast, escapeHtml, timeAgo, formatDate, debounce, requireSession, loadMyContext, rpc, call, uploadSubmissionFile, uploadCommentAttachment, getSignedUrl, subscribeToMyNotifications, triggerTelegramSend, buildCommentsBlock, wireCommentsToggle, setBtnLoading, withBtnLoading };
 })();

@@ -51,6 +51,16 @@ th{color:var(--ink60);font-weight:600;font-size:12px;font-family:'IBM Plex Mono'
 .btn.danger{background:rgba(242,85,95,.1);color:var(--red);border-color:rgba(242,85,95,.28)}
 .btn.ok{background:rgba(0,186,124,.12);color:var(--lime);border-color:rgba(0,186,124,.3)}
 .btn:disabled{opacity:.5;cursor:not-allowed}
+/* ===== حالة الضغط (Pressed) وحالة التحميل (Loading) لكل الأزرار ===== */
+.btn,.iconBtn,.navItem{transition:transform .1s ease,filter .1s ease}
+.btn:active:not(:disabled),.iconBtn:active:not(:disabled),.navItem:active{transform:scale(.96);filter:brightness(.9)}
+.btn.isLoading,.iconBtn.isLoading{position:relative;color:transparent!important;pointer-events:none}
+.btn.isLoading::after,.iconBtn.isLoading::after{
+  content:"";position:absolute;inset:0;margin:auto;width:14px;height:14px;border-radius:50%;
+  border:2px solid rgba(231,233,234,.35);border-top-color:var(--ink);animation:btnSpin .7s linear infinite}
+.btn.dark.isLoading::after{border-color:rgba(255,255,255,.4);border-top-color:#fff}
+.iconBtn.isLoading svg{visibility:hidden}
+@keyframes btnSpin{to{transform:rotate(360deg)}}
 .pill{display:inline-flex;align-items:center;font-family:'IBM Plex Mono',monospace;padding:3px 9px;border-radius:7px;font-size:11px;font-weight:500;border:1px solid var(--line);color:var(--ink60)}
 .pill.pending{background:rgba(240,180,41,.1);color:var(--amber);border-color:rgba(240,180,41,.28)}
 .pill.approved{background:rgba(0,186,124,.12);color:var(--lime);border-color:rgba(0,186,124,.3)}

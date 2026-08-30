@@ -57,33 +57,42 @@ Admin.sections.files = {
     if(globalBtn) globalBtn.onclick = async ()=>{
       const days = parseInt(body.querySelector("#globalDays").value);
       if(!days || days<1){ CodeUp.toast("أدخل رقمًا صحيحًا أكبر من صفر","error"); return; }
-      try{
-        await db.from("archive_settings").upsert({scope_type:"global", scope_id:null, retention_days:days, created_by:Admin.ctx.user.id}, {onConflict:"scope_type,scope_id"}).throwOnError();
-        CodeUp.toast("تم الحفظ","success");
-      }catch(e){ CodeUp.toast(e.message,"error"); }
+      await CodeUp.withBtnLoading(globalBtn, async ()=>{
+        try{
+          await db.from("archive_settings").upsert({scope_type:"global", scope_id:null, retention_days:days, created_by:Admin.ctx.user.id}, {onConflict:"scope_type,scope_id"}).throwOnError();
+          CodeUp.toast("تم الحفظ","success");
+        }catch(e){ CodeUp.toast(e.message,"error"); }
+      });
     };
 
-    body.querySelector("#saveCourseBtn").onclick = async ()=>{
+    const saveCourseBtn = body.querySelector("#saveCourseBtn");
+    saveCourseBtn.onclick = async ()=>{
       const val = body.querySelector("#courseDays").value.trim();
       if(!val){ CodeUp.toast("أدخل رقم أيام أو استخدم زر الإلغاء","error"); return; }
       const days = parseInt(val);
       if(!days || days<1){ CodeUp.toast("أدخل رقمًا صحيحًا أكبر من صفر","error"); return; }
-      try{
-        await db.from("archive_settings").upsert({scope_type:"course", scope_id:cid, retention_days:days, created_by:Admin.ctx.user.id}, {onConflict:"scope_type,scope_id"}).throwOnError();
-        CodeUp.toast("تم الحفظ لهذا الكورس","success"); Admin.go("files");
-      }catch(e){ CodeUp.toast(e.message,"error"); }
+      await CodeUp.withBtnLoading(saveCourseBtn, async ()=>{
+        try{
+          await db.from("archive_settings").upsert({scope_type:"course", scope_id:cid, retention_days:days, created_by:Admin.ctx.user.id}, {onConflict:"scope_type,scope_id"}).throwOnError();
+          CodeUp.toast("تم الحفظ لهذا الكورس","success"); Admin.go("files");
+        }catch(e){ CodeUp.toast(e.message,"error"); }
+      });
     };
 
     const clearBtn = body.querySelector("#clearCourseBtn");
     if(clearBtn) clearBtn.onclick = async ()=>{
-      try{ await db.from("archive_settings").delete().eq("scope_type","course").eq("scope_id",cid).throwOnError(); Admin.go("files"); }
-      catch(e){ CodeUp.toast(e.message,"error"); }
+      await CodeUp.withBtnLoading(clearBtn, async ()=>{
+        try{ await db.from("archive_settings").delete().eq("scope_type","course").eq("scope_id",cid).throwOnError(); Admin.go("files"); }
+        catch(e){ CodeUp.toast(e.message,"error"); }
+      });
     };
 
     body.querySelectorAll("[data-archivenow]").forEach(b=>{
       b.onclick = async ()=>{
-        try{ await db.rpc("set_file_delete_schedule",{p_file_id:b.dataset.archivenow, p_new_time:new Date().toISOString()}).throwOnError(); CodeUp.toast("سيُحذف من التخزين بأول تشغيل للمهمة اليومية (بعد التأكد من نجاح الإرسال لتيليجرام)","success"); Admin.go("files"); }
-        catch(e){ CodeUp.toast(e.message,"error"); }
+        await CodeUp.withBtnLoading(b, async ()=>{
+          try{ await db.rpc("set_file_delete_schedule",{p_file_id:b.dataset.archivenow, p_new_time:new Date().toISOString()}).throwOnError(); CodeUp.toast("سيُحذف من التخزين بأول تشغيل للمهمة اليومية (بعد التأكد من نجاح الإرسال لتيليجرام)","success"); Admin.go("files"); }
+          catch(e){ CodeUp.toast(e.message,"error"); }
+        });
       };
     });
     body.querySelectorAll("[data-postpone]").forEach(b=>{
@@ -91,8 +100,10 @@ Admin.sections.files = {
         const days = prompt("أجّل الحذف كم يوم من الآن؟", "7");
         if(!days) return;
         const newDate = new Date(Date.now() + parseInt(days)*24*60*60*1000).toISOString();
-        try{ await db.rpc("set_file_delete_schedule",{p_file_id:b.dataset.postpone, p_new_time:newDate}).throwOnError(); CodeUp.toast("تم التأجيل","success"); Admin.go("files"); }
-        catch(e){ CodeUp.toast(e.message,"error"); }
+        await CodeUp.withBtnLoading(b, async ()=>{
+          try{ await db.rpc("set_file_delete_schedule",{p_file_id:b.dataset.postpone, p_new_time:newDate}).throwOnError(); CodeUp.toast("تم التأجيل","success"); Admin.go("files"); }
+          catch(e){ CodeUp.toast(e.message,"error"); }
+        });
       };
     });
   }
