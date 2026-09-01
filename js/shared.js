@@ -29,7 +29,10 @@ function Icon(name){
 // ولا نطلب رابط المعاينة من Supabase إلا لما يضغط المستخدم "معاينة" — يقلل الحمل والاستهلاك.
 function renderFileCard(f, bucket){
   const sizeLabel = f.file_size ? `${(f.file_size/1024).toFixed(0)} ك.ب` : "";
-  const isImage = (f.mime_type||"").startsWith("image/");
+  const mime = f.mime_type||"";
+  const isImage = mime.startsWith("image/");
+  const isPdf = mime === "application/pdf";
+  const isAudio = mime.startsWith("audio/");
   if(f.archive_status === "archived"){
     const link = f.telegram_chat_id && f.telegram_message_id
       ? `https://t.me/c/${String(f.telegram_chat_id).replace(/^-100/,"")}/${f.telegram_message_id}`
@@ -40,29 +43,77 @@ function renderFileCard(f, bucket){
       ${link?`<a class="btn" href="${link}" target="_blank">شاهد في تيليجرام ↗</a>`:`<span class="small">غير متاح حاليًا</span>`}
     </div>`;
   }
+  // الصوت يشتغل تلقائيًا فور ظهور البطاقة (مشغّل مضمّن) — بدون خطوة "معاينة" إضافية
+  if(isAudio){
+    return `<div class="fileCard audioCard" data-filecard="${f.id}" data-autoaudio="${f.id}" data-bucket="${bucket}" data-path="${CodeUp.escapeHtml(f.storage_path)}">
+      <span class="tabIcon">${Icon("mic")}</span>
+      <div class="fileCardInfo" style="flex:1"><b>${CodeUp.escapeHtml(f.file_name||"تسجيل صوتي")}</b>
+        <div class="audioSlot small">جارِ التحميل…</div>
+      </div>
+    </div>`;
+  }
   return `<div class="fileCard" data-filecard="${f.id}">
     <span class="tabIcon">${Icon(isImage?"eye":"file")}</span>
-    <div class="fileCardInfo"><b>${CodeUp.escapeHtml(f.file_name||"ملف")}</b><span class="small">${isImage?"صورة":"ملف"}${sizeLabel?" — "+sizeLabel:""}</span></div>
-    <button class="btn" data-previewfile="${f.id}" data-bucket="${bucket}" data-path="${CodeUp.escapeHtml(f.storage_path)}" data-isimage="${isImage}">معاينة</button>
+    <div class="fileCardInfo"><b>${CodeUp.escapeHtml(f.file_name||"ملف")}</b><span class="small">${isImage?"صورة":isPdf?"PDF":"ملف"}${sizeLabel?" — "+sizeLabel:""}</span></div>
+    <button class="btn" data-previewfile="${f.id}" data-bucket="${bucket}" data-path="${CodeUp.escapeHtml(f.storage_path)}" data-kind="${isImage?"image":isPdf?"pdf":"other"}">معاينة</button>
   </div>`;
 }
 function wireFileCardPreviews(container){
+  // تشغيل تلقائي للتسجيلات الصوتية فور ظهورها — بدون انتظار ضغطة
+  container.querySelectorAll("[data-autoaudio]").forEach(async card=>{
+    const slot = card.querySelector(".audioSlot");
+    try{
+      const url = await CodeUp.getSignedUrl(card.dataset.bucket, card.dataset.path, 3600);
+      slot.outerHTML = `<audio controls preload="metadata" src="${url}" style="width:100%;height:34px;margin-top:2px"></audio>`;
+    }catch(e){ if(slot) slot.textContent = "تعذّر تحميل التسجيل الصوتي"; }
+  });
+
   container.querySelectorAll("[data-previewfile]").forEach(btn=>{
     btn.onclick = async ()=>{
       const card = btn.closest(".fileCard");
+      const kind = btn.dataset.kind;
+      // Toggle: لو المعاينة ظاهرة أصلًا، اخفيها بدل ما نطلب الرابط من جديد
+      const existingPreview = card.querySelector(".inlinePreview");
+      if(existingPreview){ existingPreview.remove(); btn.textContent = "معاينة"; return; }
+
       btn.disabled = true; btn.textContent = "جارِ التحميل…";
       try{
         const url = await CodeUp.getSignedUrl(btn.dataset.bucket, btn.dataset.path, 3600);
-        if(btn.dataset.isimage === "true"){
-          card.insertAdjacentHTML("beforeend", `<img src="${url}" style="max-width:100%;border-radius:10px;margin-top:8px;display:block">`);
-          btn.remove();
+        if(kind === "image"){
+          card.insertAdjacentHTML("beforeend", `<img class="inlinePreview" src="${url}" style="max-width:100%;border-radius:10px;margin-top:8px;display:block">`);
+          btn.textContent = "إخفاء المعاينة";
+        }else if(kind === "pdf"){
+          card.insertAdjacentHTML("beforeend", `<iframe class="inlinePreview" src="${url}" style="width:100%;height:420px;border:1px solid var(--line);border-radius:10px;margin-top:8px"></iframe>`);
+          btn.textContent = "إخفاء المعاينة";
         }else{
           window.open(url, "_blank");
-          btn.disabled = false; btn.textContent = "معاينة";
+          btn.textContent = "معاينة";
         }
+        btn.disabled = false;
       }catch(e){ CodeUp.toast("تعذّر تحميل الملف", "error"); btn.disabled = false; btn.textContent = "معاينة"; }
     };
   });
+}
+
+// عدّاد وقت مباشر أثناء التسجيل الصوتي — عنصر مشترك يستخدمه أي زر تسجيل بالتطبيق
+function createRecTimer(){
+  let intervalId = null, seconds = 0, labelEl = null;
+  const fmt = s => `${String(Math.floor(s/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`;
+  return {
+    start(container){
+      seconds = 0;
+      labelEl = document.createElement("span");
+      labelEl.className = "recTimerLabel small mono";
+      labelEl.textContent = fmt(0);
+      container.appendChild(labelEl);
+      intervalId = setInterval(()=>{ seconds++; if(labelEl) labelEl.textContent = fmt(seconds); }, 1000);
+    },
+    stop(){
+      if(intervalId) clearInterval(intervalId);
+      if(labelEl) labelEl.remove();
+      intervalId = null; labelEl = null;
+    }
+  };
 }
 
 function commentComposerHtml(targetId, targetType = "submission"){
@@ -94,6 +145,7 @@ function wireCommentComposer(container, targetId){
 
   if(recordBtn && navigator.mediaDevices?.getUserMedia){
     let mediaRecorder = null, chunks = [];
+    const recTimer = createRecTimer();
     recordBtn.onclick = async () => {
       if(mediaRecorder && mediaRecorder.state === "recording"){
         mediaRecorder.stop();
@@ -105,6 +157,7 @@ function wireCommentComposer(container, targetId){
         mediaRecorder = new MediaRecorder(stream);
         mediaRecorder.ondataavailable = e => chunks.push(e.data);
         mediaRecorder.onstop = () => {
+          recTimer.stop();
           stream.getTracks().forEach(t=>t.stop());
           const blob = new Blob(chunks, {type:"audio/webm"});
           pendingFile = new File([blob], `voice_${Date.now()}.webm`, {type:"audio/webm"});
@@ -114,6 +167,7 @@ function wireCommentComposer(container, targetId){
         };
         mediaRecorder.start();
         recordBtn.innerHTML = `<span class="recordingDot"></span>${Icon("stop")}`;
+        recTimer.start(previewBox.parentElement || recordBtn.parentElement);
       }catch(e){ CodeUp.toast("تعذّر الوصول للميكروفون", "error"); }
     };
   } else if(recordBtn){
@@ -395,5 +449,5 @@ const CodeUp = (() => {
     });
   }
 
-  return { toast, escapeHtml, timeAgo, formatDate, debounce, requireSession, loadMyContext, rpc, call, uploadSubmissionFile, uploadCommentAttachment, getSignedUrl, subscribeToMyNotifications, triggerTelegramSend, buildCommentsBlock, wireCommentsToggle, setBtnLoading, withBtnLoading };
+  return { toast, escapeHtml, timeAgo, formatDate, debounce, requireSession, loadMyContext, rpc, call, uploadSubmissionFile, uploadCommentAttachment, getSignedUrl, subscribeToMyNotifications, triggerTelegramSend, buildCommentsBlock, wireCommentsToggle, setBtnLoading, withBtnLoading, compressImageIfNeeded };
 })();

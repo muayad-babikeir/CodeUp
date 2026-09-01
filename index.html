@@ -11,11 +11,6 @@
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="manifest" href="manifest.json">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-   <script
-  src="https://js-de.sentry-cdn.com/29097ba9f627743c929bcead6c844f1a.min.js"
-  crossorigin="anonymous"
-></script>
-   
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -135,6 +130,8 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
 .topbrand .mark img{width:68%;height:68%;object-fit:contain}
 .topRight{display:flex;align-items:center;gap:8px;flex-shrink:0}
 .iconBtn{position:relative;border:1px solid var(--line);background:rgba(255,255,255,.03);border-radius:10px;width:38px;height:38px;display:grid;place-items:center;cursor:pointer;color:var(--ink)}
+.topAvatarBtn{border-radius:50%;overflow:hidden;background:var(--accent);color:#fff;font-weight:700;font-size:14px}
+.topAvatarBtn img{width:100%;height:100%;object-fit:cover;border-radius:50%}
 .iconBtn svg{width:19px;height:19px}
 .badge{position:absolute;top:-5px;left:-5px;background:var(--red);color:#fff;font-size:10.5px;border-radius:999px;padding:1px 5px;font-weight:700;font-family:'IBM Plex Mono',monospace}
 .logout{border:1px solid var(--line);background:rgba(255,255,255,.03);border-radius:10px;padding:9px 14px;cursor:pointer;font-family:inherit;font-size:13.5px;color:var(--ink)}
@@ -316,6 +313,10 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
 <div class="topbar wrap">
 <div class="topbrand"><div class="mark"><img src="codeup-logo.svg" alt="CodeUp"></div></div>
 <div class="topRight">
+<button class="iconBtn topAvatarBtn" id="topAvatarBtn" title="حسابي" aria-label="حسابي">
+<img id="topAvatarImg" class="hidden" alt="">
+<span id="topAvatarInitial">؟</span>
+</button>
 <button class="iconBtn" id="messagesBtn" title="الرسائل" aria-label="الرسائل">
 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
 <span id="msgBadge" class="badge hidden">0</span>
@@ -475,6 +476,8 @@ const App = {
     document.getElementById("notifBtn").onclick = ()=>this.openNotifications();
     document.getElementById("bottomNotifBtn").onclick = ()=>this.openNotifications();
     document.getElementById("messagesBtn").onclick = ()=>this.go({name:"messages"});
+    document.getElementById("topAvatarBtn").onclick = ()=> this.go({name:"profile", profileId:this.ctx.user.id});
+    this.refreshTopAvatar();
     this.refreshNotifBadge();
     this.refreshMsgBadge();
     CodeUp.subscribeToMyNotifications(user.id, (n)=>{ this.refreshNotifBadge(); if(n.related_type!=="message") CodeUp.toast(n.title, "info"); if(n.related_type==="message") this.refreshMsgBadge(); });
@@ -499,6 +502,15 @@ const App = {
     authApp.classList.remove("hidden");
     setMode("login");
     this.ctx = null;
+  },
+
+  // تحدّث أفتار الشريط العلوي — صورة حقيقية لو موجودة، وإلا الحرف الأول (نفس أسلوب باقي التطبيق)
+  refreshTopAvatar(){
+    const img = document.getElementById("topAvatarImg"), initial = document.getElementById("topAvatarInitial");
+    const url = this.ctx?.profile?.avatar_url;
+    const name = this.ctx?.profile?.full_name || "؟";
+    if(url){ img.src = url; img.classList.remove("hidden"); initial.classList.add("hidden"); }
+    else{ img.classList.add("hidden"); initial.classList.remove("hidden"); initial.textContent = name[0]; }
   },
 
   updateBottomNavActive(){
@@ -850,6 +862,21 @@ const App = {
     const m = this.modal(`
       <h3>إعدادات الحساب</h3>
       <div class="card" style="margin-top:10px">
+        <b>الملف الشخصي</b>
+        <div class="row" style="align-items:center;gap:12px;margin-top:10px">
+          <div class="topAvatarBtn" id="editAvatarPreview" style="width:56px;height:56px;font-size:20px;flex-shrink:0">
+            ${this.ctx.profile.avatar_url?`<img src="${this.ctx.profile.avatar_url}" alt="">`:`<span>${CodeUp.escapeHtml((this.ctx.profile.full_name||"؟")[0])}</span>`}
+          </div>
+          <div style="flex:1">
+            <input type="file" id="avatarFileInput" accept="image/*" style="display:none">
+            <button class="btn" id="changeAvatarBtn">تغيير الصورة</button>
+          </div>
+        </div>
+        <label style="margin-top:12px">الاسم الكامل</label>
+        <input id="editFullName" value="${CodeUp.escapeHtml(this.ctx.profile.full_name||"")}">
+        <button class="btn dark" id="saveProfileBtn" style="margin-top:10px">حفظ التعديلات</button>
+      </div>
+      <div class="card" style="margin-top:10px">
         <button class="btn" id="accountLogoutBtn" style="width:100%">تسجيل الخروج</button>
       </div>
       <div class="card" style="margin-top:10px;border-color:rgba(224,49,49,.4)">
@@ -858,6 +885,40 @@ const App = {
         <button class="btn danger" id="deleteAccountStep1" style="margin-top:10px">حذف حسابي نهائيًا</button>
       </div>`);
     m.el.querySelector("#accountLogoutBtn").onclick = ()=>{ m.close(); App.logout(); };
+
+    m.el.querySelector("#changeAvatarBtn").onclick = ()=> m.el.querySelector("#avatarFileInput").click();
+    m.el.querySelector("#avatarFileInput").onchange = async (e)=>{
+      const file = e.target.files[0];
+      if(!file) return;
+      const btn = m.el.querySelector("#changeAvatarBtn");
+      try{
+        await CodeUp.withBtnLoading(btn, async ()=>{
+          const processed = await CodeUp.compressImageIfNeeded(file); // نفس دالة ضغط الصور الموجودة أصلًا
+          const path = `${this.ctx.user.id}/${Date.now()}_${processed.name.replace(/[^\w.\-]+/g,"_")}`;
+          const { error: upErr } = await db.storage.from("avatars").upload(path, processed, {upsert:true});
+          if(upErr) throw upErr;
+          const { data: pub } = db.storage.from("avatars").getPublicUrl(path);
+          await db.from("profiles").update({avatar_url: pub.publicUrl}).eq("id", this.ctx.user.id).throwOnError();
+          this.ctx.profile.avatar_url = pub.publicUrl;
+          m.el.querySelector("#editAvatarPreview").innerHTML = `<img src="${pub.publicUrl}" alt="">`;
+          this.refreshTopAvatar();
+          CodeUp.toast("تم تحديث الصورة", "success");
+        });
+      }catch(err){ CodeUp.toast(err.message||"تعذّر رفع الصورة", "error"); }
+    };
+
+    m.el.querySelector("#saveProfileBtn").onclick = async (e)=>{
+      const newName = m.el.querySelector("#editFullName").value.trim();
+      if(!newName){ CodeUp.toast("الاسم لا يمكن أن يكون فارغًا","error"); return; }
+      try{
+        await CodeUp.withBtnLoading(e.target, async ()=>{
+          await db.from("profiles").update({full_name:newName}).eq("id", this.ctx.user.id).throwOnError();
+          this.ctx.profile.full_name = newName;
+          this.refreshTopAvatar();
+          CodeUp.toast("تم حفظ التعديلات", "success");
+        });
+      }catch(err){ CodeUp.toast(err.message||"تعذّر الحفظ", "error"); }
+    };
     m.el.querySelector("#deleteAccountStep1").onclick = ()=>{
       if(!confirm("هذا الإجراء نهائي ولا يمكن التراجع عنه — هل أنت متأكد؟")) return;
       const typed = prompt('للتأكيد النهائي، اكتب كلمة "حذف" بالضبط:');
@@ -1035,6 +1096,7 @@ const App = {
     const postRecordBtn = document.getElementById("newPostRecordBtn");
     if(navigator.mediaDevices?.getUserMedia){
       let mediaRecorder=null, chunks=[];
+      const postRecTimer = createRecTimer();
       postRecordBtn.onclick = async ()=>{
         if(mediaRecorder && mediaRecorder.state==="recording"){ mediaRecorder.stop(); return; }
         try{
@@ -1042,6 +1104,7 @@ const App = {
           chunks=[]; mediaRecorder = new MediaRecorder(stream);
           mediaRecorder.ondataavailable = e=>chunks.push(e.data);
           mediaRecorder.onstop = ()=>{
+            postRecTimer.stop();
             stream.getTracks().forEach(t=>t.stop());
             const blob = new Blob(chunks,{type:"audio/webm"});
             pendingPostFile = new File([blob], `voice_${Date.now()}.webm`, {type:"audio/webm"});
@@ -1051,6 +1114,7 @@ const App = {
           };
           mediaRecorder.start();
           postRecordBtn.innerHTML = `<span class="recordingDot"></span>${Icon("stop")}`;
+          postRecTimer.start(postPreview);
         }catch(e){ CodeUp.toast("تعذّر الوصول للميكروفون","error"); }
       };
     }else{ postRecordBtn.style.display="none"; }
@@ -1343,8 +1407,8 @@ const App = {
       <h3>تسليم: ${CodeUp.escapeHtml(assignment.title)}</h3>
       <label>ملاحظات/شرح (اختياري)</label>
       <textarea id="subContent" rows="4">${CodeUp.escapeHtml(existing?.content||"")}</textarea>
-      <label>الملف</label>
-      <input type="file" id="subFile" accept="image/*,application/pdf,.doc,.docx,.txt">
+      <label>الملفات (اختياري، تقدر ترفع أكثر من ملف)</label>
+      <input type="file" id="subFile" accept="image/*,application/pdf,.doc,.docx,.txt,.zip,.py,.js,.html,.css,.json,.c,.cpp,.java" multiple>
       <div id="subFilePreview" style="margin-top:8px"></div>
       <label>مشاركة في المستجدات</label>
       <select id="subVisibility">
@@ -1356,16 +1420,22 @@ const App = {
       <div id="subMsg" class="message"></div>
     `);
     const previewBox = m.el.querySelector("#subFilePreview");
+    const MAX_FILE_MB = 8;
     m.el.querySelector("#subFile").onchange = (e)=>{
-      const f = e.target.files[0];
-      if(!f){ previewBox.innerHTML = ""; return; }
-      const sizeKb = (f.size/1024).toFixed(0);
-      if(f.type.startsWith("image/")){
-        const url = URL.createObjectURL(f);
-        previewBox.innerHTML = `<img src="${url}" style="max-width:100%;max-height:220px;border-radius:8px;display:block"><span class="small mono">${sizeKb} كيلوبايت — ستُضغط تلقائيًا قبل الرفع</span>`;
-      }else{
-        previewBox.innerHTML = `<div class="small mono">${CodeUp.escapeHtml(f.name)} — ${sizeKb} كيلوبايت</div>`;
-      }
+      const files = [...e.target.files];
+      if(!files.length){ previewBox.innerHTML = ""; return; }
+      previewBox.innerHTML = files.map(f=>{
+        const sizeMb = f.size/1024/1024;
+        const tooBig = sizeMb > MAX_FILE_MB && !f.type.startsWith("image/"); // الصور تُضغط تلقائيًا، باقي الملفات تُرفض فورًا لو كبيرة
+        if(tooBig){
+          return `<div class="small" style="color:#E03131">${CodeUp.escapeHtml(f.name)} — ${sizeMb.toFixed(1)} ميجا، أكبر من الحد المسموح (${MAX_FILE_MB} ميجا). لن يُرفع هذا الملف.</div>`;
+        }
+        if(f.type.startsWith("image/")){
+          const url = URL.createObjectURL(f);
+          return `<div style="margin-bottom:6px"><img src="${url}" style="max-width:100%;max-height:180px;border-radius:8px;display:block"><span class="small mono">${CodeUp.escapeHtml(f.name)} — ${(f.size/1024).toFixed(0)} ك.ب — ستُضغط تلقائيًا</span></div>`;
+        }
+        return `<div class="small mono">${CodeUp.escapeHtml(f.name)} — ${(f.size/1024).toFixed(0)} ك.ب</div>`;
+      }).join("");
     };
     let submitIdempotencyKey = crypto.randomUUID();
     m.el.querySelector("#subSubmitBtn").onclick = async ()=>{
@@ -1391,22 +1461,28 @@ const App = {
         const submissionId = data.id;
 
         // من هنا، التسليم نفسه نجح فعليًا (submissions upsert اكتمل) — أي خطأ
-        // بعد هذي النقطة يخص رفع الملف المرفق فقط، فلازم نميّزه للطالب بدل
+        // بعد هذي النقطة يخص رفع الملفات المرفقة فقط، فلازم نميّزه للطالب بدل
         // ما نوهمه إن التسليم بالكامل فشل ويحاول يرسله من جديد بلا داعي.
-        if(fileInput.files[0]){
-          try{
-            const uploaded = await CodeUp.uploadSubmissionFile(fileInput.files[0], this.ctx.user.id, submissionId);
-            const {data: fileRow, error: fErr} = await db.from("file_uploads")
-              .upsert({
-                course_id: course.id, uploader_id: this.ctx.user.id, related_type:"submission",
-                related_id: submissionId, submission_id: submissionId, storage_path: uploaded.path,
-                file_name: uploaded.name, mime_type: uploaded.type, file_size: uploaded.size,
-                idempotency_key: submitIdempotencyKey
-              }, {onConflict:"submission_id,idempotency_key"}).select().single();
-            if(fErr) throw fErr;
-            CodeUp.triggerTelegramSend(fileRow.id); // إرسال فوري لتيليجرام — لا ننتظره، ولا يوقف نجاح التسليم لو فشل
-          }catch(fileErr){
-            CodeUp.toast("تم إرسال التسليم، لكن تعذّر رفع المرفق: " + (fileErr.message||"خطأ غير معروف") + " — جرّب ترفعه مرة ثانية من نفس الواجب", "error");
+        const MAX_FILE_MB = 8;
+        const filesToUpload = [...fileInput.files].filter(f => f.type.startsWith("image/") || f.size/1024/1024 <= MAX_FILE_MB);
+        if(filesToUpload.length){
+          const failedFiles = [];
+          for(let i=0; i<filesToUpload.length; i++){
+            try{
+              const uploaded = await CodeUp.uploadSubmissionFile(filesToUpload[i], this.ctx.user.id, submissionId);
+              const {data: fileRow, error: fErr} = await db.from("file_uploads")
+                .upsert({
+                  course_id: course.id, uploader_id: this.ctx.user.id, related_type:"submission",
+                  related_id: submissionId, submission_id: submissionId, storage_path: uploaded.path,
+                  file_name: uploaded.name, mime_type: uploaded.type, file_size: uploaded.size,
+                  idempotency_key: `${submitIdempotencyKey}-${i}`
+                }, {onConflict:"submission_id,idempotency_key"}).select().single();
+              if(fErr) throw fErr;
+              CodeUp.triggerTelegramSend(fileRow.id); // إرسال فوري لتيليجرام — لا ننتظره، ولا يوقف نجاح التسليم لو فشل
+            }catch(fileErr){ failedFiles.push(filesToUpload[i].name); }
+          }
+          if(failedFiles.length){
+            CodeUp.toast(`تم إرسال التسليم، لكن تعذّر رفع: ${failedFiles.join("، ")} — جرّب ترفعها مرة ثانية من نفس الواجب`, "error");
             m.close();
             this.render();
             return;
