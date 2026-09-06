@@ -4,6 +4,19 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>CodeUp</title>
+<meta name="description" content="CodeUp — منصة تعليمية عربية لإدارة كورسات البرمجة: متابعة الواجبات والتسليمات، مجموعات الطلاب، الإنجاز والنقاط، وتواصل مباشر بين الطلاب والقادة.">
+<link rel="canonical" href="https://codeupsd.online/">
+<meta name="robots" content="index, follow">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="CodeUp">
+<meta property="og:title" content="CodeUp — منصة التعلم والتدريب البرمجي">
+<meta property="og:description" content="منصة تعليمية عربية لإدارة كورسات البرمجة: متابعة الواجبات والتسليمات، مجموعات الطلاب، الإنجاز والنقاط، وتواصل مباشر بين الطلاب والقادة.">
+<meta property="og:url" content="https://codeupsd.online/">
+<meta property="og:image" content="https://codeupsd.online/codeup-logo.png">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="CodeUp — منصة التعلم والتدريب البرمجي">
+<meta name="twitter:description" content="منصة تعليمية عربية لإدارة كورسات البرمجة: متابعة الواجبات والتسليمات، مجموعات الطلاب، الإنجاز والنقاط، وتواصل مباشر بين الطلاب والقادة.">
+<meta name="twitter:image" content="https://codeupsd.online/codeup-logo.png">
 <link rel="icon" type="image/svg+xml" href="codeup-logo.svg">
 <link rel="icon" type="image/png" sizes="32x32" href="icons/icon-32.png">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
@@ -182,8 +195,6 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
 .commentAttachRow{display:flex;gap:6px;align-items:center;margin-top:6px}
 .commentAttachRow button{flex-shrink:0}
 .iconBtn svg{width:15px;height:15px}
-.recordingDot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#E03131;margin-inline-end:4px;animation:pulseRec 1s infinite}
-@keyframes pulseRec{0%,100%{opacity:1}50%{opacity:.3}}
 .fbTabBar button.active{background:var(--ink);color:var(--bg0)}
 .joinBanner{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--surface);border:1px solid var(--accent,#4c8dff);border-radius:14px;padding:12px 16px;margin:14px 0}
 .joinBanner p{margin:0;font-size:13.5px;color:var(--ink60)}
@@ -223,6 +234,10 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
 .emptyState{text-align:center;padding:36px 16px;color:var(--ink60);font-size:13.5px}
 .modalBg{position:fixed;inset:0;background:rgba(2,2,4,.68);display:grid;place-items:center;padding:16px;z-index:100;overflow:auto}
 .modal{background:var(--surface-solid);border:1px solid var(--line-strong);border-radius:20px;padding:22px;width:min(460px,100%);max-height:88vh;overflow:auto;box-shadow:var(--shadow)}
+.modal.modalFixedShell{display:flex;flex-direction:column;max-height:80vh;padding:0;overflow:hidden}
+.modalStickyHead{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:18px 22px;border-bottom:1px solid var(--line);flex-shrink:0}
+.modalStickyHead h3{margin:0;font-size:16px}
+.modalScrollBody{overflow-y:auto;padding:16px 22px 22px;flex:1;min-height:0}
 .modal h3{margin-top:0;font-size:16px}
 .timelinePost{background:var(--surface);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:12px}
 .timelinePost .meta{display:flex;justify-content:space-between;gap:8px;color:var(--ink60);font-size:12.5px;margin-bottom:8px;flex-wrap:wrap}
@@ -249,6 +264,13 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
 <h1>CodeUp</h1><p>منصة التعلم والتدريب البرمجي</p>
 </div>
 <div class="tabs"><button id="loginTab" class="active">تسجيل الدخول</button><button id="signupTab">إنشاء حساب</button></div>
+<div id="googleAuthRow" style="margin-bottom:14px">
+<button type="button" id="googleAuthBtn" class="btn" style="width:100%;display:flex;align-items:center;justify-content:center;gap:10px;padding:10px 13px">
+<svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg"><path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.9c1.7-1.57 2.7-3.88 2.7-6.62z"/><path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.9-2.26c-.8.54-1.84.86-3.06.86-2.35 0-4.34-1.59-5.05-3.72H.96v2.33A9 9 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.95 10.7A5.4 5.4 0 0 1 3.67 9c0-.59.1-1.17.28-1.7V4.97H.96A9 9 0 0 0 0 9c0 1.45.35 2.83.96 4.03l2.99-2.33z"/><path fill="#EA4335" d="M9 3.58c1.32 0 2.51.45 3.44 1.35l2.58-2.58C13.46.89 11.43 0 9 0A9 9 0 0 0 .96 4.97l2.99 2.33C4.66 5.17 6.65 3.58 9 3.58z"/></svg>
+<span id="googleAuthBtnText">المتابعة عبر Google</span>
+</button>
+</div>
+<div id="googleAuthDivider" class="small" style="text-align:center;margin:-6px 0 14px;color:var(--ink60)">— أو —</div>
 <form id="authForm">
 <div id="nameGroup" class="hidden"><label>الاسم الكامل</label><input id="fullName" type="text" autocomplete="name" placeholder="اكتب اسمك"></div>
 <label>البريد الإلكتروني</label><input id="email" type="email" autocomplete="email" placeholder="example@email.com" required style="direction:ltr;text-align:left">
@@ -284,8 +306,8 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
 <div id="confirmedScreen" class="hidden" style="text-align:center;padding:10px 0">
 <div class="successIcon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg></div>
 <h2 style="margin:14px 0 6px">تم تأكيد حسابك بنجاح!</h2>
-<p class="small" style="margin-bottom:20px">حسابك جاهز الآن — تقدر تبدأ تستخدم CodeUp مباشرة.</p>
-<button id="goToAppBtn" class="primary" type="button">الدخول إلى CodeUp</button>
+<p class="small" style="margin-bottom:20px">حسابك جاهز الآن — سجّل الدخول بكلمة المرور للمتابعة.</p>
+<button id="goToAppBtn" class="primary" type="button">تسجيل الدخول</button>
 </div>
 
 <div id="pwdChangedScreen" class="hidden" style="text-align:center;padding:10px 0">
@@ -388,6 +410,8 @@ function showAuthScreen(which){
   form.classList.toggle("hidden", which!=="login");
   document.getElementById("forgotPwdRow").classList.toggle("hidden", which!=="login");
   document.querySelector(".tabs").classList.toggle("hidden", which!=="login");
+  document.getElementById("googleAuthRow").classList.toggle("hidden", which!=="login");
+  document.getElementById("googleAuthDivider").classList.toggle("hidden", which!=="login");
   msg.className="message";
   resetRequestForm.classList.toggle("hidden", which!=="reset");
   resetRequestMsg.className="message";
@@ -443,21 +467,68 @@ db.auth.onAuthStateChange((event, session)=>{
   }
 });
 
+// بعد تأكيد البريد، ما نسجّل الدخول تلقائيًا — نفس سلوك "تم تغيير كلمة المرور":
+// نخرج من أي جلسة مؤقتة أنشأها رابط التأكيد ونوديه لصفحة تسجيل الدخول العادية.
 document.getElementById("goToAppBtn").onclick=async()=>{
-  const {data}=await db.auth.getSession();
-  if(data.session) await bootApp(data.session.user);
-  else showAuthScreen("login");
+  await db.auth.signOut();
+  showAuthScreen("login");
 };
+
+// ===== تسجيل الدخول عبر Google (Supabase Auth + Google OAuth) =====
+const googleAuthBtn=document.getElementById("googleAuthBtn");
+googleAuthBtn.onclick=async()=>{
+  googleAuthBtn.disabled=true;googleAuthBtn.classList.add("loading");
+  try{
+    const {error}=await db.auth.signInWithOAuth({
+      provider:"google",
+      options:{ redirectTo: window.location.origin + window.location.pathname }
+    });
+    // عند النجاح، المتصفح يُحوَّل فورًا لصفحة Google — ما وصلنا هنا إلا لو صار خطأ قبل التحويل
+    if(error) throw error;
+  }catch(e){
+    message(e.message||"تعذّر بدء تسجيل الدخول عبر Google");
+    googleAuthBtn.disabled=false;googleAuthBtn.classList.remove("loading");
+  }
+};
+
+// رجوع Google لنا وهو حامل خطأ (مثلاً المستخدم ألغى تسجيل الدخول) بيجي كـ query/hash فيه error
+(function checkOAuthError(){
+  const hashParams=new URLSearchParams(location.hash.replace(/^#/,""));
+  const errDesc=urlParams.get("error_description")||hashParams.get("error_description")||urlParams.get("error")||hashParams.get("error");
+  if(errDesc){
+    message(decodeURIComponent(errDesc).replace(/\+/g," "));
+    history.replaceState(null,"",window.location.pathname);
+  }
+})();
 
 (async()=>{
   let{data}=await db.auth.getSession();
-  if(data.session && isSignupConfirmFlow && !isPasswordRecoveryFlow){
+  // تسجيل دخول Google (أو أي مزوّد خارجي) يمرّ برابط PKCE فيه ?code= هو نفسه، لكن ما هو
+  // "تأكيد بريد" — نفرّق بينهم عبر app_metadata.provider في الجلسة الراجعة.
+  const provider = data.session?.user?.app_metadata?.provider;
+  const isOAuthLogin = !!provider && provider !== "email";
+  if(data.session && isOAuthLogin && !isPasswordRecoveryFlow){
+    history.replaceState(null,"",window.location.pathname);
+    await bootApp(data.session.user);
+  }else if(data.session && isSignupConfirmFlow && !isPasswordRecoveryFlow){
     showAuthScreen("confirmed");
     history.replaceState(null,"",window.location.pathname);
   }else if(data.session && !isPasswordRecoveryFlow){
     await bootApp(data.session.user);
   }
 })();
+
+// شبكة أمان: بعض المتصفحات/الحالات تُطلق SIGNED_IN بعد أن يكون التحميل الأول قد انتهى
+// (مثلاً تأخّر معالجة hash الخاص بـ OAuth). لا يكرر bootApp لو التطبيق ظاهر أصلًا.
+db.auth.onAuthStateChange((event, session)=>{
+  if(event === "SIGNED_IN" && session && dash.classList.contains("hidden") && authApp.classList.contains("hidden")===false){
+    const provider = session.user?.app_metadata?.provider;
+    if(provider && provider !== "email" && !isPasswordRecoveryFlow){
+      history.replaceState(null,"",window.location.pathname);
+      bootApp(session.user);
+    }
+  }
+});
 
 async function bootApp(user){
   authApp.classList.add("hidden");dash.classList.remove("hidden");
@@ -469,6 +540,7 @@ const App = {
   view: {name:"home"},
   root: document.getElementById("viewRoot"),
   crumbs: document.getElementById("crumbs"),
+  _openNotifModal: null,
 
   async init(user){
     this.ctx = await CodeUp.loadMyContext();
@@ -531,6 +603,8 @@ const App = {
   },
 
   go(view, updateHash = true){
+    // نافذة الإشعارات مودال عائم فوق الصفحة — لازم تُغلق عند أي تنقل حتى لا تبقى معلّقة فوق صفحة جديدة
+    if(this._openNotifModal){ this._openNotifModal.close(); this._openNotifModal = null; }
     this.view = view;
     if(updateHash){
       if(view.name === "course" && view.courseSlug){
@@ -576,41 +650,75 @@ const App = {
   },
 
   async openNotifications(){
-    const {data} = await db.from("notifications").select("*").eq("profile_id", this.ctx.user.id).order("created_at",{ascending:false}).limit(20);
-    const list = (data||[]).map(n=>`
+    const PAGE_SIZE = 15;
+    let offset = 0, done = false, loading = false;
+
+    const rowHtml = (n)=>`
       <div class="card2 notifRow" data-notifid="${n.id}" data-notiftype="${n.related_type||''}" data-notifcourse="${n.course_id||''}" data-notifrelated="${n.related_id||''}" style="${n.is_read?'':'background:rgba(255,255,255,.08)'};cursor:pointer">
         <div class="row"><b style="font-size:13.5px">${CodeUp.escapeHtml(n.title)}</b><span class="small mono">${CodeUp.timeAgo(n.created_at)}</span></div>
         ${n.body?`<p class="small" style="margin-top:4px">${CodeUp.escapeHtml(n.body)}</p>`:""}
-      </div>`).join("") || `<div class="emptyState">لا توجد إشعارات بعد.</div>`;
-    const m = this.modal(`<h3>الإشعارات</h3><div>${list}</div>`, async ()=>{
-      const ids=(data||[]).filter(n=>!n.is_read).map(n=>n.id);
-      if(ids.length) await db.from("notifications").update({is_read:true}).in("id", ids);
-      this.refreshNotifBadge();
-    });
+      </div>`;
+
+    const m = this.modalScrollable("الإشعارات", `<div id="notifListInner"></div><div id="notifLoadMoreRow" style="text-align:center;margin-top:10px"></div>`);
+    App._openNotifModal = m;
+    const listInner = m.el.querySelector("#notifListInner");
+    const loadMoreRow = m.el.querySelector("#notifLoadMoreRow");
 
     // خرائط نوع الإشعار → التبويب المناسب داخل الكورس
     const TAB_BY_TYPE = { announcement:"timeline", submission:"assignments", squad_join_request:"squads", leader_application:"squads" };
 
-    m.el.querySelectorAll("[data-notifid]").forEach(row=>{
-      row.onclick = async ()=>{
-        const id = row.dataset.notifid;
-        await db.from("notifications").update({is_read:true}).eq("id", id);
-        const courseId = row.dataset.notifcourse;
-        const notifType = row.dataset.notiftype;
-        m.close();
-        this.refreshNotifBadge();
-
-        if(notifType === "message"){
-          this.go({name:"messages", conversationId: row.dataset.notifrelated});
-          return;
-        }
-        const tab = TAB_BY_TYPE[notifType] || "timeline";
-        if(!courseId){ this.go({name:"home", homeTab:"feed"}); return; } // إعلان عام لكل المنصة
-        const {data: course} = await db.from("courses").select("id,slug").eq("id", courseId).single();
-        if(!course){ CodeUp.toast("هذا العنصر لم يعد موجودًا", "error"); return; }
-        this.go({name:"course", courseId: course.id, courseSlug: course.slug, tab});
-      };
+    const openRow = async (row)=>{
+      const id = row.dataset.notifid;
+      await db.from("notifications").update({is_read:true}).eq("id", id);
+      const courseId = row.dataset.notifcourse;
+      const notifType = row.dataset.notiftype;
+      m.close();
+      this.refreshNotifBadge();
+      if(notifType === "message"){
+        this.go({name:"messages", conversationId: row.dataset.notifrelated});
+        return;
+      }
+      const tab = TAB_BY_TYPE[notifType] || "timeline";
+      if(!courseId){ this.go({name:"home", homeTab:"feed"}); return; } // إعلان عام لكل المنصة
+      const {data: course} = await db.from("courses").select("id,slug").eq("id", courseId).single();
+      if(!course){ CodeUp.toast("هذا العنصر لم يعد موجودًا", "error"); return; }
+      this.go({name:"course", courseId: course.id, courseSlug: course.slug, tab});
+    };
+    // تفويض حدث النقر لعنصر القائمة نفسه بدل كل صف — يشتغل تلقائيًا مع الصفوف
+    // المُضافة لاحقًا عبر "تحميل المزيد" بدون إعادة ربط أحداث جديدة.
+    listInner.addEventListener("click", (e)=>{
+      const row = e.target.closest("[data-notifid]");
+      if(row) openRow(row);
     });
+
+    const loadPage = async ()=>{
+      if(done || loading) return;
+      loading = true;
+      const {data} = await db.from("notifications").select("*").eq("profile_id", this.ctx.user.id)
+        .order("created_at", {ascending:false}).range(offset, offset + PAGE_SIZE - 1);
+      const page = data || [];
+      if(offset === 0 && !page.length){
+        listInner.innerHTML = `<div class="emptyState">لا توجد إشعارات بعد.</div>`;
+      }else{
+        listInner.insertAdjacentHTML("beforeend", page.map(rowHtml).join(""));
+      }
+      offset += page.length;
+      if(page.length < PAGE_SIZE) done = true;
+
+      // نعلّم غير المقروء ضمن هذه الدفعة كمقروء بمجرد عرضها فعليًا للمستخدم
+      const unreadIds = page.filter(n=>!n.is_read).map(n=>n.id);
+      if(unreadIds.length){
+        await db.from("notifications").update({is_read:true}).in("id", unreadIds);
+        this.refreshNotifBadge();
+      }
+
+      loadMoreRow.innerHTML = done ? "" : `<button class="btn" id="notifLoadMoreBtn">تحميل المزيد</button>`;
+      const moreBtn = document.getElementById("notifLoadMoreBtn");
+      if(moreBtn) moreBtn.onclick = loadPage;
+      loading = false;
+    };
+
+    await loadPage();
   },
 
   async renderMessages(conversationId){
@@ -999,6 +1107,26 @@ const App = {
     return {close, el:bg};
   },
 
+  // نافذة بترويسة ثابتة (عنوان + زر إغلاق دائم الظهور) ومنطقة تمرير مستقلة للمحتوى —
+  // تُستخدم لأي قائمة يُحتمل أن تطول (الإشعارات مثلاً) حتى يبقى زر الإغلاق قابلاً للوصول دومًا.
+  modalScrollable(title, bodyHtml, onClose){
+    const bg=document.createElement("div");bg.className="modalBg";
+    bg.innerHTML=`<div class="modal modalFixedShell">
+      <div class="modalStickyHead"><h3>${title}</h3><button class="btn" id="modalScrollClose">إغلاق</button></div>
+      <div class="modalScrollBody">${bodyHtml}</div>
+    </div>`;
+    document.body.appendChild(bg);
+    bg.addEventListener("click",e=>{if(e.target===bg)close()});
+    function close(){
+      bg.remove();
+      if(App._openNotifModal===api) App._openNotifModal=null;
+      if(onClose) onClose();
+    }
+    bg.querySelector("#modalScrollClose").onclick=close;
+    const api = {close, el:bg, body: bg.querySelector(".modalScrollBody")};
+    return api;
+  },
+
   async render(){
     this.root.innerHTML = `<div class="emptyState">جارِ التحميل…</div>`;
     this.updateBottomNavActive();
@@ -1076,7 +1204,6 @@ const App = {
         <div class="commentAttachRow" style="margin-top:8px">
           <input type="file" accept="image/*" id="newPostImage" style="display:none">
           <button class="btn iconBtn" id="newPostAttachBtn" title="إرفاق صورة">${Icon("paperclip")}</button>
-          <button class="btn iconBtn" id="newPostRecordBtn" title="تسجيل صوتي">${Icon("mic")}</button>
           <div style="flex:1"></div>
           <button class="btn dark" id="newPostBtn">نشر</button>
         </div>
@@ -1093,32 +1220,6 @@ const App = {
       postPreview.innerHTML = `<span class="small">${Icon("paperclip")} ${CodeUp.escapeHtml(f.name)}</span> <button class="btn" id="clearPostAttach">إزالة</button>`;
       document.getElementById("clearPostAttach").onclick = ()=>{ pendingPostFile=null; postPreview.innerHTML=""; };
     };
-    const postRecordBtn = document.getElementById("newPostRecordBtn");
-    if(navigator.mediaDevices?.getUserMedia){
-      let mediaRecorder=null, chunks=[];
-      const postRecTimer = createRecTimer();
-      postRecordBtn.onclick = async ()=>{
-        if(mediaRecorder && mediaRecorder.state==="recording"){ mediaRecorder.stop(); return; }
-        try{
-          const stream = await navigator.mediaDevices.getUserMedia({audio:true});
-          chunks=[]; mediaRecorder = new MediaRecorder(stream);
-          mediaRecorder.ondataavailable = e=>chunks.push(e.data);
-          mediaRecorder.onstop = ()=>{
-            postRecTimer.stop();
-            stream.getTracks().forEach(t=>t.stop());
-            const blob = new Blob(chunks,{type:"audio/webm"});
-            pendingPostFile = new File([blob], `voice_${Date.now()}.webm`, {type:"audio/webm"});
-            postPreview.innerHTML = `<span class="small">${Icon("mic")} تسجيل صوتي جاهز</span> <button class="btn" id="clearPostAttach">إزالة</button>`;
-            document.getElementById("clearPostAttach").onclick = ()=>{ pendingPostFile=null; postPreview.innerHTML=""; };
-            postRecordBtn.innerHTML = Icon("mic");
-          };
-          mediaRecorder.start();
-          postRecordBtn.innerHTML = `<span class="recordingDot"></span>${Icon("stop")}`;
-          postRecTimer.start(postPreview);
-        }catch(e){ CodeUp.toast("تعذّر الوصول للميكروفون","error"); }
-      };
-    }else{ postRecordBtn.style.display="none"; }
-
     document.getElementById("newPostBtn").onclick = async ()=>{
       const ta = document.getElementById("newPostText");
       const val = ta.value.trim();

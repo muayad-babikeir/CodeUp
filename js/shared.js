@@ -95,44 +95,21 @@ function wireFileCardPreviews(container){
   });
 }
 
-// عدّاد وقت مباشر أثناء التسجيل الصوتي — عنصر مشترك يستخدمه أي زر تسجيل بالتطبيق
-function createRecTimer(){
-  let intervalId = null, seconds = 0, labelEl = null;
-  const fmt = s => `${String(Math.floor(s/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`;
-  return {
-    start(container){
-      seconds = 0;
-      labelEl = document.createElement("span");
-      labelEl.className = "recTimerLabel small mono";
-      labelEl.textContent = fmt(0);
-      container.appendChild(labelEl);
-      intervalId = setInterval(()=>{ seconds++; if(labelEl) labelEl.textContent = fmt(seconds); }, 1000);
-    },
-    stop(){
-      if(intervalId) clearInterval(intervalId);
-      if(labelEl) labelEl.remove();
-      intervalId = null; labelEl = null;
-    }
-  };
-}
-
 function commentComposerHtml(targetId, targetType = "submission"){
   return `<div class="commentBox">
     <input type="text" placeholder="اكتب تعليقًا…" data-commentinput="${targetId}">
     <input type="file" accept="image/*" data-commentimage="${targetId}" style="display:none">
     <button class="btn iconBtn" data-commentattachbtn="${targetId}" title="إرفاق صورة">${Icon("paperclip")}</button>
-    <button class="btn iconBtn" data-commentrecordbtn="${targetId}" title="تسجيل صوتي">${Icon("mic")}</button>
     <button class="btn" data-commentsend="${targetId}" data-commenttype="${targetType}">إرسال</button>
   </div><div class="commentAttachPreview" data-commentpreview="${targetId}"></div>`;
 }
 
-// يربط أزرار الإرفاق/التسجيل بمربع تعليق معيّن، ويرجع دالة تجيب الملف الجاهز (لو فيه) وقت الإرسال
+// يربط زر الإرفاق بمربع تعليق معيّن، ويرجع دالة تجيب الملف الجاهز (لو فيه) وقت الإرسال
 function wireCommentComposer(container, targetId){
   let pendingFile = null;
   const previewBox = container.querySelector(`[data-commentpreview="${targetId}"]`);
   const fileInput = container.querySelector(`[data-commentimage="${targetId}"]`);
   const attachBtn = container.querySelector(`[data-commentattachbtn="${targetId}"]`);
-  const recordBtn = container.querySelector(`[data-commentrecordbtn="${targetId}"]`);
 
   if(attachBtn) attachBtn.onclick = () => fileInput.click();
   if(fileInput) fileInput.onchange = () => {
@@ -142,37 +119,6 @@ function wireCommentComposer(container, targetId){
     previewBox.innerHTML = `<span class="small">${Icon("paperclip")} ${CodeUp.escapeHtml(f.name)}</span> <button class="btn" data-clearattach>إزالة</button>`;
     previewBox.querySelector("[data-clearattach]").onclick = () => { pendingFile = null; previewBox.innerHTML = ""; fileInput.value = ""; };
   };
-
-  if(recordBtn && navigator.mediaDevices?.getUserMedia){
-    let mediaRecorder = null, chunks = [];
-    const recTimer = createRecTimer();
-    recordBtn.onclick = async () => {
-      if(mediaRecorder && mediaRecorder.state === "recording"){
-        mediaRecorder.stop();
-        return;
-      }
-      try{
-        const stream = await navigator.mediaDevices.getUserMedia({audio:true});
-        chunks = [];
-        mediaRecorder = new MediaRecorder(stream);
-        mediaRecorder.ondataavailable = e => chunks.push(e.data);
-        mediaRecorder.onstop = () => {
-          recTimer.stop();
-          stream.getTracks().forEach(t=>t.stop());
-          const blob = new Blob(chunks, {type:"audio/webm"});
-          pendingFile = new File([blob], `voice_${Date.now()}.webm`, {type:"audio/webm"});
-          previewBox.innerHTML = `<span class="small">${Icon("mic")} تسجيل صوتي جاهز</span> <button class="btn" data-clearattach>إزالة</button>`;
-          previewBox.querySelector("[data-clearattach]").onclick = () => { pendingFile = null; previewBox.innerHTML = ""; };
-          recordBtn.innerHTML = Icon("mic");
-        };
-        mediaRecorder.start();
-        recordBtn.innerHTML = `<span class="recordingDot"></span>${Icon("stop")}`;
-        recTimer.start(previewBox.parentElement || recordBtn.parentElement);
-      }catch(e){ CodeUp.toast("تعذّر الوصول للميكروفون", "error"); }
-    };
-  } else if(recordBtn){
-    recordBtn.style.display = "none";
-  }
 
   return () => pendingFile; // استدعِها وقت الإرسال لتجيب الملف المرفق الحالي (لو فيه)
 }
