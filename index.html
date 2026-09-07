@@ -357,9 +357,7 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
 </div>
 
 <nav id="bottomNav" class="bottomNav">
-  <button data-bottomnav="home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12l9-9 9 9"/><path d="M5 10v10a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1v-4a1 1 0 0 1 1-1h0a1 1 0 0 1 1 1v4a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1V10"/></svg><span>الرئيسية</span></button>
   <button data-bottomnav="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.3-4.3"/></svg><span>بحث</span></button>
-  <button data-bottomnav="courses"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg><span>الكورسات</span></button>
   <button data-bottomnav="messages"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span>الرسائل</span><span id="bottomMsgBadge" class="bottomBadge hidden"></span></button>
   <button id="bottomNotifBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg><span>الإشعارات</span><span id="bottomNotifBadge" class="bottomBadge hidden"></span></button>
   <button data-bottomnav="profile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span>حسابي</span></button>
@@ -556,9 +554,7 @@ const App = {
     document.querySelectorAll("#bottomNav [data-bottomnav]").forEach(b=>{
       b.onclick = ()=>{
         const dest = b.dataset.bottomnav;
-        if(dest==="home") this.go({name:"home"});
-        else if(dest==="courses") this.go({name:"home", homeTab:"courses"});
-        else if(dest==="search") this.go({name:"search"});
+        if(dest==="search") this.go({name:"search"});
         else if(dest==="messages") this.go({name:"messages"});
         else if(dest==="profile") this.go({name:"profile", profileId:this.ctx.user.id});
       };
@@ -586,8 +582,8 @@ const App = {
   },
 
   updateBottomNavActive(){
-    const map = {home:"home", search:"search", messages:"messages", profile:"profile"};
-    let active = this.view.name==="course" && this.view.homeTab==="courses" ? "courses" : (this.view.name==="home" && this.view.homeTab==="courses" ? "courses" : map[this.view.name] || "home");
+    const map = {search:"search", messages:"messages", profile:"profile"};
+    const active = map[this.view.name] || null;
     document.querySelectorAll("#bottomNav [data-bottomnav]").forEach(b=> b.classList.toggle("active", b.dataset.bottomnav===active));
   },
 
@@ -1146,6 +1142,7 @@ const App = {
       <div class="fbTabBar">
         <button data-hometab="feed" class="${tab==='feed'?'active':''}"><span class="tabIcon">${Icon('timeline')}</span>الرئيسية</button>
         <button data-hometab="courses" class="${tab==='courses'?'active':''}"><span class="tabIcon">${Icon('learning')}</span>الكورسات</button>
+        <button data-hometab="university" class="${tab==='university'?'active':''}"><span class="tabIcon">${Icon('learning')}</span>الجامعة</button>
       </div>
       <div id="homeBody"></div>`;
     this.root.querySelectorAll("[data-hometab]").forEach(b=>{
@@ -1154,6 +1151,7 @@ const App = {
 
     const body = document.getElementById("homeBody");
     if(tab === "courses") return this.renderHomeCourses(body);
+    if(tab === "university") return this.renderHomeUniversity(body);
     return this.renderHomeFeed(body);
   },
 
@@ -1192,6 +1190,65 @@ const App = {
     body.querySelectorAll(".courseCard").forEach(el=>{
       el.onclick = ()=> this.go({name:"course", courseId: el.dataset.course, courseSlug: el.dataset.slug, tab:"learning"});
     });
+  },
+
+  // قسم "الجامعة" — مستقل تمامًا عن نظام الكورسات البرمجية. تصفّح محلي
+  // (فصل → مادة → روابط) بدون تغيير الـ hash، مشابه لتصفح كورس عادي.
+  async renderHomeUniversity(body){
+    const MATERIAL_ICON = {video:"🎬", telegram:"📎", link:"🔗"};
+
+    const showSemesters = async ()=>{
+      body.innerHTML = `<div class="emptyState">جارِ التحميل…</div>`;
+      const {data: semesters} = await db.from("university_semesters").select("*").order("order_index");
+      if(!semesters || !semesters.length){
+        body.innerHTML = `<div class="emptyState">لا توجد فصول دراسية مضافة بعد.</div>`;
+        return;
+      }
+      body.innerHTML = `<div class="sectionHead"><h3 class="eyebrow">الفصول الدراسية</h3></div><div class="grid">` +
+        semesters.map(s=>`<div class="courseCard" data-semester="${s.id}"><h3>${CodeUp.escapeHtml(s.title)}</h3></div>`).join("") +
+        `</div>`;
+      body.querySelectorAll("[data-semester]").forEach(el=>{
+        el.onclick = ()=> showSubjects(semesters.find(s=>s.id===el.dataset.semester));
+      });
+    };
+
+    const showSubjects = async (semester)=>{
+      body.innerHTML = `<div class="emptyState">جارِ التحميل…</div>`;
+      const {data: subjects} = await db.from("university_subjects").select("*").eq("semester_id", semester.id).order("order_index");
+      const backRow = `<button class="btn" id="uniBackToSemesters" style="margin-bottom:10px">← رجوع للفصول</button>`;
+      if(!subjects || !subjects.length){
+        body.innerHTML = backRow + `<div class="emptyState">لا توجد مواد مضافة لهذا الفصل بعد.</div>`;
+      }else{
+        body.innerHTML = backRow +
+          `<div class="sectionHead"><h3 class="eyebrow">${CodeUp.escapeHtml(semester.title)}</h3></div><div class="grid">` +
+          subjects.map(s=>`<div class="courseCard" data-subject="${s.id}"><h3>${CodeUp.escapeHtml(s.title)}</h3></div>`).join("") +
+          `</div>`;
+        body.querySelectorAll("[data-subject]").forEach(el=>{
+          el.onclick = ()=> showMaterials(subjects.find(s=>s.id===el.dataset.subject), semester);
+        });
+      }
+      document.getElementById("uniBackToSemesters").onclick = showSemesters;
+    };
+
+    const showMaterials = async (subject, semester)=>{
+      body.innerHTML = `<div class="emptyState">جارِ التحميل…</div>`;
+      const {data: materials} = await db.from("university_materials").select("*").eq("subject_id", subject.id).order("order_index");
+      const backRow = `<button class="btn" id="uniBackToSubjects" style="margin-bottom:10px">← رجوع لمواد ${CodeUp.escapeHtml(semester.title)}</button>`;
+      if(!materials || !materials.length){
+        body.innerHTML = backRow + `<div class="emptyState">لا توجد روابط/فيديوهات مضافة لهذه المادة بعد.</div>`;
+      }else{
+        body.innerHTML = backRow +
+          `<div class="sectionHead"><h3 class="eyebrow">${CodeUp.escapeHtml(subject.title)}</h3></div>` +
+          materials.map(m=>`
+            <a href="${CodeUp.escapeHtml(m.url)}" target="_blank" rel="noopener noreferrer" class="card2" style="display:flex;align-items:center;gap:10px;margin-bottom:8px;text-decoration:none;color:inherit">
+              <span style="font-size:20px">${MATERIAL_ICON[m.material_type]||"🔗"}</span>
+              <span>${CodeUp.escapeHtml(m.title)}</span>
+            </a>`).join("");
+      }
+      document.getElementById("uniBackToSubjects").onclick = ()=> showSubjects(semester);
+    };
+
+    await showSemesters();
   },
 
   // الرئيسية المجمّعة: إعلانات عامة + منشورات حرة + تسليمات وتعليقات ولايكات من كل الكورسات المسجّل فيها الطالب
