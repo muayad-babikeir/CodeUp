@@ -1511,6 +1511,9 @@ const App = {
       <label>الملفات (اختياري، تقدر ترفع أكثر من ملف)</label>
       <input type="file" id="subFile" accept="image/*,application/pdf,.doc,.docx,.txt,.zip,.py,.js,.html,.css,.json,.c,.cpp,.java" multiple>
       <div id="subFilePreview" style="margin-top:8px"></div>
+      <label>رابط GitHub (اختياري — بديل أو إضافة لرفع ملف)</label>
+      <input type="url" id="subGithubUrl" placeholder="https://github.com/username/project" value="${CodeUp.escapeHtml(existing?.github_url||"")}">
+      <div id="subGithubMsg" class="small" style="color:#E03131"></div>
       <label>مشاركة في المستجدات</label>
       <select id="subVisibility">
         <option value="private" ${existing?.visibility==="private"?"selected":""}>خاص — لا يظهر لأحد</option>
@@ -1543,6 +1546,15 @@ const App = {
       const msgEl = m.el.querySelector("#subMsg");
       const submitBtn = m.el.querySelector("#subSubmitBtn");
       if(submitBtn.disabled) return; // منع تكرار فعلي حتى لو انضغط الزر مرتين بنفس اللحظة
+
+      const githubUrlRaw = m.el.querySelector("#subGithubUrl").value.trim();
+      const githubMsgEl = m.el.querySelector("#subGithubMsg");
+      githubMsgEl.textContent = "";
+      if(githubUrlRaw && !/^https?:\/\/.+/i.test(githubUrlRaw)){
+        githubMsgEl.textContent = "الرابط لازم يبدأ بـ http:// أو https://";
+        return;
+      }
+
       submitBtn.disabled = true;
       submitBtn.textContent = "جارِ الإرسال…";
       try{
@@ -1552,7 +1564,8 @@ const App = {
 
         const payload = {
           assignment_id: assignment.id, profile_id: this.ctx.user.id,
-          content, visibility, status: "submitted", submitted_at: new Date().toISOString()
+          content, visibility, status: "submitted", submitted_at: new Date().toISOString(),
+          github_url: githubUrlRaw || null
         };
         // Upsert بدل insert/update منفصلين: القيد الفريد (assignment_id, profile_id) بقاعدة البيانات
         // يمنع أي تسليم مكرر حتى لو تكرر الطلب فعليًا على مستوى الـ Backend، مو بس الواجهة.

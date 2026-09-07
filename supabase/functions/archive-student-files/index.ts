@@ -37,11 +37,15 @@ Deno.serve(async (req: Request) => {
   }
 
   if (BOT_TOKEN && CHAT_ID) {
+    // نلتقط 'failed' (فشل إرسال حقيقي) + 'live' العالقة من قبل (بسبب علة CORS
+    // السابقة في telegram-send-immediate اللي كانت تمنع وصول الحالة لـ 'failed'
+    // أصلًا) وأقدم من ساعة (عشان ما نزاحم ملفًا لسه بالطريق عبر الإرسال الفوري).
+    const staleBefore = new Date(Date.now() - 60 * 60 * 1000).toISOString();
     const { data: failedFiles } = await supabase
       .from("file_uploads")
       .select("id, storage_path, file_name, mime_type, created_at, course_id, submission_id, uploader_id")
-      .eq("archive_status", "failed")
       .in("related_type", ["submission","post","comment"])
+      .or(`archive_status.eq.failed,and(archive_status.eq.live,created_at.lte.${staleBefore})`)
       .limit(20);
 
     for (const f of failedFiles || []) {

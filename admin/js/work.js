@@ -187,6 +187,7 @@ async function openReviewModal(sub){
     <h3>مراجعة تسليم: ${CodeUp.escapeHtml(sub.profiles?.full_name||"")}</h3>
     <p class="small">${CodeUp.escapeHtml(sub.assignments?.title||"")}</p>
     <div style="margin:10px 0">${CodeUp.escapeHtml(sub.content||"بدون ملاحظات")}</div>
+    ${sub.github_url ? `<div class="card2" style="margin-bottom:10px"><a href="${CodeUp.escapeHtml(sub.github_url)}" target="_blank" rel="noopener noreferrer" class="btn dark">🔗 فتح رابط GitHub</a></div>` : ""}
     ${fileCards || '<p class="small">لا توجد ملفات مرفقة.</p>'}
     <label>الدرجة</label><input id="rGrade" type="number" step="0.5" value="${sub.grade??""}">
     <label>ملاحظات المراجع</label><textarea id="rNotes" rows="3">${CodeUp.escapeHtml(sub.reviewer_notes||"")}</textarea>

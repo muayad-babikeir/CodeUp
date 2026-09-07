@@ -98,6 +98,13 @@ end $$;
 --    security definer) حتى تبقى خاضعة لسياسات RLS/auth.uid()
 --    تمامًا كما يفترض تعليق delete-account/index.ts.
 -- ------------------------------------------------------------
+-- ⚠️ تحديث بعد اختبار فعلي: Supabase يمنع صراحة أي DELETE مباشر على
+-- storage.objects عبر SQL ("Direct deletion from storage tables is not
+-- allowed. Use the Storage API instead.") — لذلك نُقل تنظيف ملفات
+-- Storage بالكامل إلى supabase/functions/delete-account/index.ts (اللي
+-- يقدر يستخدم Storage API الحقيقي). هذه الدالة صارت مجرد فحص أمان بسيط
+-- (لا تلمس Storage نهائيًا) — أبقيناها لأن اسمها معروف وقد تُستخدم لاحقًا،
+-- ولا ضرر ببقائها.
 create or replace function delete_own_account()
 returns void
 language plpgsql
@@ -108,18 +115,10 @@ begin
   if auth.uid() is null then
     raise exception 'unauthorized';
   end if;
-
-  -- ملفات Storage المملوكة للمستخدم بمساراتها المعتادة "{user_id}/..."
-  -- في bucket الصور الشخصية وbucket المرفقات العام (تسليمات/منشورات/تعليقات)
-  delete from storage.objects
-  where bucket_id in ('avatars', 'submissions')
-    and (storage.foldername(name))[1] = auth.uid()::text;
-
-  -- ملاحظة: باقي بيانات المستخدم (enrollments, submissions, comments,
-  -- reactions, notifications, squad_leaders, course_admins, ...) كلها
-  -- معرّفة أصلًا بـ ON DELETE CASCADE من profiles، فتُحذف تلقائيًا
-  -- عند حذف auth.users من الخطوة التالية في delete-account/index.ts
-  -- — لا داعي لتكرارها هنا.
+  -- باقي بيانات المستخدم (enrollments, submissions, comments, reactions,
+  -- notifications, squad_leaders, course_admins, ...) كلها معرّفة أصلًا
+  -- بـ ON DELETE CASCADE من profiles، فتُحذف تلقائيًا عند حذف auth.users.
+  -- ملفات Storage تُنظَّف من الآن فصاعدًا داخل delete-account/index.ts مباشرة.
 end;
 $$;
 
