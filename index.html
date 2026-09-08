@@ -158,7 +158,7 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
 .box{background:var(--surface);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);border-radius:18px;padding:18px}
 @media(max-width:500px){.card{padding:26px 20px}}
 .crumbs{display:flex;gap:8px;align-items:center;color:var(--ink60);font-size:13.5px;margin:14px 0;flex-wrap:wrap}
-.crumbs button{border:0;background:transparent;color:var(--accent);cursor:pointer;font-weight:600;padding:0;font-family:inherit;font-size:13.5px}
+.crumbs button{border:0;background:var(--surface-solid);color:var(--accent);cursor:pointer;font-weight:600;padding:6px 12px;border-radius:20px;font-family:inherit;font-size:13.5px}
 .courseCard{background:var(--surface);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);border-radius:18px;padding:18px;cursor:pointer;transition:border-color .15s,transform .15s;overflow:hidden}
 .courseCard:hover{border-color:var(--accent);transform:translateY(-2px)}
 .courseCard h3{margin:0 0 6px;font-size:15.5px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -241,6 +241,12 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
 .modal h3{margin-top:0;font-size:16px}
 .timelinePost{background:var(--surface);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:12px}
 .timelinePost .meta{display:flex;justify-content:space-between;gap:8px;color:var(--ink60);font-size:12.5px;margin-bottom:8px;flex-wrap:wrap}
+.timelinePost .metaWithAvatar{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.timelinePost .metaAvatar{width:34px;height:34px;border-radius:50%;object-fit:cover;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px}
+.timelinePost .metaTextCol{display:flex;flex-direction:column;gap:1px;color:var(--ink60);font-size:12.5px}
+.timelinePost .metaTextCol b{color:var(--ink);font-size:13.5px}
+.fabComposeBtn{position:fixed;inset-inline-end:18px;bottom:calc(76px + env(safe-area-inset-bottom));width:56px;height:56px;border-radius:50%;background:var(--accent);color:#fff;border:0;font-size:28px;line-height:1;box-shadow:0 6px 18px rgba(0,0,0,.35);cursor:pointer;z-index:110;display:flex;align-items:center;justify-content:center}
+.fabComposeBtn:active{transform:scale(.94)}
 .timelinePost .body{white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px}
 .reactBar{display:flex;gap:8px;margin-top:10px;border-top:1px solid var(--line);padding-top:10px;flex-wrap:wrap}
 .reactBtn{border:1px solid var(--line);background:rgba(255,255,255,.03);border-radius:9px;padding:6px 11px;cursor:pointer;font-size:12.5px;font-family:'IBM Plex Mono',monospace;color:var(--ink)}
@@ -358,7 +364,7 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
 </div>
 
 <div class="wrap">
-<div id="crumbs" class="crumbs hidden"><button id="crumbHome">الرئيسية</button></div>
+<div id="crumbs" class="crumbs hidden"><button id="crumbHome">→ الرجوع للرئيسية</button></div>
 <div id="viewRoot"></div>
 </div>
 
@@ -1278,50 +1284,57 @@ const App = {
     const PAGE_SIZE = 15;
     const myCourseIds = this.ctx.enrollments.map(e=>e.course_id);
     body.innerHTML = `
-      <div class="card2" style="margin-top:14px">
-        <textarea id="newPostText" rows="2" placeholder="شارك تحديثًا أو سؤالًا مع الجميع…" style="width:100%;resize:vertical"></textarea>
+      <div id="feedList"></div><div id="feedMore"></div>
+      <button class="fabComposeBtn" id="openComposeBtn" title="منشور جديد" aria-label="منشور جديد">+</button>`;
+
+    let pendingPostFile = null;
+
+    const openComposeModal = ()=>{
+      const m = this.modal(`
+        <h3 style="margin-top:0">منشور جديد</h3>
+        <textarea id="newPostText" rows="4" placeholder="شارك تحديثًا أو سؤالًا مع الجميع…" style="width:100%;resize:vertical"></textarea>
         <div class="commentAttachRow" style="margin-top:8px">
           <input type="file" accept="image/*" id="newPostImage" style="display:none">
           <button class="btn iconBtn" id="newPostAttachBtn" title="إرفاق صورة">${Icon("paperclip")}</button>
           <div style="flex:1"></div>
           <button class="btn dark" id="newPostBtn">نشر</button>
         </div>
-        <div id="newPostPreview" style="margin-top:6px"></div>
-      </div>
-      <div id="feedList"></div><div id="feedMore"></div>`;
+        <div id="newPostPreview" style="margin-top:6px"></div>`);
 
-    let pendingPostFile = null;
-    const postPreview = document.getElementById("newPostPreview");
-    document.getElementById("newPostAttachBtn").onclick = ()=> document.getElementById("newPostImage").click();
-    document.getElementById("newPostImage").onchange = (e)=>{
-      const f = e.target.files[0]; if(!f) return;
-      pendingPostFile = f;
-      postPreview.innerHTML = `<span class="small">${Icon("paperclip")} ${CodeUp.escapeHtml(f.name)}</span> <button class="btn" id="clearPostAttach">إزالة</button>`;
-      document.getElementById("clearPostAttach").onclick = ()=>{ pendingPostFile=null; postPreview.innerHTML=""; };
+      const postPreview = m.el.querySelector("#newPostPreview");
+      m.el.querySelector("#newPostAttachBtn").onclick = ()=> m.el.querySelector("#newPostImage").click();
+      m.el.querySelector("#newPostImage").onchange = (e)=>{
+        const f = e.target.files[0]; if(!f) return;
+        pendingPostFile = f;
+        postPreview.innerHTML = `<span class="small">${Icon("paperclip")} ${CodeUp.escapeHtml(f.name)}</span> <button class="btn" id="clearPostAttach">إزالة</button>`;
+        m.el.querySelector("#clearPostAttach").onclick = ()=>{ pendingPostFile=null; postPreview.innerHTML=""; };
+      };
+      m.el.querySelector("#newPostBtn").onclick = async ()=>{
+        const ta = m.el.querySelector("#newPostText");
+        const val = ta.value.trim();
+        if(!val && !pendingPostFile) return;
+        const btn = m.el.querySelector("#newPostBtn");
+        btn.disabled = true;
+        try{
+          const {data: row, error} = await db.from("posts").insert({profile_id:this.ctx.user.id, content: val || "📎"}).select().single();
+          if(error) throw error;
+          if(pendingPostFile){
+            const uploaded = await CodeUp.uploadCommentAttachment(pendingPostFile, this.ctx.user.id, row.id); // نفس منطق الرفع، مسار عام تحت posts
+            await db.from("file_uploads").insert({
+              uploader_id: this.ctx.user.id, related_type:"post", related_id: row.id,
+              storage_path: uploaded.path, file_name: uploaded.name, mime_type: uploaded.type, file_size: uploaded.size
+            });
+            const fileRow = await db.from("file_uploads").select("id").eq("related_type","post").eq("related_id", row.id).single();
+            if(fileRow.data) CodeUp.triggerTelegramSend(fileRow.data.id);
+          }
+          pendingPostFile=null;
+          m.close();
+          loadFeed(true); CodeUp.toast("تم النشر","success");
+        }catch(e){ CodeUp.toast(e.message,"error"); }
+        finally{ btn.disabled = false; }
+      };
     };
-    document.getElementById("newPostBtn").onclick = async ()=>{
-      const ta = document.getElementById("newPostText");
-      const val = ta.value.trim();
-      if(!val && !pendingPostFile) return;
-      const btn = document.getElementById("newPostBtn");
-      btn.disabled = true;
-      try{
-        const {data: row, error} = await db.from("posts").insert({profile_id:this.ctx.user.id, content: val || "📎"}).select().single();
-        if(error) throw error;
-        if(pendingPostFile){
-          const uploaded = await CodeUp.uploadCommentAttachment(pendingPostFile, this.ctx.user.id, row.id); // نفس منطق الرفع، مسار عام تحت posts
-          await db.from("file_uploads").insert({
-            uploader_id: this.ctx.user.id, related_type:"post", related_id: row.id,
-            storage_path: uploaded.path, file_name: uploaded.name, mime_type: uploaded.type, file_size: uploaded.size
-          });
-          const fileRow = await db.from("file_uploads").select("id").eq("related_type","post").eq("related_id", row.id).single();
-          if(fileRow.data) CodeUp.triggerTelegramSend(fileRow.data.id);
-        }
-        ta.value=""; pendingPostFile=null; postPreview.innerHTML="";
-        loadFeed(true); CodeUp.toast("تم النشر","success");
-      }catch(e){ CodeUp.toast(e.message,"error"); }
-      finally{ btn.disabled = false; }
-    };
+    document.getElementById("openComposeBtn").onclick = openComposeModal;
 
     const list = body.querySelector("#feedList");
     const moreBox = body.querySelector("#feedMore");
@@ -1332,9 +1345,9 @@ const App = {
       moreBox.innerHTML = `<div class="emptyState">جارِ التحميل…</div>`;
 
       const [{data: announcements}, {data: posts}, {data: subs}] = await Promise.all([
-        page===0 ? db.from("announcements").select("*, profiles(full_name)").is("course_id", null).order("created_at",{ascending:false}).limit(10) : Promise.resolve({data:[]}),
-        db.from("posts").select("*, profiles(full_name)").order("created_at",{ascending:false}).range(page*PAGE_SIZE, page*PAGE_SIZE+PAGE_SIZE-1),
-        myCourseIds.length ? db.from("submissions").select("*, assignments(title,course_id,courses(name)), profiles(full_name)").in("assignments.course_id", myCourseIds).in("visibility",["course","squad"]).order("created_at",{ascending:false}).range(page*PAGE_SIZE, page*PAGE_SIZE+PAGE_SIZE-1) : Promise.resolve({data:[]})
+        page===0 ? db.from("announcements").select("*, profiles(full_name,avatar_url)").is("course_id", null).order("created_at",{ascending:false}).limit(10) : Promise.resolve({data:[]}),
+        db.from("posts").select("*, profiles(full_name,avatar_url)").order("created_at",{ascending:false}).range(page*PAGE_SIZE, page*PAGE_SIZE+PAGE_SIZE-1),
+        myCourseIds.length ? db.from("submissions").select("*, assignments(title,course_id,courses(name)), profiles(full_name,avatar_url)").in("assignments.course_id", myCourseIds).in("visibility",["course","squad"]).order("created_at",{ascending:false}).range(page*PAGE_SIZE, page*PAGE_SIZE+PAGE_SIZE-1) : Promise.resolve({data:[]})
       ]);
       const safeSubs = (subs||[]).filter(s=>s.assignments); // استبعاد أي صف ما رجع بسبب inner join
       const safePosts = posts || [];
@@ -1366,7 +1379,7 @@ const App = {
         if(item.type==="announcement"){
           const a = item.data;
           return `<div class="timelinePost feedAnnouncement"><span class="feedTag">${Icon("announcement")} إعلان عام</span>
-            <div class="meta"><b style="color:var(--ink)">${CodeUp.escapeHtml(a.profiles?.full_name||"إدارة CodeUp")}</b><span class="mono">${CodeUp.timeAgo(a.created_at)}</span></div>
+            <div class="metaWithAvatar">${CodeUp.avatarHtml(a.profiles?.full_name||"إدارة CodeUp", a.profiles?.avatar_url)}<div class="metaTextCol"><b>${CodeUp.escapeHtml(a.profiles?.full_name||"إدارة CodeUp")}</b><span class="mono">${CodeUp.timeAgo(a.created_at)}</span></div></div>
             <div class="body"><b>${CodeUp.escapeHtml(a.title)}</b>${a.content?`<br>${CodeUp.escapeHtml(a.content)}`:""}</div></div>`;
         }
         const isPost = item.type==="post";
@@ -1376,7 +1389,7 @@ const App = {
         const itemComments = commentsFor(item.type, d.id);
         return `<div class="timelinePost" data-feeditem="${d.id}" data-type="${item.type}">
           <span class="feedTag">${Icon("check")} ${isPost?"منشور":"تسليم واجب"}${!isPost && d.assignments?.courses?.name ? " · " + CodeUp.escapeHtml(d.assignments.courses.name) : ""}</span>
-          <div class="meta"><b style="color:var(--ink)">${CodeUp.escapeHtml(d.profiles?.full_name||"طالب")}</b><span class="mono">${CodeUp.timeAgo(d.created_at)}</span></div>
+          <div class="metaWithAvatar">${CodeUp.avatarHtml(d.profiles?.full_name||"طالب", d.profiles?.avatar_url)}<div class="metaTextCol"><b>${CodeUp.escapeHtml(d.profiles?.full_name||"طالب")}</b><span class="mono">${CodeUp.timeAgo(d.created_at)}</span></div></div>
           ${!isPost?`<div class="small mono" style="margin-bottom:6px">${CodeUp.escapeHtml(d.assignments?.title||"")}</div>`:""}
           <div class="body">${CodeUp.escapeHtml(d.content||"")}</div>
           ${!isPost?(filesByPost[d.id]||[]).map(f=>renderFileCard(f,"submissions")).join(""):""}

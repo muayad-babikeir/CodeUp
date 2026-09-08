@@ -178,6 +178,16 @@ const CodeUp = (() => {
     return String(str).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   }
 
+  // دائرة صورة شخصية صغيرة (أو أول حرف من الاسم كبديل) — لرؤوس البطاقات بأسلوب X
+  function avatarHtml(name, avatarUrl, size) {
+    size = size || 34;
+    const initial = escapeHtml((name || "؟").trim().charAt(0) || "؟");
+    if (avatarUrl) {
+      return `<img src="${escapeHtml(avatarUrl)}" class="metaAvatar" style="width:${size}px;height:${size}px" alt="">`;
+    }
+    return `<div class="metaAvatar" style="width:${size}px;height:${size}px">${initial}</div>`;
+  }
+
   function timeAgo(iso) {
     if (!iso) return "";
     const diff = (Date.now() - new Date(iso).getTime()) / 1000;
@@ -397,5 +407,5 @@ const CodeUp = (() => {
     });
   }
 
-  return { toast, escapeHtml, timeAgo, formatDate, debounce, requireSession, loadMyContext, rpc, call, uploadSubmissionFile, uploadCommentAttachment, getSignedUrl, subscribeToMyNotifications, triggerTelegramSend, buildCommentsBlock, wireCommentsToggle, setBtnLoading, withBtnLoading, compressImageIfNeeded };
+  return { toast, escapeHtml, avatarHtml, timeAgo, formatDate, debounce, requireSession, loadMyContext, rpc, call, uploadSubmissionFile, uploadCommentAttachment, getSignedUrl, subscribeToMyNotifications, triggerTelegramSend, buildCommentsBlock, wireCommentsToggle, setBtnLoading, withBtnLoading, compressImageIfNeeded };
 })();
