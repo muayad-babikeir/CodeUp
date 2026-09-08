@@ -247,6 +247,9 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
 .timelinePost .metaTextCol b{color:var(--ink);font-size:13.5px}
 .fabComposeBtn{position:fixed;inset-inline-end:18px;bottom:calc(76px + env(safe-area-inset-bottom));width:56px;height:56px;border-radius:50%;background:var(--accent);color:#fff;border:0;font-size:28px;line-height:1;box-shadow:0 6px 18px rgba(0,0,0,.35);cursor:pointer;z-index:110;display:flex;align-items:center;justify-content:center}
 .fabComposeBtn:active{transform:scale(.94)}
+.pullRefreshIndicator{display:flex;align-items:center;justify-content:center;height:0;overflow:hidden;color:var(--ink60);font-size:13px;transition:height .15s ease}
+.pullRefreshIndicator.spinning svg{animation:pullSpin .7s linear infinite}
+@keyframes pullSpin{to{transform:rotate(360deg)}}
 .timelinePost .body{white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px}
 .reactBar{display:flex;gap:8px;margin-top:10px;border-top:1px solid var(--line);padding-top:10px;flex-wrap:wrap}
 .reactBtn{border:1px solid var(--line);background:rgba(255,255,255,.03);border-radius:9px;padding:6px 11px;cursor:pointer;font-size:12.5px;font-family:'IBM Plex Mono',monospace;color:var(--ink)}
@@ -1285,6 +1288,10 @@ const App = {
     const PAGE_SIZE = 15;
     const myCourseIds = this.ctx.enrollments.map(e=>e.course_id);
     body.innerHTML = `
+      <div id="pullRefreshIndicator" class="pullRefreshIndicator">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-inline-end:6px"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>
+        <span id="pullRefreshLabel">اسحب للتحديث</span>
+      </div>
       <div id="newPostsBanner" class="hidden" style="text-align:center;margin-bottom:10px">
         <button class="btn dark" id="newPostsBtn" style="border-radius:20px">منشورات جديدة — اضغط للتحديث</button>
       </div>
@@ -1340,40 +1347,126 @@ const App = {
     };
     document.getElementById("openComposeBtn").onclick = openComposeModal;
 
-    // ===== بث حي: تنبيه "منشورات جديدة" بدل قفز المنشور تلقائيًا لأعلى القائمة =====
+    const list = body.querySelector("#feedList");
+    const moreBox = body.querySelector("#feedMore");
+    const renderedIds = new Set(); // منع أي تكرار للعنصر نفسه بين صفحات pagination والبث الحي
+    let postsCursor = null, subsCursor = null; // keyset pagination بدل range/offset — ما يتأثر بإضافة صفوف جديدة أثناء التصفح
+    let postsDone = false, subsDone = false;
+    let loadingFeed = false;
+    let newestSeenAt = null; // أحدث created_at شفناه فعليًا — نستخدمه للحاق أي منشور فاتنا بعد انقطاع الاتصال
+
+    // ===== بث حي: تنبيه "منشورات جديدة" + تحديث/حذف محلي بدون إعادة تحميل الفيد كامل =====
     const newPostsBanner = document.getElementById("newPostsBanner");
     const newPostsBtn = document.getElementById("newPostsBtn");
     newPostsBtn.onclick = ()=>{
       newPostsBanner.classList.add("hidden");
       loadFeed(true);
-      list.scrollIntoView({behavior:"smooth"});
     };
+
+    const patchPostLocally = (row)=>{
+      const el = list.querySelector(`[data-feeditem="${row.id}"][data-type="post"] .body`);
+      if(el) el.textContent = row.content || "";
+    };
+    const removePostLocally = (id)=>{
+      const el = list.querySelector(`[data-feeditem="${id}"][data-type="post"]`);
+      if(el) el.remove();
+      renderedIds.delete(id);
+    };
+
     if(this._feedRealtimeChannel){ db.removeChannel(this._feedRealtimeChannel); this._feedRealtimeChannel = null; }
+    let hadSubscribedBefore = false;
     this._feedRealtimeChannel = db.channel("home-feed-posts")
       .on("postgres_changes", {event:"INSERT", schema:"public", table:"posts"}, (payload)=>{
         if(payload.new?.profile_id === this.ctx.user.id) return; // منشورك أنت يظهر فورًا أصلًا عبر loadFeed(true) بالأعلى، ما نكرره
+        if(renderedIds.has(payload.new.id)) return; // منشور وصلنا فعليًا بصفحة سابقة (نادر لكن ممكن أثناء إعادة الاتصال)
         newPostsBanner.classList.remove("hidden");
       })
-      .subscribe();
+      .on("postgres_changes", {event:"UPDATE", schema:"public", table:"posts"}, (payload)=>{
+        patchPostLocally(payload.new); // تحديث محلي فوري بدل تحميل الفيد كامل
+      })
+      .on("postgres_changes", {event:"DELETE", schema:"public", table:"posts"}, (payload)=>{
+        removePostLocally(payload.old.id); // حذف محلي فوري بدل تحميل الفيد كامل
+      })
+      .subscribe((status)=>{
+        // أول اشتراك ناجح: مجرد تسجيل حالة. أي اشتراك ناجح بعده (SUBSCRIBED مرة ثانية) يعني
+        // كان في انقطاع اتصال وأُعيد الاتصال تلقائيًا — نتحقق حينها هل فاتنا منشور أثناء الانقطاع
+        // بدل ما نفترض عدم وجود جديد بصمت.
+        if(status === "SUBSCRIBED"){
+          if(hadSubscribedBefore && newestSeenAt){
+            db.from("posts").select("id", {count:"exact", head:true}).gt("created_at", newestSeenAt).then(({count})=>{
+              if(count) newPostsBanner.classList.remove("hidden");
+            });
+          }
+          hadSubscribedBefore = true;
+        }
+      });
 
-    const list = body.querySelector("#feedList");
-    const moreBox = body.querySelector("#feedMore");
-    let page = 0;
+    // ===== سحب للتحديث (Pull to refresh) — لمس بسيط بدون مكتبات خارجية =====
+    const pullIndicator = document.getElementById("pullRefreshIndicator");
+    const pullLabel = document.getElementById("pullRefreshLabel");
+    let pullStartY = null, pulling = false;
+    const PULL_THRESHOLD = 70;
+    body.addEventListener("touchstart", (e)=>{
+      if(window.scrollY <= 0){ pullStartY = e.touches[0].clientY; pulling = true; }
+    }, {passive:true});
+    body.addEventListener("touchmove", (e)=>{
+      if(!pulling || pullStartY===null) return;
+      const dy = e.touches[0].clientY - pullStartY;
+      if(dy > 0){
+        pullIndicator.style.height = Math.min(dy, PULL_THRESHOLD) + "px";
+        pullLabel.textContent = dy > PULL_THRESHOLD ? "حرّر للتحديث" : "اسحب للتحديث";
+      }
+    }, {passive:true});
+    body.addEventListener("touchend", (e)=>{
+      if(!pulling) return;
+      const dy = (e.changedTouches[0].clientY - pullStartY);
+      pulling = false; pullStartY = null;
+      if(dy > PULL_THRESHOLD){
+        pullIndicator.classList.add("spinning");
+        pullLabel.textContent = "جارِ التحديث…";
+        loadFeed(true).finally(()=>{
+          pullIndicator.classList.remove("spinning");
+          pullIndicator.style.height = "0px";
+        });
+      }else{
+        pullIndicator.style.height = "0px";
+      }
+    });
 
     const loadFeed = async (reset)=>{
-      if(reset){ page = 0; list.innerHTML = ""; }
+      if(loadingFeed) return;
+      loadingFeed = true;
+      if(reset){
+        postsCursor = null; subsCursor = null; postsDone = false; subsDone = false;
+        renderedIds.clear(); list.innerHTML = ""; newestSeenAt = null;
+        feedScrollObserver.observe(moreBox); // إعادة تفعيل التمرير اللانهائي لو كان قد تعطّل بعد وصوله لآخر صفحة سابقًا
+      }
       moreBox.innerHTML = `<div class="emptyState">جارِ التحميل…</div>`;
 
-      const [{data: announcements}, {data: posts}, {data: subs}] = await Promise.all([
-        page===0 ? db.from("announcements").select("*, profiles(full_name,avatar_url)").is("course_id", null).order("created_at",{ascending:false}).limit(10) : Promise.resolve({data:[]}),
-        db.from("posts").select("*, profiles(full_name,avatar_url)").order("created_at",{ascending:false}).range(page*PAGE_SIZE, page*PAGE_SIZE+PAGE_SIZE-1),
-        myCourseIds.length ? db.from("submissions").select("*, assignments(title,course_id,courses(name)), profiles(full_name,avatar_url)").in("assignments.course_id", myCourseIds).in("visibility",["course","squad"]).order("created_at",{ascending:false}).range(page*PAGE_SIZE, page*PAGE_SIZE+PAGE_SIZE-1) : Promise.resolve({data:[]})
+      let postsQ = db.from("posts").select("*, profiles(full_name,avatar_url)").order("created_at",{ascending:false}).limit(PAGE_SIZE);
+      if(postsCursor) postsQ = postsQ.lt("created_at", postsCursor);
+      let subsQ = (myCourseIds.length && !subsDone)
+        ? db.from("submissions").select("*, assignments(title,course_id,courses(name)), profiles(full_name,avatar_url)").in("assignments.course_id", myCourseIds).in("visibility",["course","squad"]).order("created_at",{ascending:false}).limit(PAGE_SIZE)
+        : null;
+      if(subsQ && subsCursor) subsQ = subsQ.lt("created_at", subsCursor);
+
+      const [{data: announcements}, postsRes, subsRes] = await Promise.all([
+        reset ? db.from("announcements").select("*, profiles(full_name,avatar_url)").is("course_id", null).order("created_at",{ascending:false}).limit(10) : Promise.resolve({data:[]}),
+        postsDone ? Promise.resolve({data:[]}) : postsQ,
+        subsQ || Promise.resolve({data:[]})
       ]);
+      const posts = postsRes.data, subs = subsRes.data;
       const safeSubs = (subs||[]).filter(s=>s.assignments); // استبعاد أي صف ما رجع بسبب inner join
       const safePosts = posts || [];
 
-      if(page===0 && !safeSubs.length && !safePosts.length && !(announcements||[]).length){
-        list.innerHTML = `<div class="emptyState">لا توجد منشورات بعد. كن أول من يشارك شيئًا!</div>`; moreBox.innerHTML = ""; return;
+      // تحديث حالة "خلصت الصفحات" لكل مصدر لحاله (كل واحد يوقف طلبه لما يرجع أقل من PAGE_SIZE)
+      if(safePosts.length < PAGE_SIZE) postsDone = true;
+      if((subs||[]).length < PAGE_SIZE) subsDone = true;
+      if(safePosts.length) postsCursor = safePosts[safePosts.length-1].created_at;
+      if((subs||[]).length) subsCursor = subs[subs.length-1].created_at;
+
+      if(reset && !safeSubs.length && !safePosts.length && !(announcements||[]).length){
+        list.innerHTML = `<div class="emptyState">لا توجد منشورات بعد. كن أول من يشارك شيئًا!</div>`; moreBox.innerHTML = ""; loadingFeed = false; return;
       }
 
       const [{data: reactions}, {data: comments}, {data: postFiles}] = await Promise.all([
@@ -1383,14 +1476,25 @@ const App = {
       ]);
       const filesByPost = {};
       for(const f of (postFiles||[])) (filesByPost[f.related_id] ||= []).push(f);
-      const {data: commentFiles} = await db.from("file_uploads").select("*").eq("related_type","comment").in("related_id", (comments||[]).map(c=>c.id));
-      const filesByComment = Object.fromEntries((commentFiles||[]).map(f=>[f.related_id, f]));
+      const {data: commentFilesReal} = await db.from("file_uploads").select("*").eq("related_type","comment").in("related_id", (comments||[]).map(c=>c.id));
+      const filesByComment = Object.fromEntries((commentFilesReal||[]).map(f=>[f.related_id, f]));
+
+      // منع التكرار: أي عنصر سبق عرضه فعليًا (مثلاً وصل قبل كذا عبر تحديث سابق) يُستبعد هنا
+      const newAnnouncements = (reset?(announcements||[]):[]);
+      const newPosts = safePosts.filter(p=>!renderedIds.has(p.id));
+      const newSubs = safeSubs.filter(s=>!renderedIds.has(s.id));
 
       const feed = [
-        ...(page===0?(announcements||[]):[]).map(a=>({type:"announcement", created_at:a.created_at, data:a})),
-        ...safePosts.map(p=>({type:"post", created_at:p.created_at, data:p})),
-        ...safeSubs.map(s=>({type:"submission", created_at:s.created_at, data:s}))
+        ...newAnnouncements.map(a=>({type:"announcement", created_at:a.created_at, data:a})),
+        ...newPosts.map(p=>({type:"post", created_at:p.created_at, data:p})),
+        ...newSubs.map(s=>({type:"submission", created_at:s.created_at, data:s}))
       ].sort((x,y)=> new Date(y.created_at) - new Date(x.created_at));
+
+      for(const it of feed){ if(it.type!=="announcement") renderedIds.add(it.data.id); }
+      if(feed.length){
+        const latest = feed.reduce((m,it)=> !m || new Date(it.created_at) > new Date(m) ? it.created_at : m, newestSeenAt);
+        newestSeenAt = latest;
+      }
 
       const reactionsFor = (type,id)=> (reactions||[]).filter(r=>r.target_type===type && r.target_id===id);
       const commentsFor = (type,id)=> (comments||[]).filter(c=> type==='post' ? c.post_id===id : c.submission_id===id);
@@ -1465,11 +1569,21 @@ const App = {
         };
       });
 
-      if(safeSubs.length === PAGE_SIZE || safePosts.length === PAGE_SIZE){
-        moreBox.innerHTML = `<button class="btn" id="feedMoreBtn">تحميل المزيد</button>`;
-        moreBox.querySelector("#feedMoreBtn").onclick = ()=>{ page++; loadFeed(false); };
-      }else{ moreBox.innerHTML = ""; }
+      if(postsDone && subsDone){
+        moreBox.innerHTML = list.children.length ? `<div class="emptyState small">وصلت لآخر المنشورات</div>` : "";
+        feedScrollObserver.disconnect();
+      }else{
+        moreBox.innerHTML = "";
+      }
+      loadingFeed = false;
     };
+
+    // ===== تمرير لا نهائي (Infinite Scroll) — Sentinel ثابت بدل زر "تحميل المزيد" =====
+    const feedScrollObserver = new IntersectionObserver((entries)=>{
+      if(entries[0].isIntersecting && !loadingFeed && !(postsDone && subsDone)) loadFeed(false);
+    }, {rootMargin:"300px"});
+    feedScrollObserver.observe(moreBox);
+
     loadFeed(true);
   },
 
