@@ -572,6 +572,8 @@ const App = {
   crumbs: document.getElementById("crumbs"),
   _openNotifModal: null,
   _feedRealtimeChannel: null,
+  _coursesCache: null,
+  _universitySemestersCache: null,
 
   async init(user){
     this.ctx = await CodeUp.loadMyContext();
@@ -1188,7 +1190,17 @@ const App = {
   },
 
   async renderHomeCourses(body){
-    const {data: courses} = await db.from("courses").select("*").eq("status","published").order("created_at");
+    // كاش بسيط بذاكرة الجلسة (60 ثانية) — قائمة الكورسات المنشورة تتغيّر نادرًا،
+    // وتبديل التابات (الرئيسية/الكورسات) المتكرر كان يعيد جلبها من الصفر كل مرة بلا داعٍ.
+    const CACHE_TTL = 60000;
+    let courses;
+    if(this._coursesCache && (Date.now() - this._coursesCache.at) < CACHE_TTL){
+      courses = this._coursesCache.data;
+    }else{
+      const res = await db.from("courses").select("*").eq("status","published").order("created_at");
+      courses = res.data;
+      this._coursesCache = {data: courses, at: Date.now()};
+    }
     const enrolledIds = new Set(this.ctx.enrollments.map(e=>e.course_id));
     const myCourses = this.ctx.enrollments;
     let html = "";
@@ -1231,7 +1243,15 @@ const App = {
 
     const showSemesters = async ()=>{
       body.innerHTML = `<div class="emptyState">جارِ التحميل…</div>`;
-      const {data: semesters} = await db.from("university_semesters").select("*").order("order_index");
+      const CACHE_TTL = 60000; // نفس منطق كاش الكورسات — فصول الجامعة تتغيّر نادرًا (إدارة فقط)
+      let semesters;
+      if(this._universitySemestersCache && (Date.now() - this._universitySemestersCache.at) < CACHE_TTL){
+        semesters = this._universitySemestersCache.data;
+      }else{
+        const res = await db.from("university_semesters").select("*").order("order_index");
+        semesters = res.data;
+        this._universitySemestersCache = {data: semesters, at: Date.now()};
+      }
       if(!semesters || !semesters.length){
         body.innerHTML = `<div class="emptyState">لا توجد فصول دراسية مضافة بعد.</div>`;
         return;

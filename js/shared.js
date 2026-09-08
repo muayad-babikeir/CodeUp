@@ -179,11 +179,13 @@ const CodeUp = (() => {
   }
 
   // دائرة صورة شخصية صغيرة (أو أول حرف من الاسم كبديل) — لرؤوس البطاقات بأسلوب X
+  // loading="lazy": الفيد يعرض حتى 15-30 صورة شخصية دفعة واحدة، معظمها خارج الشاشة
+  // المرئية أول تحميل — lazy يأجّل جلبها لين تقترب من منطقة الرؤية فعليًا.
   function avatarHtml(name, avatarUrl, size) {
     size = size || 34;
     const initial = escapeHtml((name || "؟").trim().charAt(0) || "؟");
     if (avatarUrl) {
-      return `<img src="${escapeHtml(avatarUrl)}" class="metaAvatar" style="width:${size}px;height:${size}px" alt="">`;
+      return `<img src="${escapeHtml(avatarUrl)}" class="metaAvatar" style="width:${size}px;height:${size}px" alt="" loading="lazy" decoding="async">`;
     }
     return `<div class="metaAvatar" style="width:${size}px;height:${size}px">${initial}</div>`;
   }
