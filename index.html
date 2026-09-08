@@ -741,7 +741,7 @@ const App = {
   },
 
   async renderMessages(conversationId){
-    this.crumbs.classList.add("hidden");
+    this.crumbTrail([]);
     const isMobile = window.innerWidth < 720;
     this.root.innerHTML = `
       <div class="chatShell ${isMobile && conversationId ? 'showThread' : ''} ${isMobile && !conversationId ? 'showList' : ''}">
@@ -916,7 +916,7 @@ const App = {
   },
 
   async renderProfile(profileId){
-    this.crumbs.classList.add("hidden");
+    this.crumbTrail([]);
     const isMe = profileId === this.ctx.user.id;
     const {data: profile} = await db.from("profiles").select("id,full_name,avatar_url,created_at").eq("id", profileId).single();
     if(!profile){ this.root.innerHTML = `<div class="emptyState">المستخدم غير موجود.</div>`; return; }
@@ -1066,7 +1066,7 @@ const App = {
   },
 
   async renderSearch(){
-    this.crumbs.classList.add("hidden");
+    this.crumbTrail([]);
     this.root.innerHTML = `
       <div class="card2" style="margin-top:14px">
         <input type="text" id="globalSearchInput" placeholder="ابحث عن منشور أو شخص…" style="width:100%">
@@ -1161,11 +1161,10 @@ const App = {
     this.crumbs.classList.add("hidden");
 
     this.root.innerHTML = `
-      <section class="welcome"><h2>مرحباً ${CodeUp.escapeHtml(this.ctx.profile.full_name||"")}</h2><p class="mono">${CodeUp.escapeHtml(this.ctx.user.email||"")}</p></section>
       <div class="fbTabBar">
-        <button data-hometab="feed" class="${tab==='feed'?'active':''}"><span class="tabIcon">${Icon('timeline')}</span>الرئيسية</button>
+        <button data-hometab="feed" class="${tab==='feed'?'active':''}"><span class="tabIcon">${Icon('home')}</span>الرئيسية</button>
         <button data-hometab="courses" class="${tab==='courses'?'active':''}"><span class="tabIcon">${Icon('learning')}</span>الكورسات</button>
-        <button data-hometab="university" class="${tab==='university'?'active':''}"><span class="tabIcon">${Icon('learning')}</span>الجامعة</button>
+        <button data-hometab="university" class="${tab==='university'?'active':''}"><span class="tabIcon">${Icon('university')}</span>الجامعة</button>
       </div>
       <div id="homeBody"></div>`;
     this.root.querySelectorAll("[data-hometab]").forEach(b=>{
