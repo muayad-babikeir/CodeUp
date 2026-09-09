@@ -53,7 +53,7 @@ Deno.serve(async (req: Request) => {
         const { data: blob, error: dlErr } = await supabase.storage.from("submissions").download(f.storage_path);
         if (dlErr || !blob) throw new Error(dlErr?.message || "download failed");
 
-        let studentName = "طالب", courseName = "", assignmentTitle = "";
+        let studentName = "طالب", courseName = "", assignmentTitle = "", githubUrl = "";
         const { data: profile } = await supabase.from("profiles").select("full_name").eq("id", f.uploader_id).single();
         if (profile?.full_name) studentName = profile.full_name;
         if (f.course_id) {
@@ -61,13 +61,14 @@ Deno.serve(async (req: Request) => {
           if (course?.name) courseName = course.name;
         }
         if (f.submission_id) {
-          const { data: sub } = await supabase.from("submissions").select("assignment_id, assignments(title)").eq("id", f.submission_id).single();
+          const { data: sub } = await supabase.from("submissions").select("assignment_id, github_url, assignments(title)").eq("id", f.submission_id).single();
           // deno-lint-ignore no-explicit-any
           const subAny = sub as any;
           if (subAny?.assignments?.title) assignmentTitle = subAny.assignments.title;
+          if (subAny?.github_url) githubUrl = subAny.github_url;
         }
 
-        const caption = `📚 CodeUp Archive\n\nالطالب: ${studentName}\nالكورس: ${courseName}\nالواجب: ${assignmentTitle}\nنوع الملف: ${f.mime_type || ""}\nتاريخ الرفع: ${new Date(f.created_at).toLocaleDateString("ar-EG")}`;
+        const caption = `📚 CodeUp Archive\n\nالطالب: ${studentName}\nالكورس: ${courseName}\nالواجب: ${assignmentTitle}\nنوع الملف: ${f.mime_type || ""}\nتاريخ الرفع: ${new Date(f.created_at).toLocaleDateString("ar-EG")}${githubUrl ? `\nGitHub: ${githubUrl}` : ""}`;
         const isImage = (f.mime_type || "").startsWith("image/");
         const method = isImage ? "sendPhoto" : "sendDocument";
         const fieldName = isImage ? "photo" : "document";

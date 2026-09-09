@@ -697,6 +697,7 @@ const App = {
 
     // خرائط نوع الإشعار → التبويب المناسب داخل الكورس
     const TAB_BY_TYPE = { announcement:"timeline", submission:"assignments", squad_join_request:"squads", leader_application:"squads" };
+    const ADMIN_ACTION_TYPES = new Set(["squad_join_request_new", "leader_application_new"]); // إشعارات تخص دور القائد/الأدمن، توديه للوحة التحكم مباشرة
 
     const openRow = async (row)=>{
       const id = row.dataset.notifid;
@@ -707,6 +708,11 @@ const App = {
       this.refreshNotifBadge();
       if(notifType === "message"){
         this.go({name:"messages", conversationId: row.dataset.notifrelated});
+        return;
+      }
+      if(ADMIN_ACTION_TYPES.has(notifType)){
+        // إشعار إداري (طلب انضمام/قيادة جديد) — يخص لوحة التحكم مباشرة، مو تطبيق الطالب
+        window.location.href = "admin/index.html";
         return;
       }
       const tab = TAB_BY_TYPE[notifType] || "timeline";
@@ -2069,11 +2075,11 @@ const App = {
       const pending = pendingSquadIds.has(sq.id);
       const leaders = (sq.squad_leaders||[]).map(l=>l.profiles?.full_name).filter(Boolean).join("، ") || "لا يوجد قائد بعد";
       return `
-      <div class="courseCard">
+      <div class="courseCard" ${isMine?`data-detail="${sq.id}" style="cursor:pointer"`:""}>
         <div class="row"><h3>${CodeUp.escapeHtml(sq.name)}</h3>${isMine?'<span class="tag approved">عضو</span>':''}</div>
         <p class="small">القائد: ${CodeUp.escapeHtml(leaders)}</p>
         <p class="small">${CodeUp.escapeHtml(sq.description||"")}</p>
-        ${isMine ? "" : pending
+        ${isMine ? `<button class="btn" data-detailbtn="${sq.id}">الأعضاء والتفاصيل</button>` : pending
           ? `<button class="btn" disabled>طلبك قيد المراجعة</button>`
           : `<button class="btn dark" data-join="${sq.id}">طلب الانضمام</button>`}
       </div>`;
@@ -2085,12 +2091,26 @@ const App = {
     if(applyBtn) applyBtn.onclick = ()=> this.openLeaderApplicationModal(course);
     body.querySelector("#proposeSquadBtn").onclick = ()=> this.openProposeSquadModal(course, myEnrollment);
 
+    body.querySelectorAll("[data-detail], [data-detailbtn]").forEach(el=>{
+      el.onclick = (e)=>{
+        e.stopPropagation();
+        const id = el.dataset.detail || el.dataset.detailbtn;
+        this.openSquadDetailModal(squads.find(s=>s.id===id), course, isAdmin, isLeader);
+      };
+    });
+
     body.querySelectorAll("[data-join]").forEach(b=>{
       b.onclick = async ()=>{
         if(!myEnrollment){
           if(!confirm("للانضمام لمجموعة يجب الانضمام للكورس أولًا. تريد الانضمام الآن؟")) return;
           try{ await CodeUp.rpc.enrollInCourse(course.id); this.ctx = await CodeUp.loadMyContext(); }
           catch(e){ CodeUp.toast(e.message||"تعذّر الانضمام", "error"); return; }
+        }
+        // تحذير قبل الطلب لو الطالب أصلًا بمجموعة ثانية بنفس الكورس — القبول ينقله تلقائيًا
+        if(myEnrollment?.squad_id && myEnrollment.squad_id !== b.dataset.join){
+          const currentSquad = squads.find(s=>s.id===myEnrollment.squad_id);
+          const ok = confirm(`أنت حاليًا عضو بمجموعة "${currentSquad?.name||""}". لو تمت الموافقة على هذا الطلب، سيتم نقلك تلقائيًا لهذه المجموعة الجديدة وإخراجك من مجموعتك الحالية. هل تريد المتابعة؟`);
+          if(!ok) return;
         }
         b.disabled = true;
         try{
@@ -2100,6 +2120,63 @@ const App = {
         }catch(e){ CodeUp.toast(e.message, "error"); b.disabled = false; }
       };
     });
+  },
+
+  async openSquadDetailModal(squad, course, isAdmin, isLeader){
+    const leaderIds = new Set((squad.squad_leaders||[]).map(l=>l.profile_id));
+    // نفس شرط صلاحية assign_squad_leader() بالضبط: أدمن الكورس، أو قائد هذه المجموعة تحديدًا (مو أي قائد بالكورس)
+    const canManage = isAdmin || leaderIds.has(this.ctx.user.id);
+    const {data: members} = await db.from("enrollments").select("profile_id, profiles(full_name, avatar_url)").eq("squad_id", squad.id);
+
+    const rows = (members||[]).map(m=>{
+      const isLeaderRow = leaderIds.has(m.profile_id);
+      const isMe = m.profile_id === this.ctx.user.id;
+      return `<tr data-member="${m.profile_id}">
+        <td style="display:flex;align-items:center;gap:8px">${CodeUp.avatarHtml(m.profiles?.full_name||"", m.profiles?.avatar_url, 28)} ${CodeUp.escapeHtml(m.profiles?.full_name||"")} ${isLeaderRow?'<span class="tag approved">قائد</span>':''}</td>
+        <td>${isMe?"":`<button class="btn" data-msg="${m.profile_id}">مراسلة</button>`}</td>
+        <td>${(canManage && !isLeaderRow)?`<button class="btn" data-makeleader="${m.profile_id}">تعيين قائد</button>`:""}</td>
+      </tr>`;
+    }).join("");
+
+    const m = this.modal(`
+      <h3 style="margin-top:0">${CodeUp.escapeHtml(squad.name)}</h3>
+      <table class="small" style="width:100%;border-collapse:collapse">
+        <thead><tr><th style="text-align:start">العضو</th><th></th><th></th></tr></thead>
+        <tbody>${rows || `<tr><td colspan="3" class="emptyState">لا يوجد أعضاء بعد.</td></tr>`}</tbody>
+      </table>
+      <button class="btn danger" id="leaveSquadBtn" style="margin-top:14px">مغادرة المجموعة</button>
+    `);
+
+    m.el.querySelectorAll("[data-msg]").forEach(b=>{
+      b.onclick = async ()=>{
+        const {data: conv} = await db.rpc("get_or_create_conversation", {p_other_user: b.dataset.msg}).single();
+        m.close();
+        this.go({name:"messages", conversationId: conv.id});
+      };
+    });
+
+    m.el.querySelectorAll("[data-makeleader]").forEach(b=>{
+      b.onclick = async ()=>{
+        if(!confirm("تعيين هذا العضو قائدًا جديدًا للمجموعة؟ سيتم إنزال القائد الحالي لعضو عادي.")) return;
+        try{
+          await db.rpc("assign_squad_leader", {p_squad_id: squad.id, p_new_leader_id: b.dataset.makeleader}).throwOnError();
+          CodeUp.toast("تم تعيين القائد الجديد", "success");
+          m.close();
+          this.render();
+        }catch(e){ CodeUp.toast(e.message, "error"); }
+      };
+    });
+
+    m.el.querySelector("#leaveSquadBtn").onclick = async ()=>{
+      if(!confirm("هل تريد مغادرة هذه المجموعة فعلًا؟")) return;
+      try{
+        await db.rpc("leave_squad", {p_course_id: course.id}).throwOnError();
+        CodeUp.toast("تم مغادرة المجموعة", "success");
+        m.close();
+        this.ctx = await CodeUp.loadMyContext();
+        this.render();
+      }catch(e){ CodeUp.toast(e.message, "error"); }
+    };
   },
 
   openLeaderApplicationModal(course){
