@@ -58,10 +58,7 @@ Deno.serve(async (req: Request) => {
     await supabase.from("file_uploads").update({ archive_status: "sending" }).eq("id", f.id).eq("archive_status", "live");
 
     try {
-      const { data: blob, error: dlErr } = await supabase.storage.from("submissions").download(f.storage_path);
-      if (dlErr || !blob) throw new Error(dlErr?.message || "download failed");
-
-      let studentName = "طالب", courseName = "", assignmentTitle = "", githubUrl = "";
+      let studentName = "طالب", courseName = "", assignmentTitle = "", githubUrl = "", submissionContent = "";
       const { data: profile } = await supabase.from("profiles").select("full_name").eq("id", f.uploader_id).single();
       if (profile?.full_name) studentName = profile.full_name;
       if (f.course_id) {
@@ -69,26 +66,45 @@ Deno.serve(async (req: Request) => {
         if (course?.name) courseName = course.name;
       }
       if (f.submission_id) {
-        const { data: sub } = await supabase.from("submissions").select("assignment_id, github_url, assignments(title)").eq("id", f.submission_id).single();
+        const { data: sub } = await supabase.from("submissions").select("assignment_id, github_url, content, assignments(title)").eq("id", f.submission_id).single();
         // deno-lint-ignore no-explicit-any
         const subAny = sub as any;
         if (subAny?.assignments?.title) assignmentTitle = subAny.assignments.title;
         if (subAny?.github_url) githubUrl = subAny.github_url;
+        if (subAny?.content) submissionContent = subAny.content;
       }
 
-      const caption = `📚 CodeUp Archive\n\nالطالب: ${studentName}\nالكورس: ${courseName}\nالواجب: ${assignmentTitle}\nنوع الملف: ${f.mime_type || ""}\nتاريخ الرفع: ${new Date(f.created_at).toLocaleDateString("ar-EG")}${githubUrl ? `\nGitHub: ${githubUrl}` : ""}`;
+      const header = `📚 CodeUp Archive\n\nالطالب: ${studentName}\nالكورس: ${courseName}\nالواجب: ${assignmentTitle}`;
+      const footer = `\nتاريخ الرفع: ${new Date(f.created_at).toLocaleDateString("ar-EG")}${githubUrl ? `\nGitHub: ${githubUrl}` : ""}`;
 
-      const isImage = (f.mime_type || "").startsWith("image/");
-      const method = isImage ? "sendPhoto" : "sendDocument";
-      const fieldName = isImage ? "photo" : "document";
+      let tgJson: any;
+      if (!f.storage_path) {
+        // لا يوجد ملف فعلي — تسليم نصي أو رابط بحت. نرسله كرسالة نصية عادية بدل مستند/صورة.
+        const textBody = submissionContent ? `\n\nالمحتوى:\n${submissionContent}` : "";
+        const text = `${header}${textBody}${footer}`.slice(0, 4096); // حد Telegram لطول الرسالة النصية
+        const tgRes = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ chat_id: CHAT_ID, text })
+        });
+        tgJson = await tgRes.json();
+      } else {
+        const { data: blob, error: dlErr } = await supabase.storage.from("submissions").download(f.storage_path);
+        if (dlErr || !blob) throw new Error(dlErr?.message || "download failed");
 
-      const form = new FormData();
-      form.append("chat_id", CHAT_ID);
-      form.append("caption", caption);
-      form.append(fieldName, blob, f.file_name || "file");
+        const caption = `${header}\nنوع الملف: ${f.mime_type || ""}${footer}`;
+        const isImage = (f.mime_type || "").startsWith("image/");
+        const method = isImage ? "sendPhoto" : "sendDocument";
+        const fieldName = isImage ? "photo" : "document";
 
-      const tgRes = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/${method}`, { method: "POST", body: form });
-      const tgJson = await tgRes.json();
+        const form = new FormData();
+        form.append("chat_id", CHAT_ID);
+        form.append("caption", caption);
+        form.append(fieldName, blob, f.file_name || "file");
+
+        const tgRes = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/${method}`, { method: "POST", body: form });
+        tgJson = await tgRes.json();
+      }
       if (!tgJson.ok) throw new Error("Telegram: " + JSON.stringify(tgJson));
 
       await supabase.from("file_uploads").update({

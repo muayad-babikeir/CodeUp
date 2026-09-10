@@ -251,7 +251,17 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
 .pullRefreshIndicator.spinning svg{animation:pullSpin .7s linear infinite}
 @keyframes pullSpin{to{transform:rotate(360deg)}}
 .timelinePost .body{white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px}
-.reactBar{display:flex;gap:8px;margin-top:10px;border-top:1px solid var(--line);padding-top:10px;flex-wrap:wrap}
+.reactBar{display:flex;gap:8px;margin-top:10px;border-top:1px solid var(--line);padding-top:10px;flex-wrap:wrap;align-items:center}
+.pillBtn{display:inline-flex;align-items:center;gap:6px;border:0;background:rgba(180,180,180,.35);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);color:#fff;border-radius:999px;padding:8px 15px;cursor:pointer;font-size:12.5px;font-family:inherit;font-weight:600;transition:transform .12s ease,background .12s ease}
+.pillBtn svg{width:15px;height:15px;stroke:#fff;flex-shrink:0}
+.pillBtn:active{transform:scale(.93)}
+.pillBtn.active{background:rgba(255,255,255,.55);color:#111}
+.pillBtn.active svg{stroke:#111}
+.pillBtn.pillRound{padding:9px;border-radius:50%}
+.communityReview{margin-top:10px;border-top:1px solid var(--line);padding-top:10px}
+.communityReview .crHead{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink60);margin-bottom:8px}
+.communityReview .crCounts{display:flex;gap:14px;font-size:12px;color:var(--ink60);margin-bottom:8px}
+.communityReview textarea{width:100%;resize:vertical;font-size:12.5px;margin-top:8px}
 .reactBtn{border:1px solid var(--line);background:rgba(255,255,255,.03);border-radius:9px;padding:6px 11px;cursor:pointer;font-size:12.5px;font-family:'IBM Plex Mono',monospace;color:var(--ink)}
 .reactBtn.active{background:rgba(255,255,255,.12);border-color:var(--line-strong);color:var(--ink)}
 .commentBox{margin-top:10px;display:flex;gap:8px}
@@ -1495,11 +1505,13 @@ const App = {
         list.innerHTML = `<div class="emptyState">لا توجد منشورات بعد. كن أول من يشارك شيئًا!</div>`; moreBox.innerHTML = ""; loadingFeed = false; return;
       }
 
-      const [{data: reactions}, {data: comments}, {data: postFiles}] = await Promise.all([
+      const [{data: reactions}, {data: comments}, {data: postFiles}, {data: savedRows}] = await Promise.all([
         db.from("reactions").select("*").in("target_type",["submission","post"]).in("target_id", [...safeSubs.map(s=>s.id), ...safePosts.map(p=>p.id)]),
         db.from("comments").select("*, profiles(full_name)").or(`submission_id.in.(${safeSubs.map(s=>s.id).join(",")||"00000000-0000-0000-0000-000000000000"}),post_id.in.(${safePosts.map(p=>p.id).join(",")||"00000000-0000-0000-0000-000000000000"})`).order("created_at"),
-        db.from("file_uploads").select("*").eq("related_type","submission").in("related_id", safeSubs.map(s=>s.id))
+        db.from("file_uploads").select("*").eq("related_type","submission").in("related_id", safeSubs.map(s=>s.id)),
+        safeSubs.length ? db.from("saved_submissions").select("submission_id").eq("profile_id", this.ctx.user.id).in("submission_id", safeSubs.map(s=>s.id)) : Promise.resolve({data:[]})
       ]);
+      const savedIds = new Set((savedRows||[]).map(s=>s.submission_id));
       const filesByPost = {};
       for(const f of (postFiles||[])) (filesByPost[f.related_id] ||= []).push(f);
       const {data: commentFilesReal} = await db.from("file_uploads").select("*").eq("related_type","comment").in("related_id", (comments||[]).map(c=>c.id));
@@ -1543,7 +1555,11 @@ const App = {
           ${!isPost?`<div class="small mono" style="margin-bottom:6px">${CodeUp.escapeHtml(d.assignments?.title||"")}</div>`:""}
           <div class="body">${CodeUp.escapeHtml(d.content||"")}</div>
           ${!isPost?(filesByPost[d.id]||[]).map(f=>renderFileCard(f,"submissions")).join(""):""}
-          <div class="reactBar"><button class="reactBtn ${myLiked?'active':''}" data-like="${d.id}" data-liketype="${item.type}">إعجاب ${likeCount||""}</button></div>
+          <div class="reactBar">
+            <button class="pillBtn ${myLiked?'active':''}" data-like="${d.id}" data-liketype="${item.type}" aria-label="إعجاب"><span class="tabIcon">${Icon("heart")}</span><span>${likeCount||0}</span></button>
+            ${!isPost?`<button class="pillBtn pillRound ${savedIds.has(d.id)?'active':''}" data-save="${d.id}" aria-label="حفظ"><span class="tabIcon">${Icon("bookmark")}</span></button>`:""}
+            <button class="pillBtn pillRound" data-share="${d.id}" data-sharename="${CodeUp.escapeHtml(d.profiles?.full_name||'')}" data-sharetitle="${CodeUp.escapeHtml(isPost?'منشور':(d.assignments?.title||''))}" aria-label="مشاركة"><span class="tabIcon">${Icon("share_pill")}</span></button>
+          </div>
           ${CodeUp.buildCommentsBlock(itemComments, {filesByComment})}
           ${commentComposerHtml(d.id, isPost?"post":"submission")}
         </div>`;
@@ -1556,6 +1572,41 @@ const App = {
         el.dataset.wired = "1";
         el.style.cursor = "pointer";
         el.onclick = ()=> this.go({name:"profile", profileId: el.dataset.gotoprofile});
+      });
+
+      // ===== حفظ (Bookmark) — للتسليمات فقط، toggle بسيط محمي بـRLS =====
+      list.querySelectorAll("[data-save]:not([data-wired])").forEach(b=>{
+        b.dataset.wired = "1";
+        b.onclick = async ()=>{
+          const submissionId = b.dataset.save;
+          const isSaved = b.classList.contains("active");
+          b.disabled = true;
+          try{
+            if(isSaved){
+              await db.from("saved_submissions").delete().eq("submission_id", submissionId).eq("profile_id", this.ctx.user.id).throwOnError();
+              b.classList.remove("active");
+            }else{
+              await db.from("saved_submissions").insert({submission_id: submissionId, profile_id: this.ctx.user.id}).throwOnError();
+              b.classList.add("active");
+            }
+          }catch(e){ CodeUp.toast(e.message, "error"); }
+          finally{ b.disabled = false; }
+        };
+      });
+
+      // ===== مشاركة — Web Share API مع بديل نسخ للحافظة =====
+      list.querySelectorAll("[data-share]:not([data-wired])").forEach(b=>{
+        b.dataset.wired = "1";
+        b.onclick = async ()=>{
+          const shareText = `${b.dataset.sharename} — ${b.dataset.sharetitle} — CodeUp`;
+          const shareUrl = window.location.href;
+          if(navigator.share){
+            try{ await navigator.share({title:"CodeUp", text:shareText, url:shareUrl}); }catch(_e){ /* المستخدم ألغى المشاركة */ }
+          }else{
+            try{ await navigator.clipboard.writeText(`${shareText}\n${shareUrl}`); CodeUp.toast("تم نسخ الرابط", "success"); }
+            catch(_e){ CodeUp.toast("تعذّر النسخ", "error"); }
+          }
+        };
       });
 
       list.querySelectorAll("[data-like]:not([data-wired])").forEach(b=>{
@@ -1859,6 +1910,19 @@ const App = {
             this.render();
             return;
           }
+        }else if(content || githubUrlRaw){
+          // ما فيه ملف مرفق، لكن فيه نص أو رابط GitHub — يُؤرشف بنفس آلية الملفات
+          // (صف file_uploads بدون storage_path)، فيستفيد من نفس تتبع الحالة وإعادة المحاولة الحالية.
+          try{
+            const {data: fileRow, error: fErr} = await db.from("file_uploads")
+              .upsert({
+                course_id: course.id, uploader_id: this.ctx.user.id, related_type:"submission",
+                related_id: submissionId, submission_id: submissionId, storage_path: null,
+                file_name: "نص/رابط التسليم", mime_type: "text/plain",
+                idempotency_key: `${submitIdempotencyKey}-text`
+              }, {onConflict:"submission_id,idempotency_key"}).select().single();
+            if(!fErr && fileRow) CodeUp.triggerTelegramSend(fileRow.id);
+          }catch(_e){ /* لا نوقف نجاح التسليم لو فشل تسجيل الأرشفة النصية */ }
         }
 
         CodeUp.toast("تم إرسال التسليم بنجاح", "success");
@@ -1926,6 +1990,9 @@ const App = {
       const {data: comments} = await db.from("comments").select("*, profiles(full_name)").in("submission_id", safePosts.map(p=>p.id)).order("created_at");
       const {data: postFiles} = await db.from("file_uploads").select("*").eq("related_type","submission").in("related_id", safePosts.map(p=>p.id));
       const {data: commentFiles} = await db.from("file_uploads").select("*").eq("related_type","comment").in("related_id", (comments||[]).map(c=>c.id));
+      const {data: communityReviews} = await db.from("community_reviews").select("*").in("submission_id", safePosts.map(p=>p.id));
+      const {data: savedRows} = await db.from("saved_submissions").select("submission_id").eq("profile_id", this.ctx.user.id).in("submission_id", safePosts.map(p=>p.id));
+      const savedIds = new Set((savedRows||[]).map(s=>s.submission_id));
       const filesByPost = {};
       for(const f of (postFiles||[])) (filesByPost[f.related_id] ||= []).push(f);
       const filesByComment = Object.fromEntries((commentFiles||[]).map(f=>[f.related_id, f]));
@@ -1968,6 +2035,11 @@ const App = {
         const myLiked = (reactions||[]).some(r=>r.target_id===p.id && r.user_id===this.ctx.user.id);
         const likeCount = (reactions||[]).filter(r=>r.target_id===p.id).length;
         const postComments = (comments||[]).filter(c=>c.submission_id===p.id);
+        const subReviews = (communityReviews||[]).filter(r=>r.submission_id===p.id);
+        const meetsCount = subReviews.filter(r=>r.review_type==="meets_requirements").length;
+        const needsCount = subReviews.filter(r=>r.review_type==="needs_review").length;
+        const myReview = subReviews.find(r=>r.reviewer_id===this.ctx.user.id);
+        const isOwn = p.profile_id === this.ctx.user.id;
         return `
         <div class="timelinePost" data-post="${p.id}">
           <span class="feedTag">${Icon("check")} تسليم واجب</span>
@@ -1976,7 +2048,21 @@ const App = {
           <div class="body">${CodeUp.escapeHtml(p.content||"")}</div>
           ${(filesByPost[p.id]||[]).map(f=>renderFileCard(f,"submissions")).join("")}
           <div class="reactBar">
-            <button class="reactBtn ${myLiked?'active':''}" data-like="${p.id}">إعجاب ${likeCount||""}</button>
+            <button class="pillBtn ${myLiked?'active':''}" data-like="${p.id}" aria-label="إعجاب"><span class="tabIcon">${Icon("heart")}</span><span>${likeCount||0}</span></button>
+            <button class="pillBtn pillRound ${savedIds.has(p.id)?'active':''}" data-save="${p.id}" aria-label="حفظ"><span class="tabIcon">${Icon("bookmark")}</span></button>
+            <button class="pillBtn pillRound" data-share="${p.id}" data-sharetitle="${CodeUp.escapeHtml(p.assignments?.title||'')}" data-sharename="${CodeUp.escapeHtml(p.profiles?.full_name||'')}" aria-label="مشاركة"><span class="tabIcon">${Icon("share_pill")}</span></button>
+          </div>
+          <div class="communityReview" data-communityreview="${p.id}">
+            <div class="crHead"><span class="tabIcon">${Icon("group")}</span><b style="color:var(--ink)">مراجعة المجتمع</b><span class="mono">${subReviews.length} مراجعات</span></div>
+            <div class="crCounts"><span>${meetsCount} مستوفي</span><span>${needsCount} يحتاج مراجعة</span></div>
+            ${isOwn ? `<p class="small">لا يمكنك مراجعة تسليمك الخاص.</p>` : `
+            <div class="reactBar" style="border-top:0;padding-top:0;margin-top:0">
+              <button class="pillBtn ${myReview?.review_type==='meets_requirements'?'active':''}" data-crtype="meets_requirements" data-crsub="${p.id}" aria-label="مستوفي المتطلبات"><span class="tabIcon">${Icon("check_circle")}</span><span>مستوفي المتطلبات</span></button>
+              <button class="pillBtn ${myReview?.review_type==='needs_review'?'active':''}" data-crtype="needs_review" data-crsub="${p.id}" aria-label="يحتاج مراجعة"><span class="tabIcon">${Icon("flag")}</span><span>يحتاج مراجعة</span></button>
+            </div>
+            <textarea data-crcomment="${p.id}" rows="2" placeholder="إضافة ملاحظة تعليمية…">${CodeUp.escapeHtml(myReview?.comment||"")}</textarea>
+            <button class="btn" data-crsave="${p.id}" style="margin-top:6px">حفظ الملاحظة</button>
+            `}
           </div>
           ${CodeUp.buildCommentsBlock(postComments, {roleById, mySquadId, squadById, filesByComment})}
           ${commentComposerHtml(p.id)}
@@ -1985,6 +2071,70 @@ const App = {
       list.insertAdjacentHTML("beforeend", html);
       wireFileCardPreviews(list);
       CodeUp.wireCommentsToggle(list);
+
+      // ===== مراجعة المجتمع: اختيار/تبديل/حفظ ملاحظة — كلها عبر submit_community_review() فقط (RLS تمنع أي إدخال مباشر) =====
+      list.querySelectorAll("[data-crtype]:not([data-wired])").forEach(b=>{
+        b.dataset.wired = "1";
+        b.onclick = async ()=>{
+          const submissionId = b.dataset.crsub;
+          const reviewType = b.dataset.crtype;
+          const wrap = b.closest("[data-communityreview]");
+          const commentVal = wrap.querySelector("[data-crcomment]")?.value || null;
+          try{
+            await db.rpc("submit_community_review", {p_submission_id: submissionId, p_review_type: reviewType, p_comment: commentVal}).throwOnError();
+            load(currentFilter, true);
+          }catch(e){ CodeUp.toast(e.message, "error"); }
+        };
+      });
+      list.querySelectorAll("[data-crsave]:not([data-wired])").forEach(b=>{
+        b.dataset.wired = "1";
+        b.onclick = async ()=>{
+          const submissionId = b.dataset.crsave;
+          const wrap = b.closest("[data-communityreview]");
+          const active = wrap.querySelector("[data-crtype].active");
+          if(!active){ CodeUp.toast("اختر (مستوفي المتطلبات) أو (يحتاج مراجعة) أولًا", "error"); return; }
+          const commentVal = wrap.querySelector("[data-crcomment]")?.value || null;
+          try{
+            await db.rpc("submit_community_review", {p_submission_id: submissionId, p_review_type: active.dataset.crtype, p_comment: commentVal}).throwOnError();
+            CodeUp.toast("تم حفظ ملاحظتك", "success");
+          }catch(e){ CodeUp.toast(e.message, "error"); }
+        };
+      });
+
+      // ===== حفظ (Bookmark) — toggle بسيط، كل مستخدم يدير حفظياته فقط (RLS) =====
+      list.querySelectorAll("[data-save]:not([data-wired])").forEach(b=>{
+        b.dataset.wired = "1";
+        b.onclick = async ()=>{
+          const submissionId = b.dataset.save;
+          const isSaved = b.classList.contains("active");
+          b.disabled = true;
+          try{
+            if(isSaved){
+              await db.from("saved_submissions").delete().eq("submission_id", submissionId).eq("profile_id", this.ctx.user.id).throwOnError();
+              b.classList.remove("active");
+            }else{
+              await db.from("saved_submissions").insert({submission_id: submissionId, profile_id: this.ctx.user.id}).throwOnError();
+              b.classList.add("active");
+            }
+          }catch(e){ CodeUp.toast(e.message, "error"); }
+          finally{ b.disabled = false; }
+        };
+      });
+
+      // ===== مشاركة — Web Share API مع بديل نسخ للحافظة لو غير متاحة =====
+      list.querySelectorAll("[data-share]:not([data-wired])").forEach(b=>{
+        b.dataset.wired = "1";
+        b.onclick = async ()=>{
+          const shareText = `${b.dataset.sharename} — ${b.dataset.sharetitle} — CodeUp`;
+          const shareUrl = window.location.href;
+          if(navigator.share){
+            try{ await navigator.share({title:"CodeUp", text:shareText, url:shareUrl}); }catch(_e){ /* المستخدم ألغى المشاركة */ }
+          }else{
+            try{ await navigator.clipboard.writeText(`${shareText}\n${shareUrl}`); CodeUp.toast("تم نسخ الرابط", "success"); }
+            catch(_e){ CodeUp.toast("تعذّر النسخ", "error"); }
+          }
+        };
+      });
 
       const requireJoin = async ()=>{
         if(myEnrollment) return true;
@@ -2073,11 +2223,15 @@ const App = {
     html += `<div class="grid">` + (squads||[]).map(sq=>{
       const isMine = myEnrollment?.squad_id === sq.id;
       const pending = pendingSquadIds.has(sq.id);
-      const leaders = (sq.squad_leaders||[]).map(l=>l.profiles?.full_name).filter(Boolean).join("، ") || "لا يوجد قائد بعد";
+      // بعد إصلاح RLS: القائد يظهر فقط لعضو المجموعة فعليًا (squad_leaders غير مرئية لغير الأعضاء).
+      // لغير الأعضاء لا نعرض "لا يوجد قائد" (توحي بمجموعة فارغة وهذا مضلِّل) — نعرض دعوة واضحة للانضمام بدلها.
+      const leaders = (sq.squad_leaders||[]).map(l=>l.profiles?.full_name).filter(Boolean).join("، ");
       return `
       <div class="courseCard" ${isMine?`data-detail="${sq.id}" style="cursor:pointer"`:""}>
         <div class="row"><h3>${CodeUp.escapeHtml(sq.name)}</h3>${isMine?'<span class="tag approved">عضو</span>':''}</div>
-        <p class="small">القائد: ${CodeUp.escapeHtml(leaders)}</p>
+        ${isMine
+          ? `<p class="small">القائد: ${CodeUp.escapeHtml(leaders||"لا يوجد قائد بعد")}</p>`
+          : `<p class="small">انضم إلى المجموعة لرؤية الأعضاء ومحتوى المجموعة.</p>`}
         <p class="small">${CodeUp.escapeHtml(sq.description||"")}</p>
         ${isMine ? `<button class="btn" data-detailbtn="${sq.id}">الأعضاء والتفاصيل</button>` : pending
           ? `<button class="btn" disabled>طلبك قيد المراجعة</button>`
@@ -2124,8 +2278,6 @@ const App = {
 
   async openSquadDetailModal(squad, course, isAdmin, isLeader){
     const leaderIds = new Set((squad.squad_leaders||[]).map(l=>l.profile_id));
-    // نفس شرط صلاحية assign_squad_leader() بالضبط: أدمن الكورس، أو قائد هذه المجموعة تحديدًا (مو أي قائد بالكورس)
-    const canManage = isAdmin || leaderIds.has(this.ctx.user.id);
     const {data: members} = await db.from("enrollments").select("profile_id, profiles(full_name, avatar_url)").eq("squad_id", squad.id);
 
     const rows = (members||[]).map(m=>{
@@ -2134,15 +2286,14 @@ const App = {
       return `<tr data-member="${m.profile_id}">
         <td style="display:flex;align-items:center;gap:8px">${CodeUp.avatarHtml(m.profiles?.full_name||"", m.profiles?.avatar_url, 28)} ${CodeUp.escapeHtml(m.profiles?.full_name||"")} ${isLeaderRow?'<span class="tag approved">قائد</span>':''}</td>
         <td>${isMe?"":`<button class="btn" data-msg="${m.profile_id}">مراسلة</button>`}</td>
-        <td>${(canManage && !isLeaderRow)?`<button class="btn" data-makeleader="${m.profile_id}">تعيين قائد</button>`:""}</td>
       </tr>`;
     }).join("");
 
     const m = this.modal(`
       <h3 style="margin-top:0">${CodeUp.escapeHtml(squad.name)}</h3>
       <table class="small" style="width:100%;border-collapse:collapse">
-        <thead><tr><th style="text-align:start">العضو</th><th></th><th></th></tr></thead>
-        <tbody>${rows || `<tr><td colspan="3" class="emptyState">لا يوجد أعضاء بعد.</td></tr>`}</tbody>
+        <thead><tr><th style="text-align:start">العضو</th><th></th></tr></thead>
+        <tbody>${rows || `<tr><td colspan="2" class="emptyState">لا يوجد أعضاء بعد.</td></tr>`}</tbody>
       </table>
       <button class="btn danger" id="leaveSquadBtn" style="margin-top:14px">مغادرة المجموعة</button>
     `);
@@ -2155,17 +2306,9 @@ const App = {
       };
     });
 
-    m.el.querySelectorAll("[data-makeleader]").forEach(b=>{
-      b.onclick = async ()=>{
-        if(!confirm("تعيين هذا العضو قائدًا جديدًا للمجموعة؟ سيتم إنزال القائد الحالي لعضو عادي.")) return;
-        try{
-          await db.rpc("assign_squad_leader", {p_squad_id: squad.id, p_new_leader_id: b.dataset.makeleader}).throwOnError();
-          CodeUp.toast("تم تعيين القائد الجديد", "success");
-          m.close();
-          this.render();
-        }catch(e){ CodeUp.toast(e.message, "error"); }
-      };
-    });
+    // ملاحظة: "تعيين قائد" أُزيلت نهائيًا من لوحة الطالب (بقرار صريح) — أصبحت
+    // متاحة فقط من لوحة تحكم الأدمن لحسابات سوبر أدمن، ومحمية بنفس الشرط
+    // بمستوى RLS/RPC (assign_squad_leader) وليس بمجرد إخفاء الزر هنا.
 
     m.el.querySelector("#leaveSquadBtn").onclick = async ()=>{
       if(!confirm("هل تريد مغادرة هذه المجموعة فعلًا؟")) return;

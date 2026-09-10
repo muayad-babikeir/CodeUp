@@ -43,6 +43,7 @@ Admin.sections.squads = {
     const { data: counts } = await db.from("enrollments").select("squad_id").eq("course_id", cid);
     const memberCount = {};
     (counts||[]).forEach(e=>{ if(e.squad_id) memberCount[e.squad_id] = (memberCount[e.squad_id]||0)+1; });
+    const isSuper = Admin.role === "super"; // تعيين القائد: سوبر أدمن فقط (محمي أيضًا بـRPC/RLS، مو بس إخفاء الزر)
 
     body.innerHTML = `
       <div class="toolbar"><button class="btn dark" id="newSquadBtn">+ مجموعة جديدة</button></div>
@@ -54,7 +55,10 @@ Admin.sections.squads = {
           <td>${memberCount[sq.id]||0}</td>
           <td>${sq.capacity??"—"}</td>
           <td><span class="pill ${sq.status==='active'?'approved':'rejected'}">${sq.status==='active'?'نشطة':'مؤرشفة'}</span></td>
-          <td><button class="btn" data-edit="${sq.id}">تعديل</button></td>
+          <td>
+            <button class="btn" data-edit="${sq.id}">تعديل</button>
+            ${isSuper?`<button class="btn" data-assignleader="${sq.id}">تعيين قائد</button>`:""}
+          </td>
         </tr>`).join("") || `<tr><td colspan="6" class="emptyState">لا توجد مجموعات بعد.</td></tr>`}
       </tbody></table></div>`;
 
@@ -62,8 +66,35 @@ Admin.sections.squads = {
     body.querySelectorAll("[data-edit]").forEach(b=>{
       b.onclick = ()=> openSquadModal(cid, squads.find(s=>s.id===b.dataset.edit));
     });
+    body.querySelectorAll("[data-assignleader]").forEach(b=>{
+      b.onclick = ()=> openAssignLeaderModal(squads.find(s=>s.id===b.dataset.assignleader));
+    });
   }
 };
+
+async function openAssignLeaderModal(squad){
+  const { data: members } = await db.from("enrollments").select("profile_id, profiles(full_name,email)").eq("squad_id", squad.id);
+  if(!members || !members.length){ CodeUp.toast("لا يوجد أعضاء بهذه المجموعة بعد", "error"); return; }
+  const m = Admin.modal(`
+    <h3>تعيين قائد — ${CodeUp.escapeHtml(squad.name)}</h3>
+    <p class="small">اختيار قائد جديد يُنزل القائد الحالي (إن وُجد) لعضو عادي تلقائيًا.</p>
+    <label>العضو</label>
+    <select id="newLeaderSelect">${members.map(mm=>`<option value="${mm.profile_id}">${CodeUp.escapeHtml(mm.profiles?.full_name||mm.profiles?.email||"")}</option>`).join("")}</select>
+    <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
+      <button class="btn" id="alCancel">إلغاء</button><button class="btn dark" id="alSave">تعيين</button>
+    </div><div id="alMsg" class="emptyState" style="display:none;padding:8px;color:#F2555F"></div>
+  `);
+  m.el.querySelector("#alCancel").onclick = m.close;
+  m.el.querySelector("#alSave").onclick = async ()=>{
+    const msgEl = m.el.querySelector("#alMsg");
+    const newLeaderId = m.el.querySelector("#newLeaderSelect").value;
+    try{
+      await db.rpc("assign_squad_leader", {p_squad_id: squad.id, p_new_leader_id: newLeaderId}).throwOnError();
+      CodeUp.toast("تم تعيين القائد الجديد", "success");
+      m.close(); Admin.go("squads");
+    }catch(e){ msgEl.style.display="block"; msgEl.textContent = e.message; }
+  };
+}
 
 function openSquadModal(courseId, squad){
   const isEdit = !!squad;
