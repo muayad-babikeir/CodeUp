@@ -83,8 +83,7 @@ body{
 .bottomBadge{position:absolute;top:2px;inset-inline-end:22%;background:var(--accent);color:#fff;border-radius:20px;min-width:15px;height:15px;font-size:9px;display:flex;align-items:center;justify-content:center;padding:0 3px}
 @media (max-width:720px){
   .bottomNav{display:flex}
-  .wrap{padding-bottom:70px}
-  .topbar{display:none}
+  .wrap{padding-bottom:96px}
 }
 /* ===== الدردشة (نمط X) ===== */
 .chatShell{display:grid;grid-template-columns:320px 1fr;gap:0;height:calc(100vh - 160px);min-height:480px;border:1px solid var(--line);border-radius:16px;overflow:hidden;margin-top:14px;position:relative}
@@ -138,6 +137,16 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
 .dashboard{min-height:100vh;padding:16px}
 .wrap{max-width:1080px;margin:0 auto}
 .topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--surface);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);border-radius:18px;padding:12px 16px;position:sticky;top:10px;z-index:20}
+@media (max-width:720px){
+  /* السبب الحقيقي لتراكب الـTop Bar فوق المنشورات بالهاتف: هذي القاعدة كانت
+     موجودة *قبل* تعريف .topbar الأساسي بالملف (سطر أعلى)، وبما إن ترتيب CSS
+     بنفس درجة التحديد يحسم الأولوية بترتيب الظهور بالملف مو بمكان الميديا كويري،
+     كانت قاعدة display:flex الأساسية (الأحدث بالترتيب) تلغي display:none تلقائيًا
+     — فتظل الشريط ظاهرة وعائمة فوق المحتوى بالهاتف رغم النية إخفاءها. نقلها هنا
+     (بعد التعريف الأساسي مباشرة) يضمن فوزها فعليًا، ونظام الحساب/الإشعارات/الرسائل
+     يبقى متاحًا كاملًا عبر الشريط السفلي وصفحة "حسابي" بدون أي فقدان وظيفة. */
+  .topbar{display:none}
+}
 .topbrand{display:flex;align-items:center;gap:9px;font-weight:700;flex-shrink:0}
 .topbrand .mark{width:30px;height:30px;border-radius:10px;background:var(--surface-solid);border:1px solid var(--line);color:var(--accent-ink);display:grid;place-items:center;font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:13px;overflow:hidden}
 .topbrand .mark img{width:68%;height:68%;object-fit:contain}
@@ -245,7 +254,7 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
 .timelinePost .metaAvatar{width:34px;height:34px;border-radius:50%;object-fit:cover;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px}
 .timelinePost .metaTextCol{display:flex;flex-direction:column;gap:1px;color:var(--ink60);font-size:12.5px}
 .timelinePost .metaTextCol b{color:var(--ink);font-size:13.5px}
-.fabComposeBtn{position:fixed;inset-inline-end:18px;bottom:calc(76px + env(safe-area-inset-bottom));width:56px;height:56px;border-radius:50%;background:var(--accent);color:#fff;border:0;font-size:28px;line-height:1;box-shadow:0 6px 18px rgba(0,0,0,.35);cursor:pointer;z-index:110;display:flex;align-items:center;justify-content:center}
+.fabComposeBtn{position:fixed;inset-inline-end:18px;bottom:calc(84px + env(safe-area-inset-bottom));width:52px;height:52px;border-radius:50%;background:var(--accent);color:#fff;border:0;font-size:26px;line-height:1;box-shadow:0 6px 18px rgba(0,0,0,.35);cursor:pointer;z-index:125;display:flex;align-items:center;justify-content:center}
 .fabComposeBtn:active{transform:scale(.94)}
 .pullRefreshIndicator{display:flex;align-items:center;justify-content:center;height:0;overflow:hidden;color:var(--ink60);font-size:13px;transition:height .15s ease}
 .pullRefreshIndicator.spinning svg{animation:pullSpin .7s linear infinite}
@@ -976,23 +985,33 @@ const App = {
     const body = document.getElementById("profileBody");
     const showPosts = ()=>{
       body.innerHTML = (posts||[]).map(p=>`
-        <div class="card2" data-postid="${p.id}">
-          <div class="body">${CodeUp.escapeHtml(p.content||"")}</div>
+        <div class="card2" data-postid="${p.id}" style="position:relative">
+          ${isMe?`<button class="btn iconBtn" data-postmenu="${p.id}" aria-label="خيارات المنشور" style="position:absolute;inset-inline-end:8px;top:8px">${Icon("more_vertical")}</button>`:""}
+          <div class="body" style="padding-inline-end:${isMe?'34px':'0'}">${CodeUp.escapeHtml(p.content||"")}</div>
           <span class="small mono">${CodeUp.timeAgo(p.created_at)}</span>
-          ${isMe?`<div class="row" style="margin-top:8px"><button class="btn" data-editpost="${p.id}">تعديل</button><button class="btn danger" data-delpost="${p.id}">حذف</button></div>`:""}
         </div>`).join("") || `<div class="emptyState">لا توجد منشورات بعد.</div>`;
       if(isMe){
-        body.querySelectorAll("[data-delpost]").forEach(b=> b.onclick = async ()=>{
-          if(!confirm("حذف هذا المنشور نهائيًا؟")) return;
-          try{ await db.from("posts").delete().eq("id", b.dataset.delpost).eq("profile_id", this.ctx.user.id).throwOnError(); this.renderProfile(profileId); }
-          catch(e){ CodeUp.toast(e.message,"error"); }
-        });
-        body.querySelectorAll("[data-editpost]").forEach(b=> b.onclick = async ()=>{
-          const p = (posts||[]).find(x=>x.id===b.dataset.editpost);
-          const newVal = prompt("عدّل نص المنشور:", p.content);
-          if(newVal===null || !newVal.trim()) return;
-          try{ await db.from("posts").update({content:newVal.trim()}).eq("id", p.id).eq("profile_id", this.ctx.user.id).throwOnError(); this.renderProfile(profileId); }
-          catch(e){ CodeUp.toast(e.message,"error"); }
+        body.querySelectorAll("[data-postmenu]").forEach(b=> b.onclick = ()=>{
+          const p = (posts||[]).find(x=>x.id===b.dataset.postmenu);
+          const m = this.modal(`
+            <h3 style="margin-top:0">خيارات المنشور</h3>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <button class="btn" id="menuEditPost">تعديل</button>
+              <button class="btn danger" id="menuDelPost">حذف</button>
+            </div>`);
+          m.el.querySelector("#menuEditPost").onclick = async ()=>{
+            m.close();
+            const newVal = prompt("عدّل نص المنشور:", p.content);
+            if(newVal===null || !newVal.trim()) return;
+            try{ await db.from("posts").update({content:newVal.trim()}).eq("id", p.id).eq("profile_id", this.ctx.user.id).throwOnError(); this.renderProfile(profileId); }
+            catch(e){ CodeUp.toast(e.message,"error"); }
+          };
+          m.el.querySelector("#menuDelPost").onclick = async ()=>{
+            m.close();
+            if(!confirm("حذف هذا المنشور نهائيًا؟")) return;
+            try{ await db.from("posts").delete().eq("id", p.id).eq("profile_id", this.ctx.user.id).throwOnError(); this.renderProfile(profileId); }
+            catch(e){ CodeUp.toast(e.message,"error"); }
+          };
         });
       }
     };
@@ -1549,6 +1568,7 @@ const App = {
         const myLiked = reactionsFor(item.type, d.id).some(r=>r.user_id===this.ctx.user.id);
         const likeCount = reactionsFor(item.type, d.id).length;
         const itemComments = commentsFor(item.type, d.id);
+        const cBlock = CodeUp.buildCommentsBlock(itemComments, d.id, {filesByComment});
         return `<div class="timelinePost" data-feeditem="${d.id}" data-type="${item.type}">
           <span class="feedTag">${Icon("check")} ${isPost?"منشور":"تسليم واجب"}${!isPost && d.assignments?.courses?.name ? " · " + CodeUp.escapeHtml(d.assignments.courses.name) : ""}</span>
           <div class="metaWithAvatar" data-gotoprofile="${d.profile_id}">${CodeUp.avatarHtml(d.profiles?.full_name||"طالب", d.profiles?.avatar_url)}<div class="metaTextCol"><b>${CodeUp.escapeHtml(d.profiles?.full_name||"طالب")}</b><span class="mono">${CodeUp.timeAgo(d.created_at)}</span></div></div>
@@ -1557,10 +1577,11 @@ const App = {
           ${!isPost?(filesByPost[d.id]||[]).map(f=>renderFileCard(f,"submissions")).join(""):""}
           <div class="reactBar">
             <button class="pillBtn ${myLiked?'active':''}" data-like="${d.id}" data-liketype="${item.type}" aria-label="إعجاب"><span class="tabIcon">${Icon("heart")}</span><span>${likeCount||0}</span></button>
-            ${!isPost?`<button class="pillBtn pillRound ${savedIds.has(d.id)?'active':''}" data-save="${d.id}" aria-label="حفظ"><span class="tabIcon">${Icon("bookmark")}</span></button>`:""}
+            ${cBlock.toggleHtml}
             <button class="pillBtn pillRound" data-share="${d.id}" data-sharename="${CodeUp.escapeHtml(d.profiles?.full_name||'')}" data-sharetitle="${CodeUp.escapeHtml(isPost?'منشور':(d.assignments?.title||''))}" aria-label="مشاركة"><span class="tabIcon">${Icon("share_pill")}</span></button>
+            ${!isPost?`<button class="pillBtn pillRound ${savedIds.has(d.id)?'active':''}" data-save="${d.id}" aria-label="حفظ"><span class="tabIcon">${Icon("bookmark")}</span></button>`:""}
           </div>
-          ${CodeUp.buildCommentsBlock(itemComments, {filesByComment})}
+          ${cBlock.listHtml}
           ${commentComposerHtml(d.id, isPost?"post":"submission")}
         </div>`;
       }).join("");
@@ -1617,30 +1638,16 @@ const App = {
         b.dataset.wired = "1";
         const targetId = b.dataset.commentsend;
         const commentType = b.dataset.commenttype;
-        const cardEl = b.closest(".timelinePost");
-        const getPendingFile = wireCommentComposer(cardEl, targetId);
         b.onclick = async ()=>{
           const input = list.querySelector(`[data-commentinput="${targetId}"]`);
           const val = input.value.trim();
-          const attach = getPendingFile();
-          if(!val && !attach) return;
+          if(!val) return;
           b.disabled = true;
           try{
-            const payload = {user_id:this.ctx.user.id, content: val || "📎"};
+            const payload = {user_id:this.ctx.user.id, content: val};
             if(commentType === "post") payload.post_id = targetId;
             else payload.submission_id = targetId;
-            const {data: row, error} = await db.from("comments").insert(payload).select().single();
-            if(error) throw error;
-            if(attach){
-              const course_id_for_file = safeSubs.find(s=>s.id===targetId)?.assignments?.course_id || null;
-              const uploaded = await CodeUp.uploadCommentAttachment(attach, this.ctx.user.id, row.id);
-              const {data: fileRow} = await db.from("file_uploads").insert({
-                course_id: course_id_for_file, uploader_id: this.ctx.user.id, related_type:"comment",
-                related_id: row.id, storage_path: uploaded.path, file_name: uploaded.name,
-                mime_type: uploaded.type, file_size: uploaded.size
-              }).select().single();
-              if(fileRow) CodeUp.triggerTelegramSend(fileRow.id);
-            }
+            await db.from("comments").insert(payload).throwOnError();
             input.value=""; loadFeed(true);
           }catch(e){ CodeUp.toast(e.message,"error"); b.disabled = false; }
         };
@@ -2040,17 +2047,19 @@ const App = {
         const needsCount = subReviews.filter(r=>r.review_type==="needs_review").length;
         const myReview = subReviews.find(r=>r.reviewer_id===this.ctx.user.id);
         const isOwn = p.profile_id === this.ctx.user.id;
+        const cBlock = CodeUp.buildCommentsBlock(postComments, p.id, {roleById, mySquadId, squadById, filesByComment});
         return `
         <div class="timelinePost" data-post="${p.id}">
           <span class="feedTag">${Icon("check")} تسليم واجب</span>
-          <div class="meta"><b style="color:var(--ink)">${CodeUp.escapeHtml(p.profiles?.full_name||"طالب")}</b><span class="mono">${CodeUp.timeAgo(p.created_at)}</span></div>
+          <div class="metaWithAvatar" data-gotoprofile="${p.profile_id}">${CodeUp.avatarHtml(p.profiles?.full_name||"طالب", p.profiles?.avatar_url)}<div class="metaTextCol"><b>${CodeUp.escapeHtml(p.profiles?.full_name||"طالب")}</b><span class="mono">${CodeUp.timeAgo(p.created_at)}</span></div></div>
           <div class="small mono" style="margin-bottom:6px">${CodeUp.escapeHtml(p.assignments?.title||"")}</div>
           <div class="body">${CodeUp.escapeHtml(p.content||"")}</div>
           ${(filesByPost[p.id]||[]).map(f=>renderFileCard(f,"submissions")).join("")}
           <div class="reactBar">
             <button class="pillBtn ${myLiked?'active':''}" data-like="${p.id}" aria-label="إعجاب"><span class="tabIcon">${Icon("heart")}</span><span>${likeCount||0}</span></button>
-            <button class="pillBtn pillRound ${savedIds.has(p.id)?'active':''}" data-save="${p.id}" aria-label="حفظ"><span class="tabIcon">${Icon("bookmark")}</span></button>
+            ${cBlock.toggleHtml}
             <button class="pillBtn pillRound" data-share="${p.id}" data-sharetitle="${CodeUp.escapeHtml(p.assignments?.title||'')}" data-sharename="${CodeUp.escapeHtml(p.profiles?.full_name||'')}" aria-label="مشاركة"><span class="tabIcon">${Icon("share_pill")}</span></button>
+            <button class="pillBtn pillRound ${savedIds.has(p.id)?'active':''}" data-save="${p.id}" aria-label="حفظ"><span class="tabIcon">${Icon("bookmark")}</span></button>
           </div>
           <div class="communityReview" data-communityreview="${p.id}">
             <div class="crHead"><span class="tabIcon">${Icon("group")}</span><b style="color:var(--ink)">مراجعة المجتمع</b><span class="mono">${subReviews.length} مراجعات</span></div>
@@ -2064,13 +2073,19 @@ const App = {
             <button class="btn" data-crsave="${p.id}" style="margin-top:6px">حفظ الملاحظة</button>
             `}
           </div>
-          ${CodeUp.buildCommentsBlock(postComments, {roleById, mySquadId, squadById, filesByComment})}
+          ${cBlock.listHtml}
           ${commentComposerHtml(p.id)}
         </div>`;
       }).join("");
       list.insertAdjacentHTML("beforeend", html);
       wireFileCardPreviews(list);
       CodeUp.wireCommentsToggle(list);
+
+      list.querySelectorAll("[data-gotoprofile]:not([data-wired])").forEach(el=>{
+        el.dataset.wired = "1";
+        el.style.cursor = "pointer";
+        el.onclick = ()=> this.go({name:"profile", profileId: el.dataset.gotoprofile});
+      });
 
       // ===== مراجعة المجتمع: اختيار/تبديل/حفظ ملاحظة — كلها عبر submit_community_review() فقط (RLS تمنع أي إدخال مباشر) =====
       list.querySelectorAll("[data-crtype]:not([data-wired])").forEach(b=>{
@@ -2168,26 +2183,14 @@ const App = {
       list.querySelectorAll("[data-commentsend]:not([data-wired])").forEach(b=>{
         b.dataset.wired = "1";
         const targetId = b.dataset.commentsend;
-        const postCard = b.closest(".timelinePost");
-        const getPendingFile = wireCommentComposer(postCard, targetId);
         b.onclick = async ()=>{
           if(!(await requireJoin())) return;
           const input = list.querySelector(`[data-commentinput="${targetId}"]`);
           const val = input.value.trim();
-          const attach = getPendingFile();
-          if(!val && !attach) return;
+          if(!val) return;
           b.disabled = true;
           try{
-            const row = await CodeUp.rpc.addComment(targetId, val || "📎");
-            if(attach){
-              const uploaded = await CodeUp.uploadCommentAttachment(attach, this.ctx.user.id, row.id);
-              const {data: fileRow} = await db.from("file_uploads").insert({
-                course_id: course.id, uploader_id: this.ctx.user.id, related_type:"comment",
-                related_id: row.id, storage_path: uploaded.path, file_name: uploaded.name,
-                mime_type: uploaded.type, file_size: uploaded.size
-              }).select().single();
-              if(fileRow) CodeUp.triggerTelegramSend(fileRow.id);
-            }
+            await CodeUp.rpc.addComment(targetId, val);
             input.value="";
             load(currentFilter, true);
           }catch(e){ CodeUp.toast(e.message,"error"); b.disabled = false; }

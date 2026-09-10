@@ -25,6 +25,7 @@ function Icon(name){
     share_pill: '<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>',
     heart: '<path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>',
     bookmark: '<path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>',
+    more_vertical: '<circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/>',
     comment: '<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>',
     home: '<path d="M3 12l9-9 9 9"/><path d="M5 10v10a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1v-4a1 1 0 0 1 1-1h0a1 1 0 0 1 1 1v4a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1V10"/>',
     university: '<path d="M22 10L12 5 2 10l10 5 10-5z"/><path d="M6 12.5v4.5c0 1.66 2.69 3 6 3s6-1.34 6-3v-4.5"/><path d="M22 10v6"/>'
@@ -105,29 +106,8 @@ function wireFileCardPreviews(container){
 function commentComposerHtml(targetId, targetType = "submission"){
   return `<div class="commentBox">
     <input type="text" placeholder="اكتب تعليقًا…" data-commentinput="${targetId}">
-    <input type="file" accept="image/*" data-commentimage="${targetId}" style="display:none">
-    <button class="btn iconBtn" data-commentattachbtn="${targetId}" title="إرفاق صورة">${Icon("paperclip")}</button>
     <button class="btn" data-commentsend="${targetId}" data-commenttype="${targetType}">إرسال</button>
-  </div><div class="commentAttachPreview" data-commentpreview="${targetId}"></div>`;
-}
-
-// يربط زر الإرفاق بمربع تعليق معيّن، ويرجع دالة تجيب الملف الجاهز (لو فيه) وقت الإرسال
-function wireCommentComposer(container, targetId){
-  let pendingFile = null;
-  const previewBox = container.querySelector(`[data-commentpreview="${targetId}"]`);
-  const fileInput = container.querySelector(`[data-commentimage="${targetId}"]`);
-  const attachBtn = container.querySelector(`[data-commentattachbtn="${targetId}"]`);
-
-  if(attachBtn) attachBtn.onclick = () => fileInput.click();
-  if(fileInput) fileInput.onchange = () => {
-    const f = fileInput.files[0];
-    if(!f) return;
-    pendingFile = f;
-    previewBox.innerHTML = `<span class="small">${Icon("paperclip")} ${CodeUp.escapeHtml(f.name)}</span> <button class="btn" data-clearattach>إزالة</button>`;
-    previewBox.querySelector("[data-clearattach]").onclick = () => { pendingFile = null; previewBox.innerHTML = ""; fileInput.value = ""; };
-  };
-
-  return () => pendingFile; // استدعِها وقت الإرسال لتجيب الملف المرفق الحالي (لو فيه)
+  </div>`;
 }
 
 function youtubeIdFromUrl(url){
@@ -386,7 +366,11 @@ const CodeUp = (() => {
   }
 
   // يبني بطاقة تعليقات قابلة للطي، مع اسم الكاتب + شارة الدور (اختياري) + إشارة "من مجموعتك" + مرفق (معاينة عند الطلب)
-  function buildCommentsBlock(itemComments, opts = {}) {
+  // يرجع {toggleHtml, listHtml} منفصلين (بدل نص واحد) حتى يقدر المستدعي يحط زر
+  // التبديل داخل صف أزرار التفاعل بينما تبقى قائمة التعليقات نفسها بمكانها تحت —
+  // الربط بينهم عبر targetId (data-toggleComments/data-commentslist) بدل الاعتماد
+  // على كونهم إخوة متجاورين بالـDOM (كان هذا سبب ظهور زر التعليقات بصف منفصل).
+  function buildCommentsBlock(itemComments, targetId, opts = {}) {
     const { roleById = {}, mySquadId = null, squadById = {}, filesByComment = {} } = opts;
     const count = itemComments.length;
     const rows = itemComments.map(c => {
@@ -401,15 +385,17 @@ const CodeUp = (() => {
         ${file ? renderFileCard(file, "submissions") : ""}
       </div>`;
     }).join("");
-    return `<button class="pillBtn" data-toggleComments aria-label="التعليقات"><span class="tabIcon">${Icon("comment")}</span><span>${count}</span></button>
-      <div class="commentsList hidden">${rows || `<p class="small" style="padding:6px 0">لا توجد تعليقات بعد.</p>`}</div>`;
+    return {
+      toggleHtml: `<button class="pillBtn" data-toggleComments="${targetId}" aria-label="التعليقات"><span class="tabIcon">${Icon("comment")}</span><span>${count}</span></button>`,
+      listHtml: `<div class="commentsList hidden" data-commentslist="${targetId}">${rows || `<p class="small" style="padding:6px 0">لا توجد تعليقات بعد.</p>`}</div>`
+    };
   }
 
   function wireCommentsToggle(container) {
     container.querySelectorAll("[data-toggleComments]").forEach(btn => {
       btn.onclick = () => {
-        const list = btn.nextElementSibling;
-        list.classList.toggle("hidden");
+        const list = container.querySelector(`[data-commentslist="${btn.dataset.toggleComments}"]`);
+        if(list) list.classList.toggle("hidden");
       };
     });
   }
