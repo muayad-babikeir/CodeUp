@@ -85,6 +85,30 @@ body{
   .bottomNav{display:flex}
   .wrap{padding-bottom:96px}
 }
+
+/* ===== منطقة الهيدر الموحّدة (topbar + crumbs/tabs) — سلوك سحب بأسلوب X، هاتف فقط ===== */
+/* على الديسكتوب: الغلاف "يختفي" من صندوق الـlayout تمامًا (display:contents) فتبقى
+   العناصر الداخلية (topbar الخاصة بها بالتصميم القديم) بمكانها الطبيعي بدون أي تغيير. */
+#mobileHeaderWrap{display:contents}
+@media (max-width:720px){
+  #mobileHeaderWrap{
+    display:block; position:fixed; top:0; inset-inline:0; z-index:95;
+    background:var(--surface-solid); border-bottom:1px solid var(--line);
+    transition:transform .28s cubic-bezier(.4,0,.2,1);
+    transform:translateY(0);
+  }
+  #mobileHeaderWrap.headerHidden{ transform:translateY(-100%); }
+  /* الهيدر صار مُدارًا كوحدة واحدة عبر الغلاف الثابت — نلغي sticky/margin
+     الفردية لعناصره الداخلية حتى ما تتحرك بسرعة مختلفة عن بعض */
+  #mobileHeaderWrap .topbar{position:static; border-radius:0; margin:0}
+  #mobileHeaderWrap #crumbs{margin:0; padding:10px 16px 0}
+  #mobileHeaderWrap .fbTabBar{margin:8px 16px 10px}
+  /* المحتوى يحجز نفس ارتفاع الهيدر فعليًا (يُحسب ديناميكيًا بجافاسكريبت)، وينكمش
+     بالتزامن مع اختفاء الهيدر (نفس مدة/منحنى الحركة) حتى يملأ المنشور المساحة
+     المُفرَّغة بدل ما تفضل فجوة فاضية معلّقة مكان الهيدر. */
+  .dashboard > .wrap{ padding-top:var(--mobileHeaderH,0px); transition:padding-top .28s cubic-bezier(.4,0,.2,1); }
+  .dashboard > .wrap.headerCollapsedContent{ padding-top:0 !important; }
+}
 /* ===== الدردشة (نمط X) ===== */
 .chatShell{display:grid;grid-template-columns:320px 1fr;gap:0;height:calc(100vh - 160px);min-height:480px;border:1px solid var(--line);border-radius:16px;overflow:hidden;margin-top:14px;position:relative}
 .chatList{border-inline-end:1px solid var(--line);display:flex;flex-direction:column;position:relative;overflow-y:auto}
@@ -366,6 +390,7 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
 </div>
 
 <div id="dashboardApp" class="dashboard hidden">
+<div id="mobileHeaderWrap">
 <div class="topbar wrap">
 <div class="topbrand"><div class="mark"><img src="codeup-logo.svg" alt="CodeUp"></div></div>
 <div class="topRight">
@@ -384,9 +409,11 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
 <button id="logoutBtn" class="logout">تسجيل الخروج</button>
 </div>
 </div>
+<div id="crumbs" class="crumbs hidden"><button id="crumbHome">→ الرجوع للرئيسية</button></div>
+<div id="mobileTabSlot"></div>
+</div>
 
 <div class="wrap">
-<div id="crumbs" class="crumbs hidden"><button id="crumbHome">→ الرجوع للرئيسية</button></div>
 <div id="viewRoot"></div>
 </div>
 
@@ -614,7 +641,46 @@ const App = {
       };
     });
     window.addEventListener("popstate", ()=> this.routeFromHash(false));
+    this.initHeaderScroll();
     await this.routeFromHash(false, true);
+  },
+
+  // تحكّم تمرير موحّد لمنطقة الهيدر (topbar + crumbs/tabs) — هاتف فقط (≤720px).
+  // مستمع واحد فقط على window (السكرول الحقيقي بالتطبيق كله، لا يوجد حاوية تمرير
+  // داخلية منفصلة — نفس الافتراض المستخدم أصلًا بميزة "اسحب للتحديث"). يحرّك الغلاف
+  // كوحدة واحدة (عنصر واحد يتحرك، لا تعدد مستمعين لكل عنصر فرعي على حدة) ويزامن
+  // انكماش padding-top للمحتوى بنفس اللحظة حتى ما تفضل فجوة فاضية مكان الهيدر.
+  initHeaderScroll(){
+    const wrap = document.getElementById("mobileHeaderWrap");
+    const content = document.querySelector(".dashboard > .wrap");
+    if(!wrap || !content) return;
+
+    let lastY = window.scrollY;
+    let hidden = false;
+    const DEAD_ZONE = 6;   // نتجاهل حركات أصغر من هذا حتى ما يهتز الهيدر مع أدنى لمسة
+    const TOP_ZONE = 24;   // قرب القمة = يظهر الهيدر دائمًا، بغض النظر عن الاتجاه
+
+    const setHidden = (v)=>{
+      if(v === hidden) return; // ما نكرر نفس الحالة (يمنع استدعاءات متكررة بلا داعٍ)
+      hidden = v;
+      wrap.classList.toggle("headerHidden", v);
+      content.classList.toggle("headerCollapsedContent", v);
+    };
+    this._setHeaderHidden = setHidden; // يسمح لـgo() يرجّع الهيدر ظاهرًا عند أي تنقل بين الصفحات/التابات
+
+    const onScroll = ()=>{
+      if(window.innerWidth > 720){ setHidden(false); lastY = window.scrollY; return; } // الديسكتوب غير معني بهذا السلوك إطلاقًا
+      const y = Math.max(0, window.scrollY);
+      const diff = y - lastY;
+      if(y <= TOP_ZONE){ setHidden(false); lastY = y; return; }
+      if(Math.abs(diff) < DEAD_ZONE) return; // منطقة ميتة — يمنع الرجفان مع أدنى تغيّر اتجاه
+      if(diff > 0) setHidden(true);       // نازل → يختفي
+      else setHidden(false);              // طالع (ولو بسيط) → يظهر فورًا بدون انتظار القمة
+      lastY = y;
+    };
+    window.addEventListener("scroll", onScroll, {passive:true});
+    window.addEventListener("resize", ()=>{ this.syncHeaderHeight(); if(window.innerWidth > 720) setHidden(false); }, {passive:true});
+    this.syncHeaderHeight();
   },
 
   // منطق تسجيل الخروج الموحّد — تستخدمه Topbar (كمبيوتر) وإعدادات الحساب (موبايل)، بدون تكرار
@@ -655,6 +721,12 @@ const App = {
   go(view, updateHash = true){
     // نافذة الإشعارات مودال عائم فوق الصفحة — لازم تُغلق عند أي تنقل حتى لا تبقى معلّقة فوق صفحة جديدة
     if(this._openNotifModal){ this._openNotifModal.close(); this._openNotifModal = null; }
+    // تابات الرئيسية تعيش بفتحة دائمة بمنطقة الهيدر — أي تنقل لغير الرئيسية يجب يفرّغها
+    // (renderHome نفسها بتعيد تعبئتها لو رجع المستخدم للرئيسية بعدين)
+    if(view.name !== "home"){
+      const tabSlot = document.getElementById("mobileTabSlot");
+      if(tabSlot) tabSlot.innerHTML = "";
+    }
     this.view = view;
     if(updateHash){
       if(view.name === "course" && view.courseSlug){
@@ -664,6 +736,8 @@ const App = {
       }
     }
     this.render();
+    this.syncHeaderHeight();
+    if(this._setHeaderHidden) this._setHeaderHidden(false); // الهيدر يظهر دايمًا عند أي تنقل جديد، بدل ما يفضل مخفي من الصفحة السابقة
   },
 
   crumbTrail(items){
@@ -674,6 +748,18 @@ const App = {
     items.forEach(it=>{
       const sep=document.createElement("span");sep.textContent="/";sep.className="mono";this.crumbs.appendChild(sep);
       const b=document.createElement("button");b.textContent=it.label;b.onclick=it.onClick;this.crumbs.appendChild(b);
+    });
+    this.syncHeaderHeight();
+  },
+
+  // يقيس الارتفاع الفعلي لمنطقة الهيدر الموحّدة (topbar + crumbs/tabs الظاهرين حاليًا)
+  // ويحجز نفس المساحة أعلى المحتوى بالهاتف — بدونها يبدأ المحتوى تحت الهيدر مباشرة
+  // (Fixed = خارج تدفق الصفحة)، وبالتالي تختفي بداية أول منشور خلفه.
+  syncHeaderHeight(){
+    const wrap = document.getElementById("mobileHeaderWrap");
+    if(!wrap || window.innerWidth > 720) return;
+    requestAnimationFrame(()=>{
+      document.documentElement.style.setProperty("--mobileHeaderH", wrap.offsetHeight + "px");
     });
   },
 
@@ -1207,16 +1293,21 @@ const App = {
     tab = tab || this.view.homeTab || "feed";
     this.crumbs.classList.add("hidden");
 
-    this.root.innerHTML = `
+    // التابات تُرسم داخل الفتحة الدائمة #mobileTabSlot (بمنطقة الهيدر الموحّدة) بدل
+    // #viewRoot — حتى تنزلق مع بقية الهيدر كوحدة واحدة أثناء التمرير بالهاتف، بدل
+    // ما تكون عنصر مستقل يتحرك بسرعة مختلفة عن باقي شريط التنقل العلوي.
+    const tabSlot = document.getElementById("mobileTabSlot");
+    tabSlot.innerHTML = `
       <div class="fbTabBar">
         <button data-hometab="feed" class="${tab==='feed'?'active':''}"><span class="tabIcon">${Icon('home')}</span>الرئيسية</button>
         <button data-hometab="courses" class="${tab==='courses'?'active':''}"><span class="tabIcon">${Icon('learning')}</span>الكورسات</button>
         <button data-hometab="university" class="${tab==='university'?'active':''}"><span class="tabIcon">${Icon('university')}</span>الجامعة</button>
-      </div>
-      <div id="homeBody"></div>`;
-    this.root.querySelectorAll("[data-hometab]").forEach(b=>{
+      </div>`;
+    tabSlot.querySelectorAll("[data-hometab]").forEach(b=>{
       b.onclick = ()=>{ this.view = {name:"home", homeTab:b.dataset.hometab}; this.renderHome(b.dataset.hometab); };
     });
+    this.root.innerHTML = `<div id="homeBody"></div>`;
+    this.syncHeaderHeight();
 
     const body = document.getElementById("homeBody");
     if(tab === "courses") return this.renderHomeCourses(body);
