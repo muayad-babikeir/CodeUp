@@ -1045,7 +1045,7 @@ const App = {
     if(!profile){ this.root.innerHTML = `<div class="emptyState">المستخدم غير موجود.</div>`; return; }
 
     const [{data: posts}, {data: subs}] = await Promise.all([
-      db.from("posts").select("*").eq("profile_id", profileId).order("created_at",{ascending:false}).limit(30),
+      db.from("posts").select("*").eq("profile_id", profileId).eq("status","published").order("created_at",{ascending:false}).limit(30),
       db.from("submissions").select("*, assignments(title)").eq("profile_id", profileId).order("created_at",{ascending:false}).limit(30)
     ]);
 
@@ -1094,8 +1094,8 @@ const App = {
           };
           m.el.querySelector("#menuDelPost").onclick = async ()=>{
             m.close();
-            if(!confirm("حذف هذا المنشور نهائيًا؟")) return;
-            try{ await db.from("posts").delete().eq("id", p.id).eq("profile_id", this.ctx.user.id).throwOnError(); this.renderProfile(profileId); }
+            if(!confirm("حذف هذا المنشور؟ لن يظهر لأي شخص بعد الحذف.")) return;
+            try{ await db.from("posts").update({status:"deleted", deleted_at:new Date().toISOString()}).eq("id", p.id).eq("profile_id", this.ctx.user.id).throwOnError(); this.renderProfile(profileId); }
             catch(e){ CodeUp.toast(e.message,"error"); }
           };
         });
@@ -1213,7 +1213,7 @@ const App = {
       try{
         const [peopleRes, postsRes] = await Promise.all([
           db.from("profiles").select("id,full_name").ilike("full_name", `%${q}%`).neq("id", this.ctx.user.id).limit(10),
-          db.from("posts").select("*, profiles(full_name)").ilike("content", `%${q}%`).order("created_at",{ascending:false}).limit(15)
+          db.from("posts").select("*, profiles(full_name)").eq("status","published").ilike("content", `%${q}%`).order("created_at",{ascending:false}).limit(15)
         ]);
         if(peopleRes.error) throw peopleRes.error;
         if(postsRes.error) throw postsRes.error;
@@ -1438,6 +1438,10 @@ const App = {
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-inline-end:6px"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>
         <span id="pullRefreshLabel">اسحب للتحديث</span>
       </div>
+      <div class="subtabs" id="feedModeTabs" style="margin-bottom:10px">
+        <button data-feedmode="smart" class="active">الرئيسية</button>
+        <button data-feedmode="latest">الأحدث</button>
+      </div>
       <div id="newPostsBanner" class="hidden" style="text-align:center;margin-bottom:10px">
         <button class="btn dark" id="newPostsBtn" style="border-radius:20px">منشورات جديدة — اضغط للتحديث</button>
       </div>
@@ -1445,11 +1449,27 @@ const App = {
       <button class="fabComposeBtn" id="openComposeBtn" title="منشور جديد" aria-label="منشور جديد">+</button>`;
 
     let pendingPostFile = null;
+    let postsMode = "smart"; // "smart" = ترتيب ذكي (Recency+Engagement+Pinned+Diversity) عبر get_ranked_posts، "latest" = زمني بحت
+    body.querySelectorAll("[data-feedmode]").forEach(b=>{
+      b.onclick = ()=>{
+        if(b.dataset.feedmode === postsMode) return;
+        postsMode = b.dataset.feedmode;
+        body.querySelectorAll("[data-feedmode]").forEach(x=>x.classList.toggle("active", x===b));
+        loadFeed(true);
+      };
+    });
 
     const openComposeModal = ()=>{
+      const isAdmin = !!this.ctx.isPlatformAdmin;
+      const typeOptions = [
+        {v:"general", l:"منشور عادي"}, {v:"question", l:"سؤال"}, {v:"educational", l:"محتوى تعليمي"},
+        ...(isAdmin ? [{v:"announcement", l:"إعلان"}, {v:"course_announcement", l:"إعلان دورة"}, {v:"contest_result", l:"نتيجة مسابقة"}, {v:"admin", l:"منشور من الإدارة"}] : [])
+      ];
       const m = this.modal(`
         <h3 style="margin-top:0">منشور جديد</h3>
         <textarea id="newPostText" rows="4" placeholder="شارك تحديثًا أو سؤالًا مع الجميع…" style="width:100%;resize:vertical"></textarea>
+        <label class="small" style="margin-top:8px;display:block">نوع المنشور</label>
+        <select id="newPostType">${typeOptions.map(o=>`<option value="${o.v}">${o.l}</option>`).join("")}</select>
         <div class="commentAttachRow" style="margin-top:8px">
           <input type="file" accept="image/*" id="newPostImage" style="display:none">
           <button class="btn iconBtn" id="newPostAttachBtn" title="إرفاق صورة">${Icon("paperclip")}</button>
@@ -1473,7 +1493,8 @@ const App = {
         const btn = m.el.querySelector("#newPostBtn");
         btn.disabled = true;
         try{
-          const {data: row, error} = await db.from("posts").insert({profile_id:this.ctx.user.id, content: val || "📎"}).select().single();
+          const postType = m.el.querySelector("#newPostType").value;
+          const {data: row, error} = await db.from("posts").insert({profile_id:this.ctx.user.id, content: val || "مرفق", post_type: postType}).select().single();
           if(error) throw error;
           if(pendingPostFile){
             const uploaded = await CodeUp.uploadCommentAttachment(pendingPostFile, this.ctx.user.id, row.id); // نفس منطق الرفع، مسار عام تحت posts
@@ -1510,6 +1531,7 @@ const App = {
     };
 
     const patchPostLocally = (row)=>{
+      if(row.status && row.status !== "published"){ removePostLocally(row.id); return; } // حذف/إخفاء ناعم = يختفي من الفيد فورًا، بدون إعادة تحميل كامل
       const el = list.querySelector(`[data-feeditem="${row.id}"][data-type="post"] .body`);
       if(el) el.textContent = row.content || "";
     };
@@ -1583,14 +1605,24 @@ const App = {
       if(loadingFeed) return;
       loadingFeed = true;
       if(reset){
-        postsCursor = null; subsCursor = null; postsDone = false; subsDone = false;
+        postsCursor = postsMode === "smart" ? 0 : null;
+        subsCursor = null; postsDone = false; subsDone = false;
         renderedIds.clear(); list.innerHTML = ""; newestSeenAt = null;
         feedScrollObserver.observe(moreBox); // إعادة تفعيل التمرير اللانهائي لو كان قد تعطّل بعد وصوله لآخر صفحة سابقًا
       }
       moreBox.innerHTML = `<div class="emptyState">جارِ التحميل…</div>`;
 
-      let postsQ = db.from("posts").select("*, profiles(full_name,avatar_url)").order("created_at",{ascending:false}).limit(PAGE_SIZE);
-      if(postsCursor) postsQ = postsQ.lt("created_at", postsCursor);
+      let postsPromise;
+      if(postsDone){
+        postsPromise = Promise.resolve({data:[]});
+      }else if(postsMode === "smart"){
+        // ترتيب ذكي (حداثة+تفاعل+أهمية النوع+تثبيت+تنويع) — محسوب بالكامل داخل قاعدة البيانات (get_ranked_posts)
+        postsPromise = db.rpc("get_ranked_posts", {p_cursor_rank: postsCursor||0, p_limit: PAGE_SIZE});
+      }else{
+        let latestQ = db.from("posts").select("*, profiles(full_name,avatar_url)").eq("status","published").order("created_at",{ascending:false}).limit(PAGE_SIZE);
+        if(postsCursor) latestQ = latestQ.lt("created_at", postsCursor);
+        postsPromise = latestQ;
+      }
       let subsQ = (myCourseIds.length && !subsDone)
         ? db.from("submissions").select("*, assignments(title,course_id,courses(name)), profiles(full_name,avatar_url)").in("assignments.course_id", myCourseIds).in("visibility",["course","squad"]).order("created_at",{ascending:false}).limit(PAGE_SIZE)
         : null;
@@ -1598,17 +1630,22 @@ const App = {
 
       const [{data: announcements}, postsRes, subsRes] = await Promise.all([
         reset ? db.from("announcements").select("*, profiles(full_name,avatar_url)").is("course_id", null).order("created_at",{ascending:false}).limit(10) : Promise.resolve({data:[]}),
-        postsDone ? Promise.resolve({data:[]}) : postsQ,
+        postsPromise,
         subsQ || Promise.resolve({data:[]})
       ]);
       const posts = postsRes.data, subs = subsRes.data;
       const safeSubs = (subs||[]).filter(s=>s.assignments); // استبعاد أي صف ما رجع بسبب inner join
-      const safePosts = posts || [];
+      // منطقة الترتيب الذكي ترجع الاسم/الصورة كأعمدة مباشرة بدل علاقة profiles متداخلة — نطبّعها لنفس الشكل
+      const safePosts = (posts || []).map(p=>
+        postsMode === "smart"
+          ? {...p, profiles:{full_name:p.full_name, avatar_url:p.avatar_url}, sortKey:p.effective_created_at}
+          : {...p, sortKey:p.created_at}
+      );
 
       // تحديث حالة "خلصت الصفحات" لكل مصدر لحاله (كل واحد يوقف طلبه لما يرجع أقل من PAGE_SIZE)
       if(safePosts.length < PAGE_SIZE) postsDone = true;
       if((subs||[]).length < PAGE_SIZE) subsDone = true;
-      if(safePosts.length) postsCursor = safePosts[safePosts.length-1].created_at;
+      if(safePosts.length) postsCursor = postsMode === "smart" ? safePosts[safePosts.length-1].global_rank : safePosts[safePosts.length-1].created_at;
       if((subs||[]).length) subsCursor = subs[subs.length-1].created_at;
 
       if(reset && !safeSubs.length && !safePosts.length && !(announcements||[]).length){
@@ -1634,7 +1671,7 @@ const App = {
 
       const feed = [
         ...newAnnouncements.map(a=>({type:"announcement", created_at:a.created_at, data:a})),
-        ...newPosts.map(p=>({type:"post", created_at:p.created_at, data:p})),
+        ...newPosts.map(p=>({type:"post", created_at:p.sortKey||p.created_at, data:p})),
         ...newSubs.map(s=>({type:"submission", created_at:s.created_at, data:s}))
       ].sort((x,y)=> new Date(y.created_at) - new Date(x.created_at));
 
@@ -1656,12 +1693,14 @@ const App = {
         }
         const isPost = item.type==="post";
         const d = item.data;
+        const POST_TYPE_LABEL = {question:"سؤال", educational:"محتوى تعليمي", announcement:"إعلان", course_announcement:"إعلان دورة", contest_result:"نتيجة مسابقة", admin:"من الإدارة"};
+        const typeLabel = isPost && POST_TYPE_LABEL[d.post_type];
         const myLiked = reactionsFor(item.type, d.id).some(r=>r.user_id===this.ctx.user.id);
         const likeCount = reactionsFor(item.type, d.id).length;
         const itemComments = commentsFor(item.type, d.id);
         const cBlock = CodeUp.buildCommentsBlock(itemComments, d.id, {filesByComment});
         return `<div class="timelinePost" data-feeditem="${d.id}" data-type="${item.type}">
-          <span class="feedTag">${Icon("check")} ${isPost?"منشور":"تسليم واجب"}${!isPost && d.assignments?.courses?.name ? " · " + CodeUp.escapeHtml(d.assignments.courses.name) : ""}</span>
+          <span class="feedTag">${Icon("check")} ${isPost?"منشور":"تسليم واجب"}${!isPost && d.assignments?.courses?.name ? " · " + CodeUp.escapeHtml(d.assignments.courses.name) : ""}${typeLabel?" · "+typeLabel:""}${isPost && d.is_pinned?` · ${Icon("bookmark")} مثبَّت`:""}</span>
           <div class="metaWithAvatar" data-gotoprofile="${d.profile_id}">${CodeUp.avatarHtml(d.profiles?.full_name||"طالب", d.profiles?.avatar_url)}<div class="metaTextCol"><b>${CodeUp.escapeHtml(d.profiles?.full_name||"طالب")}</b><span class="mono">${CodeUp.timeAgo(d.created_at)}</span></div></div>
           ${!isPost?`<div class="small mono" style="margin-bottom:6px">${CodeUp.escapeHtml(d.assignments?.title||"")}</div>`:""}
           <div class="body">${CodeUp.escapeHtml(d.content||"")}</div>
@@ -1671,6 +1710,7 @@ const App = {
             ${cBlock.toggleHtml}
             <button class="pillBtn pillRound" data-share="${d.id}" data-sharename="${CodeUp.escapeHtml(d.profiles?.full_name||'')}" data-sharetitle="${CodeUp.escapeHtml(isPost?'منشور':(d.assignments?.title||''))}" aria-label="مشاركة"><span class="tabIcon">${Icon("share_pill")}</span></button>
             ${!isPost?`<button class="pillBtn pillRound ${savedIds.has(d.id)?'active':''}" data-save="${d.id}" aria-label="حفظ"><span class="tabIcon">${Icon("bookmark")}</span></button>`:""}
+            ${isPost && this.ctx.isPlatformAdmin?`<button class="pillBtn pillRound ${d.is_pinned?'active':''}" data-pinpost="${d.id}" data-pinned="${d.is_pinned?'1':'0'}" aria-label="${d.is_pinned?'إلغاء التثبيت':'تثبيت'}"><span class="tabIcon">${Icon("more_vertical")}</span></button>`:""}
           </div>
           ${cBlock.listHtml}
           ${commentComposerHtml(d.id, isPost?"post":"submission")}
@@ -1721,10 +1761,32 @@ const App = {
         };
       });
 
+      // ===== تثبيت/إلغاء تثبيت — سوبر أدمن فقط (الزر أصلًا لا يظهر لغيره، والدالة تتحقق بنفسها أيضًا) =====
+      list.querySelectorAll("[data-pinpost]:not([data-wired])").forEach(b=>{
+        b.dataset.wired = "1";
+        b.onclick = async ()=>{
+          const isPinned = b.dataset.pinned === "1";
+          try{
+            if(isPinned){
+              await db.rpc("unpin_post", {p_post_id: b.dataset.pinpost}).throwOnError();
+              CodeUp.toast("تم إلغاء التثبيت", "success");
+            }else{
+              const days = prompt("عدد أيام التثبيت (اتركه فارغًا للتثبيت الدائم):", "3");
+              if(days===null) return;
+              const until = days.trim() ? new Date(Date.now() + Number(days)*86400000).toISOString() : null;
+              await db.rpc("pin_post", {p_post_id: b.dataset.pinpost, p_pinned_until: until}).throwOnError();
+              CodeUp.toast("تم تثبيت المنشور", "success");
+            }
+            loadFeed(true);
+          }catch(e){ CodeUp.toast(e.message,"error"); }
+        };
+      });
+
       list.querySelectorAll("[data-like]:not([data-wired])").forEach(b=>{
         b.dataset.wired = "1";
         b.onclick = async ()=>{ await CodeUp.withBtnLoading(b, async ()=>{ try{ await CodeUp.rpc.toggleReaction(b.dataset.liketype, b.dataset.like, "like"); loadFeed(true); }catch(e){ CodeUp.toast(e.message,"error"); } }); };
       });
+
       list.querySelectorAll("[data-commentsend]:not([data-wired])").forEach(b=>{
         b.dataset.wired = "1";
         const targetId = b.dataset.commentsend;
