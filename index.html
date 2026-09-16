@@ -265,6 +265,25 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
 .iconBtn.isLoading svg{visibility:hidden}
 .small{font-size:12.5px;color:var(--ink60)}
 .emptyState{text-align:center;padding:36px 16px;color:var(--ink60);font-size:13.5px}
+/* ===== Skeleton Loading — عناصر أساسية بسيطة تُستخدم كبديل لأي "جارِ التحميل…" نصي.
+   نعتمد على نفس classes الحقيقية (timelinePost/metaAvatar/convRow...) لضمان تطابق الأبعاد
+   وborder-radius وspacing تلقائيًا بدل تكرارها، ونضيف فقط شكل الحركة والألوان الرمادية. ===== */
+.skeleton{background:linear-gradient(90deg, rgba(239,243,244,.06) 25%, rgba(239,243,244,.13) 37%, rgba(239,243,244,.06) 63%);background-size:400% 100%;border-radius:6px;animation:skeletonShimmer 1.4s ease infinite}
+@keyframes skeletonShimmer{0%{background-position:100% 50%}100%{background-position:0 50%}}
+.skeleton-avatar{width:34px;height:34px;border-radius:50%;flex-shrink:0}
+.skeleton-line{height:11px;border-radius:6px}
+.skeleton-line.w60{width:60%}
+.skeleton-line.w80{width:80%}
+.skeleton-line.w40{width:40%}
+.skeleton-media{height:120px;border-radius:12px;margin-top:8px}
+.skeleton-action{height:28px;width:64px;border-radius:999px}
+.skeleton-post .metaWithAvatar{margin-bottom:10px}
+.skeleton-post .skeleton-line + .skeleton-line{margin-top:8px}
+.skeleton-post .reactBar{display:flex;gap:8px;border-top:0;padding-top:2px}
+@media (prefers-reduced-motion: reduce){
+  .skeleton{animation:none;background-position:50% 50%}
+}
+
 .modalBg{position:fixed;inset:0;background:rgba(2,2,4,.68);display:grid;place-items:center;padding:16px;z-index:100;overflow:auto}
 .modal{background:var(--surface-solid);border:1px solid var(--line-strong);border-radius:20px;padding:22px;width:min(460px,100%);max-height:88vh;overflow:auto;box-shadow:var(--shadow)}
 .modal.modalFixedShell{display:flex;flex-direction:column;max-height:80vh;padding:0;overflow:hidden}
@@ -874,7 +893,7 @@ const App = {
             <p class="small" id="chatStatusLine">تواصل مع طلاب CodeUp</p>
             <input type="text" id="chatSearchInput" placeholder="بحث عن محادثة أو شخص…" class="chatSearchInput">
           </div>
-          <div id="convList"><div class="emptyState">جارِ التحميل…</div></div>
+          <div id="convList">${skeletonRowsHtml(5)}</div>
           <button id="newChatFab" class="chatFab" title="محادثة جديدة" aria-label="محادثة جديدة">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
           </button>
@@ -959,7 +978,7 @@ const App = {
 
   async renderChatThread(conversationId){
     const pane = document.getElementById("chatThreadPane");
-    pane.innerHTML = `<div class="emptyState">جارِ التحميل…</div>`;
+    pane.innerHTML = `<div class="chatMessages">${skeletonChatBubblesHtml(4)}</div>`;
 
     const {data: conv} = await db.from("conversations")
       .select("*, a:profiles!conversations_user_a_fkey(id,full_name), b:profiles!conversations_user_b_fkey(id,full_name)")
@@ -973,7 +992,7 @@ const App = {
         <div class="convAvatar">${CodeUp.escapeHtml((other.full_name||"?")[0])}</div>
         <b>${CodeUp.escapeHtml(other.full_name||"مستخدم")}</b>
       </div>
-      <div class="chatMessages" id="chatMessages"><div class="emptyState">جارِ التحميل…</div></div>
+      <div class="chatMessages" id="chatMessages">${skeletonChatBubblesHtml(4)}</div>
       <form class="chatComposer" id="chatComposerForm">
         <input type="text" id="chatMsgInput" placeholder="اكتب رسالة…" maxlength="2000" autocomplete="off">
         <button type="submit" class="btn dark">إرسال</button>
@@ -1209,7 +1228,7 @@ const App = {
       const q = e.target.value.trim();
       const box = document.getElementById("searchResults");
       if(q.length < 2){ box.innerHTML = `<div class="emptyState">اكتب حرفين على الأقل.</div>`; return; }
-      box.innerHTML = `<div class="emptyState">جارِ البحث…</div>`;
+      box.innerHTML = skeletonRowsHtml(4);
       try{
         const [peopleRes, postsRes] = await Promise.all([
           db.from("profiles").select("id,full_name").ilike("full_name", `%${q}%`).neq("id", this.ctx.user.id).limit(10),
@@ -1316,6 +1335,11 @@ const App = {
   },
 
   async renderHomeCourses(body){
+    // Skeleton فوري قبل أي تحقق كاش/طلب — يُستبدل بالمحتوى الحقيقي بدون أي إعادة رسم إضافية
+    body.innerHTML = `<div class="grid">${Array.from({length:4}, ()=>`<div class="courseCard skeleton-row" aria-hidden="true" style="pointer-events:none">
+      <div class="skeleton skeleton-line w60" style="height:15px;margin-bottom:10px"></div>
+      <div class="skeleton skeleton-line w80" style="height:11px"></div>
+    </div>`).join("")}</div>`;
     // كاش بسيط بذاكرة الجلسة (60 ثانية) — قائمة الكورسات المنشورة تتغيّر نادرًا،
     // وتبديل التابات (الرئيسية/الكورسات) المتكرر كان يعيد جلبها من الصفر كل مرة بلا داعٍ.
     const CACHE_TTL = 60000;
@@ -1449,6 +1473,7 @@ const App = {
       <button class="fabComposeBtn" id="openComposeBtn" title="منشور جديد" aria-label="منشور جديد">+</button>`;
 
     let pendingPostFile = null;
+    let isComposeOpen = false; // يمنع فتح أكثر من Modal إنشاء منشور عند الضغط المتكرر/السريع على زر +
     let postsMode = "smart"; // "smart" = ترتيب ذكي (Recency+Engagement+Pinned+Diversity) عبر get_ranked_posts، "latest" = زمني بحت
     body.querySelectorAll("[data-feedmode]").forEach(b=>{
       b.onclick = ()=>{
@@ -1460,6 +1485,8 @@ const App = {
     });
 
     const openComposeModal = ()=>{
+      if(isComposeOpen) return; // ضغطة إضافية على + والنافذة مفتوحة أصلًا — تُتجاهل بدل فتح Modal ثانٍ
+      isComposeOpen = true;
       const isAdmin = !!this.ctx.isPlatformAdmin;
       const typeOptions = [
         {v:"general", l:"منشور عادي"}, {v:"question", l:"سؤال"}, {v:"educational", l:"محتوى تعليمي"},
@@ -1476,7 +1503,7 @@ const App = {
           <div style="flex:1"></div>
           <button class="btn dark" id="newPostBtn">نشر</button>
         </div>
-        <div id="newPostPreview" style="margin-top:6px"></div>`);
+        <div id="newPostPreview" style="margin-top:6px"></div>`, ()=>{ isComposeOpen = false; }); // يعيد فتح الزر بشكل طبيعي بعد أي إغلاق (نشر أو إلغاء)
 
       const postPreview = m.el.querySelector("#newPostPreview");
       m.el.querySelector("#newPostAttachBtn").onclick = ()=> m.el.querySelector("#newPostImage").click();
@@ -1496,6 +1523,7 @@ const App = {
           const postType = m.el.querySelector("#newPostType").value;
           const {data: row, error} = await db.from("posts").insert({profile_id:this.ctx.user.id, content: val || "مرفق", post_type: postType}).select().single();
           if(error) throw error;
+          const uploadedHadFile = !!pendingPostFile;
           if(pendingPostFile){
             const uploaded = await CodeUp.uploadCommentAttachment(pendingPostFile, this.ctx.user.id, row.id); // نفس منطق الرفع، مسار عام تحت posts
             await db.from("file_uploads").insert({
@@ -1507,7 +1535,16 @@ const App = {
           }
           pendingPostFile=null;
           m.close();
-          loadFeed(true); CodeUp.toast("تم النشر","success");
+          if(uploadedHadFile){
+            // منشور بمرفق: نعتمد حاليًا على تحديث الفيد لضمان ظهور الملف بشكل صحيح بعد اكتمال الرفع والتوقيع
+            loadFeed(true);
+          }else{
+            // منشور نصّي بدون مرفق (الحالة الأشيع): إدراج محلي فوري بدون أي طلب/إعادة تحميل للفيد
+            list.insertAdjacentHTML("afterbegin", buildOwnPostHtml(row));
+            renderedIds.add(row.id);
+            wireFeedInteractions(list);
+          }
+          CodeUp.toast("تم النشر","success");
         }catch(e){ CodeUp.toast(e.message,"error"); }
         finally{ btn.disabled = false; }
       };
@@ -1520,6 +1557,149 @@ const App = {
     let postsCursor = null, subsCursor = null; // keyset pagination بدل range/offset — ما يتأثر بإضافة صفوف جديدة أثناء التصفح
     let postsDone = false, subsDone = false;
     let loadingFeed = false;
+
+    // يبني نفس بطاقة المنشور المستخدمة داخل loadFeed، لكن لمنشور نصّي جديد لسّه ما وصل من الخادم بعد
+    // (بدون تفاعلات/تعليقات — طبيعي لمنشور لحظة نشره) — يُستخدم للإدراج المحلي الفوري بعد النشر
+    // بدل إعادة تحميل الفيد بالكامل.
+    const buildOwnPostHtml = (row)=>{
+      const cBlock = CodeUp.buildCommentsBlock([], row.id, {});
+      return `<div class="timelinePost" data-feeditem="${row.id}" data-type="post">
+        <span class="feedTag">${Icon("check")} منشور</span>
+        <div class="metaWithAvatar" data-gotoprofile="${this.ctx.user.id}">${CodeUp.avatarHtml(this.ctx.profile?.full_name||"طالب", this.ctx.profile?.avatar_url)}<div class="metaTextCol"><b>${CodeUp.escapeHtml(this.ctx.profile?.full_name||"طالب")}</b><span class="mono">${CodeUp.timeAgo(row.created_at)}</span></div></div>
+        <div class="body">${CodeUp.escapeHtml(row.content||"")}</div>
+        <div class="reactBar">
+          <button class="pillBtn" data-like="${row.id}" data-liketype="post" aria-label="إعجاب"><span class="tabIcon">${Icon("heart")}</span><span>0</span></button>
+          ${cBlock.toggleHtml}
+          <button class="pillBtn pillRound" data-share="${row.id}" data-sharename="${CodeUp.escapeHtml(this.ctx.profile?.full_name||"")}" data-sharetitle="منشور" aria-label="مشاركة"><span class="tabIcon">${Icon("share_pill")}</span></button>
+          ${this.ctx.isPlatformAdmin?`<button class="pillBtn pillRound" data-pinpost="${row.id}" data-pinned="0" aria-label="تثبيت"><span class="tabIcon">${Icon("more_vertical")}</span></button>`:""}
+        </div>
+        ${cBlock.listHtml}
+        ${commentComposerHtml(row.id, "post")}
+      </div>`;
+    };
+
+    // ===== تفاعلات بطاقة المنشور/التسليم (إعجاب/تعليق/مشاركة/حفظ/تثبيت) =====
+    // مستخرجة بدالة واحدة تُستدعى مرتين: بعد كل صفحة تحميل من loadFeed، وبعد أي إدراج محلي
+    // فوري (منشور جديد) — الاعتماد على `:not([data-wired])` يضمن عدم تكرار أي مستمع حدث.
+    const wireFeedInteractions = (container)=>{
+      container.querySelectorAll("[data-gotoprofile]:not([data-wired])").forEach(el=>{
+        el.dataset.wired = "1";
+        el.style.cursor = "pointer";
+        el.onclick = ()=> this.go({name:"profile", profileId: el.dataset.gotoprofile});
+      });
+
+      // ===== حفظ (Bookmark) — للتسليمات فقط، toggle بسيط محمي بـRLS =====
+      container.querySelectorAll("[data-save]:not([data-wired])").forEach(b=>{
+        b.dataset.wired = "1";
+        b.onclick = async ()=>{
+          const submissionId = b.dataset.save;
+          const isSaved = b.classList.contains("active");
+          b.disabled = true;
+          try{
+            if(isSaved){
+              await db.from("saved_submissions").delete().eq("submission_id", submissionId).eq("profile_id", this.ctx.user.id).throwOnError();
+              b.classList.remove("active");
+            }else{
+              await db.from("saved_submissions").insert({submission_id: submissionId, profile_id: this.ctx.user.id}).throwOnError();
+              b.classList.add("active");
+            }
+          }catch(e){ CodeUp.toast(e.message, "error"); }
+          finally{ b.disabled = false; }
+        };
+      });
+
+      // ===== مشاركة — Web Share API مع بديل نسخ للحافظة =====
+      container.querySelectorAll("[data-share]:not([data-wired])").forEach(b=>{
+        b.dataset.wired = "1";
+        b.onclick = async ()=>{
+          const shareText = `${b.dataset.sharename} — ${b.dataset.sharetitle} — CodeUp`;
+          const shareUrl = window.location.href;
+          if(navigator.share){
+            try{ await navigator.share({title:"CodeUp", text:shareText, url:shareUrl}); }catch(_e){ /* المستخدم ألغى المشاركة */ }
+          }else{
+            try{ await navigator.clipboard.writeText(`${shareText}\n${shareUrl}`); CodeUp.toast("تم نسخ الرابط", "success"); }
+            catch(_e){ CodeUp.toast("تعذّر النسخ", "error"); }
+          }
+        };
+      });
+
+      // ===== تثبيت/إلغاء تثبيت — سوبر أدمن فقط (الزر أصلًا لا يظهر لغيره، والدالة تتحقق بنفسها أيضًا) =====
+      container.querySelectorAll("[data-pinpost]:not([data-wired])").forEach(b=>{
+        b.dataset.wired = "1";
+        b.onclick = async ()=>{
+          const isPinned = b.dataset.pinned === "1";
+          try{
+            if(isPinned){
+              await db.rpc("unpin_post", {p_post_id: b.dataset.pinpost}).throwOnError();
+              CodeUp.toast("تم إلغاء التثبيت", "success");
+            }else{
+              const days = prompt("عدد أيام التثبيت (اتركه فارغًا للتثبيت الدائم):", "3");
+              if(days===null) return;
+              const until = days.trim() ? new Date(Date.now() + Number(days)*86400000).toISOString() : null;
+              await db.rpc("pin_post", {p_post_id: b.dataset.pinpost, p_pinned_until: until}).throwOnError();
+              CodeUp.toast("تم تثبيت المنشور", "success");
+            }
+            loadFeed(true); // إعادة الترتيب فعليًا تتأثر بالتثبيت، فالتحديث الكامل هنا مقصود وصحيح (إجراء إداري نادر، وليس تفاعل متكرر كالإعجاب/التعليق)
+          }catch(e){ CodeUp.toast(e.message,"error"); }
+        };
+      });
+
+      // ===== إعجاب — تحديث فوري (Optimistic UI) بدون أي إعادة تحميل للفيد؛ رجوع تلقائي للحالة السابقة عند فشل الطلب =====
+      container.querySelectorAll("[data-like]:not([data-wired])").forEach(b=>{
+        b.dataset.wired = "1";
+        b.onclick = async ()=>{
+          if(b.disabled) return; // يمنع ضغط متكرر/سريع يسبب تسابق طلبات (race condition)
+          const countEl = b.querySelector("span:last-child");
+          const wasLiked = b.classList.contains("active");
+          const prevCount = Number(countEl.textContent)||0;
+          b.classList.toggle("active", !wasLiked);
+          countEl.textContent = wasLiked ? Math.max(0, prevCount-1) : prevCount+1;
+          b.disabled = true;
+          try{
+            await CodeUp.rpc.toggleReaction(b.dataset.liketype, b.dataset.like, "like");
+          }catch(e){
+            b.classList.toggle("active", wasLiked); // فشل الطلب — رجوع فوري للحالة قبل الضغط
+            countEl.textContent = prevCount;
+            CodeUp.toast(e.message,"error");
+          } finally { b.disabled = false; }
+        };
+      });
+
+      // ===== تعليق — إضافة محلية فورية للتعليق وتحديث العدّاد، بدون إعادة تحميل الفيد =====
+      container.querySelectorAll("[data-commentsend]:not([data-wired])").forEach(b=>{
+        b.dataset.wired = "1";
+        const targetId = b.dataset.commentsend;
+        const commentType = b.dataset.commenttype;
+        b.onclick = async ()=>{
+          const input = container.querySelector(`[data-commentinput="${targetId}"]`);
+          const val = input.value.trim();
+          if(!val || b.disabled) return;
+          b.disabled = true;
+          try{
+            const payload = {user_id:this.ctx.user.id, content: val};
+            if(commentType === "post") payload.post_id = targetId;
+            else payload.submission_id = targetId;
+            await db.from("comments").insert(payload).throwOnError();
+            input.value = "";
+            const commentsList = container.querySelector(`[data-commentslist="${targetId}"]`);
+            if(commentsList){
+              const empty = commentsList.querySelector("p.small");
+              if(empty) empty.remove();
+              commentsList.insertAdjacentHTML("beforeend", `<div class="comment">
+                <div class="commentHead"><b>${CodeUp.escapeHtml(this.ctx.profile?.full_name||"مستخدم")}</b></div>
+                <div>${CodeUp.escapeHtml(val)}</div>
+              </div>`);
+              commentsList.classList.remove("hidden");
+            }
+            const toggleBtn = container.querySelector(`[data-toggleComments="${targetId}"]`);
+            const countSpan = toggleBtn?.querySelector("span:last-child");
+            if(countSpan) countSpan.textContent = (Number(countSpan.textContent)||0) + 1;
+          }catch(e){ CodeUp.toast(e.message,"error"); }
+          finally{ b.disabled = false; }
+        };
+      });
+    };
+
     let newestSeenAt = null; // أحدث created_at شفناه فعليًا — نستخدمه للحاق أي منشور فاتنا بعد انقطاع الاتصال
 
     // ===== بث حي: تنبيه "منشورات جديدة" + تحديث/حذف محلي بدون إعادة تحميل الفيد كامل =====
@@ -1545,7 +1725,7 @@ const App = {
     let hadSubscribedBefore = false;
     this._feedRealtimeChannel = db.channel("home-feed-posts")
       .on("postgres_changes", {event:"INSERT", schema:"public", table:"posts"}, (payload)=>{
-        if(payload.new?.profile_id === this.ctx.user.id) return; // منشورك أنت يظهر فورًا أصلًا عبر loadFeed(true) بالأعلى، ما نكرره
+        if(payload.new?.profile_id === this.ctx.user.id) return; // منشورك أنت نضيفه محليًا فورًا لحظة الضغط على "نشر" (buildOwnPostHtml)، فما نكرره هنا
         if(renderedIds.has(payload.new.id)) return; // منشور وصلنا فعليًا بصفحة سابقة (نادر لكن ممكن أثناء إعادة الاتصال)
         newPostsBanner.classList.remove("hidden");
       })
@@ -1607,11 +1787,15 @@ const App = {
       if(reset){
         postsCursor = postsMode === "smart" ? 0 : null;
         subsCursor = null; postsDone = false; subsDone = false;
-        renderedIds.clear(); list.innerHTML = ""; newestSeenAt = null;
+        renderedIds.clear(); newestSeenAt = null;
+        list.innerHTML = skeletonPostsHtml(3); // Skeleton يظهر فورًا قبل بداية أي طلب شبكة، بدل تفريغ الشاشة أو نص "جارِ التحميل…"
+        moreBox.innerHTML = "";
         feedScrollObserver.observe(moreBox); // إعادة تفعيل التمرير اللانهائي لو كان قد تعطّل بعد وصوله لآخر صفحة سابقًا
+      }else{
+        moreBox.innerHTML = skeletonPostsHtml(1); // تحميل صفحة تالية: Skeleton صغير أسفل القائمة فقط، بدون مسّ المنشورات المعروضة أصلًا
       }
-      moreBox.innerHTML = `<div class="emptyState">جارِ التحميل…</div>`;
 
+      try{
       let postsPromise;
       if(postsDone){
         postsPromise = Promise.resolve({data:[]});
@@ -1649,7 +1833,7 @@ const App = {
       if((subs||[]).length) subsCursor = subs[subs.length-1].created_at;
 
       if(reset && !safeSubs.length && !safePosts.length && !(announcements||[]).length){
-        list.innerHTML = `<div class="emptyState">لا توجد منشورات بعد. كن أول من يشارك شيئًا!</div>`; moreBox.innerHTML = ""; loadingFeed = false; return;
+        list.innerHTML = `<div class="emptyState">لا توجد منشورات بعد. كن أول من يشارك شيئًا!</div>`; moreBox.innerHTML = ""; return;
       }
 
       const [{data: reactions}, {data: comments}, {data: postFiles}, {data: savedRows}] = await Promise.all([
@@ -1716,95 +1900,12 @@ const App = {
           ${commentComposerHtml(d.id, isPost?"post":"submission")}
         </div>`;
       }).join("");
+      if(reset) list.innerHTML = ""; // يستبدل الـSkeleton بالمحتوى الحقيقي دفعة واحدة (بدون وميض/flash ملحوظ)
       list.insertAdjacentHTML("beforeend", html);
       wireFileCardPreviews(list);
       CodeUp.wireCommentsToggle(list);
 
-      list.querySelectorAll("[data-gotoprofile]:not([data-wired])").forEach(el=>{
-        el.dataset.wired = "1";
-        el.style.cursor = "pointer";
-        el.onclick = ()=> this.go({name:"profile", profileId: el.dataset.gotoprofile});
-      });
-
-      // ===== حفظ (Bookmark) — للتسليمات فقط، toggle بسيط محمي بـRLS =====
-      list.querySelectorAll("[data-save]:not([data-wired])").forEach(b=>{
-        b.dataset.wired = "1";
-        b.onclick = async ()=>{
-          const submissionId = b.dataset.save;
-          const isSaved = b.classList.contains("active");
-          b.disabled = true;
-          try{
-            if(isSaved){
-              await db.from("saved_submissions").delete().eq("submission_id", submissionId).eq("profile_id", this.ctx.user.id).throwOnError();
-              b.classList.remove("active");
-            }else{
-              await db.from("saved_submissions").insert({submission_id: submissionId, profile_id: this.ctx.user.id}).throwOnError();
-              b.classList.add("active");
-            }
-          }catch(e){ CodeUp.toast(e.message, "error"); }
-          finally{ b.disabled = false; }
-        };
-      });
-
-      // ===== مشاركة — Web Share API مع بديل نسخ للحافظة =====
-      list.querySelectorAll("[data-share]:not([data-wired])").forEach(b=>{
-        b.dataset.wired = "1";
-        b.onclick = async ()=>{
-          const shareText = `${b.dataset.sharename} — ${b.dataset.sharetitle} — CodeUp`;
-          const shareUrl = window.location.href;
-          if(navigator.share){
-            try{ await navigator.share({title:"CodeUp", text:shareText, url:shareUrl}); }catch(_e){ /* المستخدم ألغى المشاركة */ }
-          }else{
-            try{ await navigator.clipboard.writeText(`${shareText}\n${shareUrl}`); CodeUp.toast("تم نسخ الرابط", "success"); }
-            catch(_e){ CodeUp.toast("تعذّر النسخ", "error"); }
-          }
-        };
-      });
-
-      // ===== تثبيت/إلغاء تثبيت — سوبر أدمن فقط (الزر أصلًا لا يظهر لغيره، والدالة تتحقق بنفسها أيضًا) =====
-      list.querySelectorAll("[data-pinpost]:not([data-wired])").forEach(b=>{
-        b.dataset.wired = "1";
-        b.onclick = async ()=>{
-          const isPinned = b.dataset.pinned === "1";
-          try{
-            if(isPinned){
-              await db.rpc("unpin_post", {p_post_id: b.dataset.pinpost}).throwOnError();
-              CodeUp.toast("تم إلغاء التثبيت", "success");
-            }else{
-              const days = prompt("عدد أيام التثبيت (اتركه فارغًا للتثبيت الدائم):", "3");
-              if(days===null) return;
-              const until = days.trim() ? new Date(Date.now() + Number(days)*86400000).toISOString() : null;
-              await db.rpc("pin_post", {p_post_id: b.dataset.pinpost, p_pinned_until: until}).throwOnError();
-              CodeUp.toast("تم تثبيت المنشور", "success");
-            }
-            loadFeed(true);
-          }catch(e){ CodeUp.toast(e.message,"error"); }
-        };
-      });
-
-      list.querySelectorAll("[data-like]:not([data-wired])").forEach(b=>{
-        b.dataset.wired = "1";
-        b.onclick = async ()=>{ await CodeUp.withBtnLoading(b, async ()=>{ try{ await CodeUp.rpc.toggleReaction(b.dataset.liketype, b.dataset.like, "like"); loadFeed(true); }catch(e){ CodeUp.toast(e.message,"error"); } }); };
-      });
-
-      list.querySelectorAll("[data-commentsend]:not([data-wired])").forEach(b=>{
-        b.dataset.wired = "1";
-        const targetId = b.dataset.commentsend;
-        const commentType = b.dataset.commenttype;
-        b.onclick = async ()=>{
-          const input = list.querySelector(`[data-commentinput="${targetId}"]`);
-          const val = input.value.trim();
-          if(!val) return;
-          b.disabled = true;
-          try{
-            const payload = {user_id:this.ctx.user.id, content: val};
-            if(commentType === "post") payload.post_id = targetId;
-            else payload.submission_id = targetId;
-            await db.from("comments").insert(payload).throwOnError();
-            input.value=""; loadFeed(true);
-          }catch(e){ CodeUp.toast(e.message,"error"); b.disabled = false; }
-        };
-      });
+      wireFeedInteractions(list);
 
       if(postsDone && subsDone){
         moreBox.innerHTML = list.children.length ? `<div class="emptyState small">وصلت لآخر المنشورات</div>` : "";
@@ -1812,7 +1913,16 @@ const App = {
       }else{
         moreBox.innerHTML = "";
       }
-      loadingFeed = false;
+      }catch(e){
+        // فشل الطلب: نزيل الـSkeleton فورًا ونعرض حالة الخطأ الموجودة أصلًا بالتطبيق (toast) —
+        // بدون ترك Skeleton عالقًا، وبدون تغيير أي استعلام Supabase. عند "تحميل المزيد" (reset=false)
+        // لا نلمس المنشورات المعروضة أصلًا أبدًا — فقط نفرّغ Skeleton الصغير أسفل القائمة.
+        if(reset) list.innerHTML = `<div class="emptyState">تعذّر تحميل المنشورات. اسحب للأسفل للمحاولة مرة أخرى.</div>`;
+        moreBox.innerHTML = "";
+        CodeUp.toast(e.message || "تعذّر تحميل المنشورات", "error");
+      }finally{
+        loadingFeed = false; // مسار مضمون دائمًا (نجاح/فشل/فارغ) — لا تبقى حالة التحميل عالقة أبدًا
+      }
     };
 
     // ===== تمرير لا نهائي (Infinite Scroll) — Sentinel ثابت بدل زر "تحميل المزيد" =====
@@ -2121,8 +2231,8 @@ const App = {
     const mySquadId = myEnrollment?.squad_id || null;
 
     const load = async (filter, reset)=>{
-      if(reset){ page = 0; list.innerHTML = ""; }
-      moreBox.innerHTML = `<div class="emptyState">جارِ التحميل…</div>`;
+      if(reset){ page = 0; list.innerHTML = skeletonPostsHtml(3); moreBox.innerHTML = ""; }
+      else moreBox.innerHTML = skeletonPostsHtml(1);
 
       let q = db.from("submissions").select("*, assignments!inner(title,course_id), profiles(full_name,avatar_url)")
         .eq("assignments.course_id", course.id).order("created_at",{ascending:false})
@@ -2230,6 +2340,7 @@ const App = {
           ${commentComposerHtml(p.id)}
         </div>`;
       }).join("");
+      if(reset) list.innerHTML = ""; // يستبدل Skeleton بالمحتوى الحقيقي دفعة واحدة
       list.insertAdjacentHTML("beforeend", html);
       wireFileCardPreviews(list);
       CodeUp.wireCommentsToggle(list);
@@ -2323,16 +2434,27 @@ const App = {
           }catch(e){ CodeUp.toast(e.message,"error"); b.disabled = false; }
         };
       });
+      // ===== إعجاب — تحديث فوري محلي بدون إعادة تحميل الصفحة (نفس منطق فيد الرئيسية) =====
       list.querySelectorAll("[data-like]:not([data-wired])").forEach(b=>{
         b.dataset.wired = "1";
         b.onclick = async ()=>{
           if(!(await requireJoin())) return;
-          await CodeUp.withBtnLoading(b, async ()=>{
-            try{ await CodeUp.rpc.toggleReaction("submission", b.dataset.like, "like"); load(currentFilter, true); }
-            catch(e){ CodeUp.toast(e.message,"error"); }
-          });
+          if(b.disabled) return;
+          const countEl = b.querySelector("span:last-child");
+          const wasLiked = b.classList.contains("active");
+          const prevCount = Number(countEl.textContent)||0;
+          b.classList.toggle("active", !wasLiked);
+          countEl.textContent = wasLiked ? Math.max(0, prevCount-1) : prevCount+1;
+          b.disabled = true;
+          try{ await CodeUp.rpc.toggleReaction("submission", b.dataset.like, "like"); }
+          catch(e){
+            b.classList.toggle("active", wasLiked);
+            countEl.textContent = prevCount;
+            CodeUp.toast(e.message,"error");
+          } finally { b.disabled = false; }
         };
       });
+      // ===== تعليق — إضافة محلية فورية بدون إعادة تحميل الصفحة (نفس منطق فيد الرئيسية) =====
       list.querySelectorAll("[data-commentsend]:not([data-wired])").forEach(b=>{
         b.dataset.wired = "1";
         const targetId = b.dataset.commentsend;
@@ -2340,13 +2462,26 @@ const App = {
           if(!(await requireJoin())) return;
           const input = list.querySelector(`[data-commentinput="${targetId}"]`);
           const val = input.value.trim();
-          if(!val) return;
+          if(!val || b.disabled) return;
           b.disabled = true;
           try{
             await CodeUp.rpc.addComment(targetId, val);
             input.value="";
-            load(currentFilter, true);
-          }catch(e){ CodeUp.toast(e.message,"error"); b.disabled = false; }
+            const commentsList = list.querySelector(`[data-commentslist="${targetId}"]`);
+            if(commentsList){
+              const empty = commentsList.querySelector("p.small");
+              if(empty) empty.remove();
+              commentsList.insertAdjacentHTML("beforeend", `<div class="comment">
+                <div class="commentHead"><b>${CodeUp.escapeHtml(this.ctx.profile?.full_name||"مستخدم")}</b></div>
+                <div>${CodeUp.escapeHtml(val)}</div>
+              </div>`);
+              commentsList.classList.remove("hidden");
+            }
+            const toggleBtn = list.querySelector(`[data-toggleComments="${targetId}"]`);
+            const countSpan = toggleBtn?.querySelector("span:last-child");
+            if(countSpan) countSpan.textContent = (Number(countSpan.textContent)||0) + 1;
+          }catch(e){ CodeUp.toast(e.message,"error"); }
+          finally{ b.disabled = false; }
         };
       });
 

@@ -110,6 +110,48 @@ function commentComposerHtml(targetId, targetType = "submission"){
   </div>`;
 }
 
+// ===== Skeleton Loading — بدائل بصرية بسيطة أثناء الانتظار، بدل نص "جارِ التحميل…" =====
+// بطاقة منشور/تسليم: تستخدم نفس class الحقيقي .timelinePost فتاخذ نفس الأبعاد وborder-radius
+// وspacing تلقائيًا بدون تكرارها هنا — فقط نملأها بمستطيلات .skeleton بدل المحتوى الحقيقي.
+function skeletonPostHtml(){
+  return `<div class="timelinePost skeleton-post" aria-hidden="true">
+    <div class="metaWithAvatar">
+      <div class="skeleton skeleton-avatar"></div>
+      <div class="metaTextCol" style="flex:1;gap:6px">
+        <div class="skeleton skeleton-line w40"></div>
+        <div class="skeleton skeleton-line" style="width:28%;height:9px"></div>
+      </div>
+    </div>
+    <div class="skeleton skeleton-line w80"></div>
+    <div class="skeleton skeleton-line w60"></div>
+    <div class="reactBar">
+      <div class="skeleton skeleton-action"></div>
+      <div class="skeleton skeleton-action" style="width:44px"></div>
+      <div class="skeleton skeleton-action" style="width:34px;border-radius:50%"></div>
+    </div>
+  </div>`;
+}
+function skeletonPostsHtml(n){ return Array.from({length:n}, skeletonPostHtml).join(""); }
+
+// صف Skeleton بسيط لقوائم أفقية (محادثات/بحث): دائرة أفتار + سطرين، بنفس class .convRow الحقيقي
+function skeletonRowHtml(){
+  return `<div class="convRow skeleton-row" aria-hidden="true" style="pointer-events:none">
+    <div class="skeleton skeleton-avatar"></div>
+    <div style="flex:1;display:flex;flex-direction:column;gap:6px">
+      <div class="skeleton skeleton-line w60"></div>
+      <div class="skeleton skeleton-line" style="width:38%;height:9px"></div>
+    </div>
+  </div>`;
+}
+function skeletonRowsHtml(n){ return Array.from({length:n}, skeletonRowHtml).join(""); }
+
+// فقاعات Skeleton لمنطقة الرسائل (يمين/يسار بالتبادل)، بنفس class .chatBubble الحقيقي
+function skeletonChatBubblesHtml(n){
+  return Array.from({length:n}, (_,i)=>`<div class="chatBubble skeleton-row" aria-hidden="true" style="${i%2?'align-self:flex-end':''}">
+    <div class="skeleton skeleton-line" style="width:${90+((i*37)%60)}px;height:12px"></div>
+  </div>`).join("");
+}
+
 function youtubeIdFromUrl(url){
   const m = String(url||"").match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/))([\w-]{11})/);
   return m ? m[1] : null;
