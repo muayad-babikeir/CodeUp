@@ -1,5 +1,10 @@
 // admin/js/app.js
 const HOME_SENTINEL = "__home__";
+const LEADER_SECTION_LABELS = {
+  mysquad:"مجموعتي", members:"الأعضاء", ljoin:"طلبات الانضمام", lassignments:"الواجبات",
+  lcontent:"المحتوى التعليمي", lsubmissions:"التسليمات", ltimeline:"المستجدات",
+  lactivity:"النشاط", lprogress:"التقدم"
+};
 const Admin = {
   ctx: null,          // من CodeUp.loadMyContext()
   role: null,         // 'super' | 'course_admin' | 'leader'
@@ -51,11 +56,46 @@ const Admin = {
     document.getElementById("signOut").onclick = async (e)=>{ e.preventDefault(); await db.auth.signOut(); window.location.href="../index.html"; };
     document.getElementById("notifBtn").onclick = ()=>this.openNotifications();
     CodeUp.subscribeToMyNotifications(this.ctx.user.id, (n)=>{ this.refreshNotifBadge(); CodeUp.toast(n.title, "info"); });
+    this.initLayoutControls();
 
     await this.loadAccessibleCourses();
     this.refreshNotifBadge();
     await this.renderNav();
     this.go(this.role === "leader" ? "mysquad" : "dashboard");
+  },
+
+  // ---------- Layout: Sidebar (Drawer على الموبايل + طي على Desktop) + Breadcrumb ----------
+  initLayoutControls(){
+    const shell = document.getElementById("shell");
+    const sidebar = document.getElementById("sidebarEl");
+    const scrim = document.getElementById("sidebarScrim");
+    const menuBtn = document.getElementById("mobileMenuBtn");
+    const collapseBtn = document.getElementById("sidebarToggleBtn");
+
+    const openMobile = ()=>{ sidebar.classList.add("open"); scrim.classList.add("show"); };
+    const closeMobile = ()=>{ sidebar.classList.remove("open"); scrim.classList.remove("show"); };
+    this.closeMobileSidebar = closeMobile;
+
+    if(menuBtn) menuBtn.onclick = ()=> sidebar.classList.contains("open") ? closeMobile() : openMobile();
+    if(scrim) scrim.onclick = closeMobile;
+
+    if(collapseBtn){
+      const saved = localStorage.getItem("cu_admin_sidebar_collapsed") === "1";
+      if(saved) shell.classList.add("sidebarCollapsed");
+      collapseBtn.onclick = ()=>{
+        const collapsed = shell.classList.toggle("sidebarCollapsed");
+        localStorage.setItem("cu_admin_sidebar_collapsed", collapsed ? "1" : "0");
+      };
+    }
+  },
+
+  setBreadcrumb(parts){
+    const el = document.getElementById("pageBreadcrumb");
+    if(!el) return;
+    el.innerHTML = parts.filter(Boolean).map((p,i)=>{
+      const isLast = i === parts.length-1;
+      return (i>0 ? `<span class="sep">/</span>` : "") + `<span class="${isLast?"current":""}">${CodeUp.escapeHtml(p)}</span>`;
+    }).join("");
   },
 
   async refreshNotifBadge(){
@@ -170,19 +210,19 @@ const Admin = {
 
   navConfig(){
     if(this.currentCourseId === HOME_SENTINEL){
-      return [{group:"الإعدادات العامة", items:["home_announcements","home_posts","message_settings","university"]}];
+      return [{group:"الإعدادات العامة", items:["settings_hub","home_announcements","home_posts","message_settings","university"]}];
     }
     if(this.role === "super"){
       return [
         {group:"عام", items:["dashboard"]},
         {group:"المنصة", items:["courses","users","course_admins"]},
         {group:"الكورس الحالي", items:["content","squads","leaders","join_requests","leader_applications","assignments","submissions","timeline","announcements","progress"]},
-        {group:"النظام", items:["files","moderation","audit_log","settings"]}
+        {group:"النظام", items:["files","moderation","audit_log","settings","settings_hub"]}
       ];
     }
     if(this.role === "course_admin"){
       return [
-        {group:"الكورس", items:["dashboard","content","squads","join_requests","leader_applications","assignments","submissions","timeline","announcements","progress","files","settings"]}
+        {group:"الكورس", items:["dashboard","content","squads","join_requests","leader_applications","assignments","submissions","timeline","announcements","progress","files","settings","settings_hub"]}
       ];
     }
     // leader — القائمة الفعلية للقائد تُبنى عبر leaderNavHtml() وليس هنا
@@ -196,7 +236,7 @@ const Admin = {
       const myLeaderRow = this.ctx.leaderSquads.find(s=>s.squad_id===squadId);
       const canAddContent = !!(myLeaderRow?.permissions?.can_add_content);
       root.innerHTML = leaderNavHtml(counts, {canAddContent});
-      root.querySelectorAll(".navItem").forEach(el=>el.onclick=()=>this.go(el.dataset.section));
+      root.querySelectorAll(".navItem").forEach(el=>el.onclick=()=>{ this.go(el.dataset.section); this.closeMobileSidebar?.(); });
       return;
     }
     const cfg = this.navConfig();
@@ -226,7 +266,7 @@ const Admin = {
       const firstSection = this.navConfig().flatMap(g=>g.items).find(k=>this.sections[k]);
       this.go(firstSection || this.section);
     };
-    root.querySelectorAll(".navItem").forEach(el=>el.onclick=()=>this.go(el.dataset.section));
+    root.querySelectorAll(".navItem").forEach(el=>el.onclick=()=>{ this.go(el.dataset.section); this.closeMobileSidebar?.(); });
   },
 
   async go(sectionKey){
@@ -236,6 +276,7 @@ const Admin = {
     body.innerHTML = `<div class="emptyState">جارِ التحميل…</div>`;
 
     if(this.role === "leader"){
+      this.setBreadcrumb(["مجموعتي", LEADER_SECTION_LABELS[sectionKey] || ""]);
       try{
         await renderLeaderSection(sectionKey, body);
       }catch(e){
@@ -247,6 +288,10 @@ const Admin = {
     const s = this.sections[sectionKey];
     if(!s){ body.innerHTML = `<div class="emptyState">القسم غير متاح.</div>`; return; }
     document.getElementById("pageTitle").textContent = s.label;
+    const courseName = (this.currentCourseId && this.currentCourseId !== HOME_SENTINEL)
+      ? (this.courses||[]).find(c=>c.id===this.currentCourseId)?.name
+      : null;
+    this.setBreadcrumb([courseName || "لوحة الإدارة", s.label]);
     try{
       await s.render(body);
     }catch(e){
@@ -261,6 +306,16 @@ const Admin = {
     bg.addEventListener("click",e=>{if(e.target===bg)close()});
     function close(){bg.remove();}
     return {close, el:bg};
+  },
+
+  // لوحة جانبية (Drawer) — بديل الـ Modal الكبير لعرض تفاصيل عنصر واحد (طالب/كورس/إلخ)
+  drawer(innerHtml){
+    const bg=document.createElement("div");bg.className="drawerBg";
+    const panel=document.createElement("div");panel.className="drawer";panel.innerHTML=innerHtml;
+    document.body.appendChild(bg);document.body.appendChild(panel);
+    bg.addEventListener("click",close);
+    function close(){bg.remove();panel.remove();}
+    return {close, el:panel};
   }
 };
 

@@ -4,12 +4,14 @@ Admin.sections.timeline = {
   label: "المستجدات",
   async render(body){
     const cid = Admin.currentCourseId;
-    const { data: posts } = await db.from("submissions")
+    body.innerHTML = `<div class="card">${Array(3).fill(`<div class="skeleton skeleton-line w80" style="height:34px;margin-bottom:10px"></div>`).join("")}</div>`;
+    const { data: posts, error } = await db.from("submissions")
       .select("*, assignments!inner(title,course_id), profiles(full_name)")
       .eq("assignments.course_id", cid).in("visibility",["course","squad"])
       .order("created_at",{ascending:false}).limit(50);
+    if(error){ body.innerHTML = `<div class="alertBox error"><span>تعذّر تحميل المستجدات.</span><button class="btn alertRetry" id="tlRetry">إعادة المحاولة</button></div>`; body.querySelector("#tlRetry").onclick=()=>Admin.go("timeline"); return; }
 
-    body.innerHTML = `<div class="card"><table><thead><tr><th>الطالب</th><th>الواجب</th><th>المحتوى</th><th>الظهور</th><th></th></tr></thead>
+    body.innerHTML = `<div class="card"><div class="tableScroll"><table><thead><tr><th>الطالب</th><th>الواجب</th><th>المحتوى</th><th>الظهور</th><th></th></tr></thead>
       <tbody>${(posts||[]).map(p=>`
         <tr>
           <td>${CodeUp.escapeHtml(p.profiles?.full_name||"")}</td>
@@ -17,8 +19,8 @@ Admin.sections.timeline = {
           <td>${CodeUp.escapeHtml((p.content||"").slice(0,60))}</td>
           <td>${p.visibility==='course'?'الكورس كله':'مجموعته'}</td>
           <td><button class="btn danger" data-hide="${p.id}">إخفاء من المستجدات</button></td>
-        </tr>`).join("") || `<tr><td colspan="5" class="emptyState">لا توجد منشورات ظاهرة في المستجدات.</td></tr>`}
-      </tbody></table></div>`;
+        </tr>`).join("") || `<tr><td colspan="5"><div class="emptyStatePro"><h4>لا توجد منشورات ظاهرة</h4><p>ستظهر هنا التسليمات المشاركة مع الكورس أو المجموعة.</p></div></td></tr>`}
+      </tbody></table></div></div>`;
 
     body.querySelectorAll("[data-hide]").forEach(b=>{
       b.onclick = async ()=>{
@@ -34,17 +36,19 @@ Admin.sections.timeline = {
 Admin.sections.moderation = {
   label: "الإشراف",
   async render(body){
-    const { data: comments } = await db.from("comments").select("*, profiles(full_name)").order("created_at",{ascending:false}).limit(50);
+    body.innerHTML = `<div class="card">${Array(3).fill(`<div class="skeleton skeleton-line w80" style="height:30px;margin-bottom:10px"></div>`).join("")}</div>`;
+    const { data: comments, error } = await db.from("comments").select("*, profiles(full_name)").order("created_at",{ascending:false}).limit(50);
+    if(error){ body.innerHTML = `<div class="alertBox error"><span>تعذّر تحميل التعليقات.</span><button class="btn alertRetry" id="modRetry">إعادة المحاولة</button></div>`; body.querySelector("#modRetry").onclick=()=>Admin.go("moderation"); return; }
     body.innerHTML = `<div class="card"><b>أحدث التعليقات على المنصة</b>
-      <table><thead><tr><th>الكاتب</th><th>التعليق</th><th>الوقت</th><th></th></tr></thead>
+      <div class="tableScroll"><table><thead><tr><th>الكاتب</th><th>التعليق</th><th>الوقت</th><th></th></tr></thead>
       <tbody>${(comments||[]).map(c=>`
         <tr>
           <td>${CodeUp.escapeHtml(c.profiles?.full_name||"")}</td>
           <td>${CodeUp.escapeHtml(c.content)}</td>
-          <td>${CodeUp.timeAgo(c.created_at)}</td>
+          <td class="small">${CodeUp.timeAgo(c.created_at)}</td>
           <td><button class="btn danger" data-del="${c.id}">حذف</button></td>
-        </tr>`).join("") || `<tr><td colspan="4" class="emptyState">لا توجد تعليقات بعد.</td></tr>`}
-      </tbody></table></div>`;
+        </tr>`).join("") || `<tr><td colspan="4"><div class="emptyStatePro"><p style="margin:0">لا توجد تعليقات بعد.</p></div></td></tr>`}
+      </tbody></table></div></div>`;
     body.querySelectorAll("[data-del]").forEach(b=>{
       b.onclick = async ()=>{
         if(!confirm("تأكيد حذف هذا التعليق؟")) return;
@@ -59,16 +63,18 @@ Admin.sections.moderation = {
 Admin.sections.home_announcements = {
   label: "إعلانات الصفحة الرئيسية (عامة لكل المنصة)",
   async render(body){
-    const { data: anns } = await db.from("announcements").select("*").is("course_id", null).order("created_at",{ascending:false});
+    body.innerHTML = `<div class="card">${Array(2).fill(`<div class="skeleton skeleton-line w80" style="height:30px;margin-bottom:10px"></div>`).join("")}</div>`;
+    const { data: anns, error } = await db.from("announcements").select("*").is("course_id", null).order("created_at",{ascending:false});
+    if(error){ body.innerHTML = `<div class="alertBox error"><span>تعذّر تحميل الإعلانات.</span><button class="btn alertRetry" id="haRetry">إعادة المحاولة</button></div>`; body.querySelector("#haRetry").onclick=()=>Admin.go("home_announcements"); return; }
     body.innerHTML = `
       <p class="small" style="margin-bottom:10px">هذي الإعلانات تظهر لكل مستخدمي CodeUp بالصفحة الرئيسية، بغض النظر عن تسجيلهم بأي كورس.</p>
       <div class="toolbar"><button class="btn dark" id="newHomeAnnBtn">+ إعلان عام جديد</button></div>
-      <div class="card"><table><thead><tr><th>العنوان</th><th>التاريخ</th><th></th></tr></thead>
+      <div class="card"><div class="tableScroll"><table><thead><tr><th>العنوان</th><th>التاريخ</th><th></th></tr></thead>
       <tbody>${(anns||[]).map(a=>`
-        <tr><td>${CodeUp.escapeHtml(a.title)}</td><td>${CodeUp.timeAgo(a.created_at)}</td>
+        <tr><td>${CodeUp.escapeHtml(a.title)}</td><td class="small">${CodeUp.timeAgo(a.created_at)}</td>
           <td><button class="btn" data-view="${a.id}">عرض</button> <button class="btn danger" data-delann="${a.id}">حذف</button></td></tr>
-      `).join("") || `<tr><td colspan="3" class="emptyState">لا توجد إعلانات عامة بعد.</td></tr>`}
-      </tbody></table></div>`;
+      `).join("") || `<tr><td colspan="3"><div class="emptyStatePro"><h4>لا توجد إعلانات عامة بعد</h4><p>انشر أول إعلان يظهر لكل مستخدمي المنصة.</p></div></td></tr>`}
+      </tbody></table></div></div>`;
 
     body.querySelectorAll("[data-view]").forEach(b=>{
       b.onclick = ()=>{
@@ -111,27 +117,44 @@ Admin.sections.home_announcements = {
 Admin.sections.home_posts = {
   label: "منشورات المستجدات (إشراف عام)",
   async render(body){
-    const { data: posts } = await db.from("posts").select("*, profiles(full_name)").order("created_at",{ascending:false}).limit(100);
+    body.innerHTML = `<div class="card">${Array(4).fill(`<div class="skeleton skeleton-line w80" style="height:30px;margin-bottom:10px"></div>`).join("")}</div>`;
+    const { data: posts, error } = await db.from("posts").select("*, profiles(full_name)").order("created_at",{ascending:false}).limit(100);
+    if(error){ body.innerHTML = `<div class="alertBox error"><span>تعذّر تحميل المنشورات.</span><button class="btn alertRetry" id="hpRetry">إعادة المحاولة</button></div>`; body.querySelector("#hpRetry").onclick=()=>Admin.go("home_posts"); return; }
+
     body.innerHTML = `
       <p class="small" style="margin-bottom:10px">كل المنشورات الحرة اللي ينشرها الطلاب بالصفحة الرئيسية (تايم لاين المنصة) — تقدر تحذف أي منشور غير مناسب.</p>
-      <div class="card"><table><thead><tr><th>الكاتب</th><th>المحتوى</th><th>التاريخ</th><th></th></tr></thead>
-      <tbody>${(posts||[]).map(p=>`
+      <div class="toolbar">
+        <div class="searchBox">
+          <span class="searchIcon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
+          <input id="postSearch" placeholder="بحث بالكاتب أو المحتوى…">
+        </div>
+      </div>
+      <div class="card"><div class="tableScroll"><table><thead><tr><th>الكاتب</th><th>المحتوى</th><th>التاريخ</th><th></th></tr></thead>
+      <tbody id="postsBody"></tbody></table></div></div>`;
+
+    const tbody = body.querySelector("#postsBody");
+    const draw = (list)=>{
+      tbody.innerHTML = list.map(p=>`
         <tr>
           <td>${CodeUp.escapeHtml(p.profiles?.full_name||"")}</td>
           <td style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${CodeUp.escapeHtml(p.content||"")}</td>
-          <td>${CodeUp.timeAgo(p.created_at)}</td>
+          <td class="small">${CodeUp.timeAgo(p.created_at)}</td>
           <td><button class="btn danger" data-delpost="${p.id}">حذف</button></td>
         </tr>
-      `).join("") || `<tr><td colspan="4" class="emptyState">لا توجد منشورات بعد.</td></tr>`}
-      </tbody></table></div>`;
-
-    body.querySelectorAll("[data-delpost]").forEach(b=>{
-      b.onclick = async ()=>{
-        if(!confirm("حذف هذا المنشور نهائيًا؟")) return;
-        try{ await db.from("posts").delete().eq("id", b.dataset.delpost).throwOnError(); CodeUp.toast("تم الحذف","success"); Admin.go("home_posts"); }
-        catch(e){ CodeUp.toast(e.message,"error"); }
-      };
-    });
+      `).join("") || `<tr><td colspan="4"><div class="emptyStatePro"><h4>لا توجد منشورات مطابقة</h4><p>جرّب تعديل كلمة البحث.</p></div></td></tr>`;
+      tbody.querySelectorAll("[data-delpost]").forEach(b=>{
+        b.onclick = async ()=>{
+          if(!confirm("حذف هذا المنشور نهائيًا؟\n\nلا يمكن التراجع عن هذا الإجراء.")) return;
+          try{ await db.from("posts").delete().eq("id", b.dataset.delpost).throwOnError(); CodeUp.toast("تم الحذف","success"); Admin.go("home_posts"); }
+          catch(e){ CodeUp.toast(e.message,"error"); }
+        };
+      });
+    };
+    draw(posts||[]);
+    body.querySelector("#postSearch").oninput = CodeUp.debounce(e=>{
+      const q = e.target.value.trim().toLowerCase();
+      draw(!q ? (posts||[]) : (posts||[]).filter(p=>(p.profiles?.full_name||"").toLowerCase().includes(q) || (p.content||"").toLowerCase().includes(q)));
+    }, 200);
   }
 };
 
@@ -139,20 +162,24 @@ Admin.sections.announcements = {
   label: "الإعلانات",
   async render(body){
     const cid = Admin.currentCourseId;
-    const { data: anns } = await db.from("announcements").select("*, squads(name)").eq("course_id", cid).order("created_at",{ascending:false});
-    const { data: squads } = await db.from("squads").select("id,name").eq("course_id", cid).eq("status","active");
+    body.innerHTML = `<div class="card">${Array(2).fill(`<div class="skeleton skeleton-line w80" style="height:30px;margin-bottom:10px"></div>`).join("")}</div>`;
+    const [{ data: anns, error }, { data: squads }] = await Promise.all([
+      db.from("announcements").select("*, squads(name)").eq("course_id", cid).order("created_at",{ascending:false}),
+      db.from("squads").select("id,name").eq("course_id", cid).eq("status","active")
+    ]);
+    if(error){ body.innerHTML = `<div class="alertBox error"><span>تعذّر تحميل الإعلانات.</span><button class="btn alertRetry" id="anRetry">إعادة المحاولة</button></div>`; body.querySelector("#anRetry").onclick=()=>Admin.go("announcements"); return; }
     body.innerHTML = `
       <div class="toolbar"><button class="btn dark" id="newAnnBtn">+ إعلان جديد</button></div>
-      <div class="card"><table><thead><tr><th>العنوان</th><th>الجهة المستهدفة</th><th>التاريخ</th><th></th></tr></thead>
+      <div class="card"><div class="tableScroll"><table><thead><tr><th>العنوان</th><th>الجهة المستهدفة</th><th>التاريخ</th><th></th></tr></thead>
       <tbody>${(anns||[]).map(a=>`
         <tr>
           <td>${CodeUp.escapeHtml(a.title)}</td>
           <td>${a.target_squad_id ? `مجموعة: ${CodeUp.escapeHtml(a.squads?.name||"")}` : "عام (كل الكورس)"}</td>
-          <td>${CodeUp.timeAgo(a.created_at)}</td>
+          <td class="small">${CodeUp.timeAgo(a.created_at)}</td>
           <td><button class="btn" data-view="${a.id}">عرض</button></td>
         </tr>
-      `).join("") || `<tr><td colspan="4" class="emptyState">لا توجد إعلانات بعد.</td></tr>`}
-      </tbody></table></div>`;
+      `).join("") || `<tr><td colspan="4"><div class="emptyStatePro"><h4>لا توجد إعلانات بعد</h4><p>انشر أول إعلان لطلاب هذا الكورس.</p></div></td></tr>`}
+      </tbody></table></div></div>`;
 
     body.querySelectorAll("[data-view]").forEach(b=>{
       b.onclick = ()=>{

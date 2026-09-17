@@ -13,10 +13,12 @@ Admin.sections.university = {
 };
 
 async function renderSemesters(body){
-  const { data: semesters } = await db.from("university_semesters").select("*").order("order_index");
+  body.innerHTML = `<div class="card">${Array(2).fill(`<div class="skeleton skeleton-line w80" style="height:34px;margin-bottom:10px"></div>`).join("")}</div>`;
+  const { data: semesters, error } = await db.from("university_semesters").select("*").order("order_index");
+  if(error){ body.innerHTML = `<div class="alertBox error"><span>تعذّر تحميل الفصول الدراسية.</span><button class="btn alertRetry" id="uniRetry">إعادة المحاولة</button></div>`; body.querySelector("#uniRetry").onclick=()=>Admin.go("university"); return; }
   body.innerHTML = `
     <div class="toolbar"><button class="btn dark" id="newSemesterBtn">+ فصل دراسي جديد</button></div>
-    <div class="card"><table>
+    <div class="card"><div class="tableScroll"><table>
       <thead><tr><th>الفصل الدراسي</th><th>الترتيب</th><th></th></tr></thead>
       <tbody>${(semesters||[]).map(s=>`
         <tr>
@@ -27,8 +29,8 @@ async function renderSemesters(body){
             <button class="btn" data-edit="${s.id}">تعديل</button>
             <button class="btn danger" data-del="${s.id}">حذف</button>
           </td>
-        </tr>`).join("") || `<tr><td colspan="3" class="emptyState">لا توجد فصول دراسية بعد.</td></tr>`}
-      </tbody></table></div>`;
+        </tr>`).join("") || `<tr><td colspan="3"><div class="emptyStatePro"><h4>لا توجد فصول دراسية بعد</h4><p>أضف أول فصل لتنظيم مواد قسم الجامعة.</p></div></td></tr>`}
+      </tbody></table></div></div>`;
 
   body.querySelector("#newSemesterBtn").onclick = ()=> openSemesterModal(null, body);
   body.querySelectorAll("[data-edit]").forEach(b=>{
@@ -77,7 +79,7 @@ async function renderSubjects(body, semester){
   body.innerHTML = `
     <button class="btn" id="backToSemesters" style="margin-bottom:10px">← رجوع للفصول الدراسية</button>
     <div class="toolbar"><b>${CodeUp.escapeHtml(semester.title)}</b><button class="btn dark" id="newSubjectBtn">+ مادة جديدة</button></div>
-    <div class="card"><table>
+    <div class="card"><div class="tableScroll"><table>
       <thead><tr><th>المادة</th><th>الترتيب</th><th></th></tr></thead>
       <tbody>${(subjects||[]).map(s=>`
         <tr>
@@ -88,8 +90,8 @@ async function renderSubjects(body, semester){
             <button class="btn" data-edit="${s.id}">تعديل</button>
             <button class="btn danger" data-del="${s.id}">حذف</button>
           </td>
-        </tr>`).join("") || `<tr><td colspan="3" class="emptyState">لا توجد مواد بهذا الفصل بعد.</td></tr>`}
-      </tbody></table></div>`;
+        </tr>`).join("") || `<tr><td colspan="3"><div class="emptyStatePro"><p style="margin:0">لا توجد مواد بهذا الفصل بعد.</p></div></td></tr>`}
+      </tbody></table></div></div>`;
 
   body.querySelector("#backToSemesters").onclick = ()=> renderSemesters(body);
   body.querySelector("#newSubjectBtn").onclick = ()=> openSubjectModal(null, semester, body);
@@ -139,7 +141,7 @@ async function renderMaterials(body, subject, semester){
   body.innerHTML = `
     <button class="btn" id="backToSubjects" style="margin-bottom:10px">← رجوع لمواد ${CodeUp.escapeHtml(semester.title)}</button>
     <div class="toolbar"><b>${CodeUp.escapeHtml(subject.title)}</b><button class="btn dark" id="newMaterialBtn">+ رابط جديد</button></div>
-    <div class="card"><table>
+    <div class="card"><div class="tableScroll"><table>
       <thead><tr><th>العنوان</th><th>النوع</th><th>الرابط</th><th>الترتيب</th><th></th></tr></thead>
       <tbody>${(materials||[]).map(m=>`
         <tr>
@@ -151,8 +153,8 @@ async function renderMaterials(body, subject, semester){
             <button class="btn" data-edit="${m.id}">تعديل</button>
             <button class="btn danger" data-del="${m.id}">حذف</button>
           </td>
-        </tr>`).join("") || `<tr><td colspan="5" class="emptyState">لا توجد روابط بهذه المادة بعد.</td></tr>`}
-      </tbody></table></div>`;
+        </tr>`).join("") || `<tr><td colspan="5"><div class="emptyStatePro"><p style="margin:0">لا توجد روابط بهذه المادة بعد.</p></div></td></tr>`}
+      </tbody></table></div></div>`;
 
   body.querySelector("#backToSubjects").onclick = ()=> renderSubjects(body, semester);
   body.querySelector("#newMaterialBtn").onclick = ()=> openMaterialModal(null, subject, body, semester);

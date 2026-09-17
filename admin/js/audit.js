@@ -5,17 +5,23 @@ Admin.sections.files = {
   async render(body){
     const cid = Admin.currentCourseId;
     const isSuper = Admin.role === "super";
+    body.innerHTML = `<div class="card">${Array(2).fill(`<div class="skeleton skeleton-line w60" style="height:34px;margin-bottom:10px"></div>`).join("")}</div>`;
 
     // إعدادات المدة (عامة + خاصة بهذا الكورس)
-    const { data: settings } = await db.from("archive_settings").select("*").in("scope_type", isSuper?["global","course"]:["course"]).or(cid?`scope_id.eq.${cid},scope_id.is.null`:"scope_id.is.null");
+    const [{ data: settings, error: e1 }, { data: files, error: e2 }] = await Promise.all([
+      db.from("archive_settings").select("*").in("scope_type", isSuper?["global","course"]:["course"]).or(cid?`scope_id.eq.${cid},scope_id.is.null`:"scope_id.is.null"),
+      db.from("file_uploads").select("*, profiles(full_name)").eq("course_id", cid).eq("related_type","submission").order("created_at",{ascending:false}).limit(60)
+    ]);
+    if(e1 || e2){ body.innerHTML = `<div class="alertBox error"><span>تعذّر تحميل بيانات الأرشفة.</span><button class="btn alertRetry" id="filesRetry">إعادة المحاولة</button></div>`; body.querySelector("#filesRetry").onclick=()=>Admin.go("files"); return; }
     const globalSetting = (settings||[]).find(s=>s.scope_type==='global');
     const courseSetting = (settings||[]).find(s=>s.scope_type==='course' && s.scope_id===cid);
 
-    const { data: files } = await db.from("file_uploads").select("*, profiles(full_name)").eq("course_id", cid).eq("related_type","submission").order("created_at",{ascending:false}).limit(60);
-
     const statusLabelAr = {live:"بالتخزين — لسه ما اترسل", sending:"جارِ الإرسال…", sent:"أُرسل لتيليجرام (بالتخزين لسه)", failed:"فشل الإرسال — سيُعاد المحاولة", archived:"أُرشف (اتحذف من التخزين)"};
+    const statusPillClass = {live:"neutral", sending:"pending", sent:"info", failed:"rejected", archived:"approved"};
+    const failedCount = (files||[]).filter(f=>f.archive_status==='failed').length;
 
     body.innerHTML = `
+      ${failedCount>0?`<div class="alertBox warn"><span>يوجد ${failedCount} ملف فشل إرساله لتيليجرام — سيُعاد المحاولة تلقائيًا، أو أرشفه يدويًا بالأسفل.</span></div>`:""}
       ${isSuper?`
       <div class="card">
         <b>المدة الافتراضية لكل المنصة</b>
@@ -37,20 +43,20 @@ Admin.sections.files = {
 
       <div class="card" style="margin-top:14px">
         <b>ملفات تسليمات الطلاب — الحالة</b>
-        <table style="margin-top:10px"><thead><tr><th>الملف</th><th>رفعه</th><th>الحالة</th><th>موعد الحذف</th><th></th></tr></thead>
+        <div class="tableScroll"><table style="margin-top:10px"><thead><tr><th>الملف</th><th>رفعه</th><th>الحالة</th><th>موعد الحذف</th><th></th></tr></thead>
         <tbody>${(files||[]).map(f=>`
           <tr data-filerow="${f.id}">
             <td>${CodeUp.escapeHtml(f.file_name||"—")}</td>
             <td>${CodeUp.escapeHtml(f.profiles?.full_name||"")}</td>
-            <td>${statusLabelAr[f.archive_status]||f.archive_status}${f.archive_error?`<br><span class="small" style="color:#E03131">${CodeUp.escapeHtml(f.archive_error)}</span>`:""}</td>
+            <td><span class="pill ${statusPillClass[f.archive_status]||''}">${statusLabelAr[f.archive_status]||f.archive_status}</span>${f.archive_error?`<div class="small" style="color:var(--red);margin-top:4px">${CodeUp.escapeHtml(f.archive_error)}</div>`:""}</td>
             <td class="mono small">${f.archive_status==='archived'?"—":(f.scheduled_delete_at?CodeUp.formatDate(f.scheduled_delete_at):"—")}</td>
             <td>
               ${f.archive_status!=='archived'?`<button class="btn" data-archivenow="${f.id}">أرشف الآن</button>
               <button class="btn" data-postpone="${f.id}">تأجيل</button>`:`<span class="small">—</span>`}
             </td>
           </tr>
-        `).join("") || `<tr><td colspan="5" class="emptyState">لا توجد ملفات تسليمات بعد.</td></tr>`}
-        </tbody></table>
+        `).join("") || `<tr><td colspan="5"><div class="emptyStatePro"><p style="margin:0">لا توجد ملفات تسليمات بعد.</p></div></td></tr>`}
+        </tbody></table></div>
       </div>`;
 
     const globalBtn = body.querySelector("#saveGlobalBtn");
@@ -112,14 +118,20 @@ Admin.sections.files = {
 Admin.sections.audit_log = {
   label: "سجل التدقيق",
   async render(body){
+    body.innerHTML = `<div class="card">${Array(4).fill(`<div class="skeleton skeleton-line w80" style="height:26px;margin-bottom:10px"></div>`).join("")}</div>`;
     let q = db.from("activity_log").select("*, profiles(full_name)").order("created_at",{ascending:false}).limit(150);
     if(Admin.role !== "super") q = q.eq("course_id", Admin.currentCourseId);
-    const { data } = await q;
-    body.innerHTML = `<div class="card"><table><thead><tr><th>المستخدم</th><th>الحدث</th><th>الوقت</th></tr></thead>
+    const { data, error } = await q;
+    if(error){ body.innerHTML = `<div class="alertBox error"><span>تعذّر تحميل السجل.</span><button class="btn alertRetry" id="alRetry">إعادة المحاولة</button></div>`; body.querySelector("#alRetry").onclick=()=>Admin.go("audit_log"); return; }
+    body.innerHTML = `<div class="card"><div class="tableScroll"><table><thead><tr><th>المستخدم</th><th>الحدث</th><th>الوقت</th></tr></thead>
       <tbody>${(data||[]).map(a=>`
-        <tr><td>${CodeUp.escapeHtml(a.profiles?.full_name||"—")}</td><td>${CodeUp.escapeHtml(a.action_text)}</td><td>${CodeUp.timeAgo(a.created_at)}</td></tr>
-      `).join("") || `<tr><td colspan="3" class="emptyState">لا يوجد سجل بعد.</td></tr>`}
-      </tbody></table></div>`;
+        <tr>
+          <td><div class="metaWithAvatar">${CodeUp.avatarHtml(a.profiles?.full_name, null, 26)}<span>${CodeUp.escapeHtml(a.profiles?.full_name||"—")}</span></div></td>
+          <td>${CodeUp.escapeHtml(a.action_text)}</td>
+          <td class="small">${CodeUp.timeAgo(a.created_at)}</td>
+        </tr>
+      `).join("") || `<tr><td colspan="3"><div class="emptyStatePro"><p style="margin:0">لا يوجد سجل بعد.</p></div></td></tr>`}
+      </tbody></table></div></div>`;
   }
 };
 
@@ -129,7 +141,7 @@ Admin.sections.audit_log = {
    ============================================================ */
 async function renderLeaderSection(section, body){
   const mySquads = Admin.ctx.leaderSquads.map(s=>s.squad_id);
-  if(!mySquads.length){ body.innerHTML = `<div class="emptyState">لا تقود أي مجموعة حاليًا.</div>`; return; }
+  if(!mySquads.length){ body.innerHTML = `<div class="emptyStatePro"><h4>لا تقود أي مجموعة حاليًا</h4><p>تواصل مع مسؤول الكورس لو تتوقع إنك مفروض تكون قائد مجموعة.</p></div>`; return; }
 
   if(mySquads.length > 1 && !document.getElementById("squadSwitcherLeader")){
     const nav = document.getElementById("navRoot");
@@ -141,18 +153,20 @@ async function renderLeaderSection(section, body){
     nav.prepend(sw);
   }
   const squadId = Admin.currentSquadId || mySquads[0];
-  if(!mySquads.includes(squadId)){ body.innerHTML = `<div class="emptyState">لا تملك صلاحية على هذه المجموعة.</div>`; return; }
+  if(!mySquads.includes(squadId)){ body.innerHTML = `<div class="emptyStatePro"><p style="margin:0">لا تملك صلاحية على هذه المجموعة.</p></div>`; return; }
 
   const { data: squad } = await db.from("squads").select("*, courses(id,name)").eq("id", squadId).single();
   document.getElementById("pageTitle").textContent = squad?.name || "";
 
   if(section==="mysquad" || section==="members"){
-    const { data: members } = await db.from("enrollments").select("*, profiles(full_name,email)").eq("squad_id", squadId);
-    body.innerHTML = `<div class="card"><table><thead><tr><th>الطالب</th><th>الحالة</th><th>التقدم</th><th>XP</th></tr></thead>
+    body.innerHTML = `<div class="card">${Array(3).fill(`<div class="skeleton skeleton-line w80" style="height:30px;margin-bottom:10px"></div>`).join("")}</div>`;
+    const { data: members, error } = await db.from("enrollments").select("*, profiles(full_name,email)").eq("squad_id", squadId);
+    if(error){ body.innerHTML = `<div class="alertBox error"><span>تعذّر تحميل الأعضاء.</span><button class="btn alertRetry" id="mbRetry">إعادة المحاولة</button></div>`; body.querySelector("#mbRetry").onclick=()=>Admin.go(section); return; }
+    body.innerHTML = `<div class="card"><div class="tableScroll"><table><thead><tr><th>الطالب</th><th>الحالة</th><th>التقدم</th><th>XP</th></tr></thead>
       <tbody>${(members||[]).map(m=>`
-        <tr><td>${CodeUp.escapeHtml(m.profiles?.full_name||m.profiles?.email||"")}</td><td><span class="pill ${m.status==='on_track'?'approved':m.status==='behind'?'rejected':'pending'}">${m.status}</span></td><td>${m.progress}%</td><td>${m.xp}</td></tr>
-      `).join("") || `<tr><td colspan="4" class="emptyState">لا يوجد أعضاء في مجموعتك بعد.</td></tr>`}
-      </tbody></table></div>`;
+        <tr><td>${CodeUp.escapeHtml(m.profiles?.full_name||m.profiles?.email||"")}</td><td><span class="pill ${m.status==='on_track'?'approved':m.status==='behind'?'rejected':'pending'}">${enrollmentStatusLabel(m.status)}</span></td><td>${m.progress}%</td><td>${m.xp}</td></tr>
+      `).join("") || `<tr><td colspan="4"><div class="emptyStatePro"><p style="margin:0">لا يوجد أعضاء في مجموعتك بعد.</p></div></td></tr>`}
+      </tbody></table></div></div>`;
     return;
   }
 
@@ -175,8 +189,8 @@ async function renderLeaderSection(section, body){
     const { data } = await db.from("assignments").select("*").eq("course_id", squad.courses.id).order("deadline");
     body.innerHTML = `
       ${canAdd?`<div class="toolbar"><button class="btn dark" id="leaderNewAssignBtn">+ واجب جديد</button></div>`:""}
-      <div class="card"><table><thead><tr><th>العنوان</th><th>الموعد النهائي</th></tr></thead>
-      <tbody>${(data||[]).map(a=>`<tr><td>${CodeUp.escapeHtml(a.title)}</td><td>${CodeUp.formatDate(a.deadline)}</td></tr>`).join("")||`<tr><td colspan="2" class="emptyState">لا توجد واجبات بعد.</td></tr>`}</tbody></table></div>`;
+      <div class="card"><div class="tableScroll"><table><thead><tr><th>العنوان</th><th>الموعد النهائي</th></tr></thead>
+      <tbody>${(data||[]).map(a=>`<tr><td>${CodeUp.escapeHtml(a.title)}</td><td class="small">${CodeUp.formatDate(a.deadline)}</td></tr>`).join("")||`<tr><td colspan="2"><div class="emptyStatePro"><p style="margin:0">لا توجد واجبات بعد.</p></div></td></tr>`}</tbody></table></div></div>`;
     if(canAdd){
       body.querySelector("#leaderNewAssignBtn").onclick = ()=> openLeaderAssignmentModal(squad.courses.id);
     }
@@ -188,8 +202,8 @@ async function renderLeaderSection(section, body){
     const memberIds = (members||[]).map(m=>m.profile_id);
     if(!memberIds.length){ body.innerHTML = `<div class="emptyState">لا يوجد أعضاء بعد.</div>`; return; }
     const { data: subs } = await db.from("submissions").select("*, assignments(title), profiles(full_name)").in("profile_id", memberIds).order("submitted_at",{ascending:false}).limit(60);
-    body.innerHTML = `<div class="card"><table><thead><tr><th>الطالب</th><th>الواجب</th><th>الحالة</th></tr></thead>
-      <tbody>${(subs||[]).map(s=>`<tr><td>${CodeUp.escapeHtml(s.profiles?.full_name||"")}</td><td>${CodeUp.escapeHtml(s.assignments?.title||"")}</td><td><span class="pill">${subStatusAr(s.status)}</span></td></tr>`).join("")||`<tr><td colspan="3" class="emptyState">لا توجد تسليمات بعد.</td></tr>`}</tbody></table></div>`;
+    body.innerHTML = `<div class="card"><div class="tableScroll"><table><thead><tr><th>الطالب</th><th>الواجب</th><th>الحالة</th></tr></thead>
+      <tbody>${(subs||[]).map(s=>`<tr><td>${CodeUp.escapeHtml(s.profiles?.full_name||"")}</td><td>${CodeUp.escapeHtml(s.assignments?.title||"")}</td><td><span class="pill ${s.status==='reviewed'?'approved':s.status==='late'?'pending':''}">${subStatusAr(s.status)}</span></td></tr>`).join("")||`<tr><td colspan="3"><div class="emptyStatePro"><p style="margin:0">لا توجد تسليمات بعد.</p></div></td></tr>`}</tbody></table></div></div>`;
     return;
   }
 
@@ -204,15 +218,15 @@ async function renderLeaderSection(section, body){
 
   if(section==="lactivity"){
     const { data } = await db.from("activity_log").select("*, profiles(full_name)").eq("course_id", squad.courses.id).order("created_at",{ascending:false}).limit(40);
-    body.innerHTML = `<div class="card"><table><thead><tr><th>المستخدم</th><th>الحدث</th><th>الوقت</th></tr></thead>
-      <tbody>${(data||[]).map(a=>`<tr><td>${CodeUp.escapeHtml(a.profiles?.full_name||"—")}</td><td>${CodeUp.escapeHtml(a.action_text)}</td><td>${CodeUp.timeAgo(a.created_at)}</td></tr>`).join("")||`<tr><td colspan="3" class="emptyState">لا يوجد نشاط بعد.</td></tr>`}</tbody></table></div>`;
+    body.innerHTML = `<div class="card"><div class="tableScroll"><table><thead><tr><th>المستخدم</th><th>الحدث</th><th>الوقت</th></tr></thead>
+      <tbody>${(data||[]).map(a=>`<tr><td>${CodeUp.escapeHtml(a.profiles?.full_name||"—")}</td><td>${CodeUp.escapeHtml(a.action_text)}</td><td class="small">${CodeUp.timeAgo(a.created_at)}</td></tr>`).join("")||`<tr><td colspan="3"><div class="emptyStatePro"><p style="margin:0">لا يوجد نشاط بعد.</p></div></td></tr>`}</tbody></table></div></div>`;
     return;
   }
 
   if(section==="lprogress"){
     const { data } = await db.from("enrollments").select("*, profiles(full_name)").eq("squad_id", squadId).order("xp",{ascending:false});
-    body.innerHTML = `<div class="card"><table><thead><tr><th>الطالب</th><th>التقدم</th><th>XP</th><th>Streak</th></tr></thead>
-      <tbody>${(data||[]).map(e=>`<tr><td>${CodeUp.escapeHtml(e.profiles?.full_name||"")}</td><td>${e.progress}%</td><td>${e.xp}</td><td>${e.streak}</td></tr>`).join("")||`<tr><td colspan="4" class="emptyState">لا يوجد أعضاء بعد.</td></tr>`}</tbody></table></div>`;
+    body.innerHTML = `<div class="card"><div class="tableScroll"><table><thead><tr><th>الطالب</th><th>التقدم</th><th>XP</th><th>Streak</th></tr></thead>
+      <tbody>${(data||[]).map(e=>`<tr><td>${CodeUp.escapeHtml(e.profiles?.full_name||"")}</td><td style="min-width:110px"><div class="progressTrack" style="margin-bottom:4px"><div class="progressFill" style="width:${e.progress??0}%"></div></div><span class="small">${e.progress??0}%</span></td><td>${e.xp}</td><td>${e.streak}</td></tr>`).join("")||`<tr><td colspan="4"><div class="emptyStatePro"><p style="margin:0">لا يوجد أعضاء بعد.</p></div></td></tr>`}</tbody></table></div></div>`;
     return;
   }
 
@@ -229,17 +243,17 @@ async function renderLeaderSection(section, body){
             <b>${CodeUp.escapeHtml(u.title)}</b>
             <button class="btn" data-editunit="${u.id}">تعديل</button>
           </div>
-          <table style="margin-top:10px"><thead><tr><th>الدرس</th><th>رابط الفيديو</th><th></th></tr></thead>
+          <div class="tableScroll"><table style="margin-top:10px"><thead><tr><th>الدرس</th><th>رابط الفيديو</th><th></th></tr></thead>
           <tbody>${(u.lessons||[]).sort((a,b)=>a.order_index-b.order_index).map(l=>`
             <tr>
               <td>${CodeUp.escapeHtml(l.title)}</td>
               <td>${l.video_url?`<a href="${l.video_url}" target="_blank">رابط ↗</a>`:"—"}</td>
               <td><button class="btn" data-editlesson="${l.id}" data-unit="${u.id}">تعديل</button></td>
-            </tr>`).join("") || `<tr><td colspan="3" class="emptyState">لا توجد دروس بعد.</td></tr>`}
-          </tbody></table>
+            </tr>`).join("") || `<tr><td colspan="3"><div class="emptyStatePro" style="padding:16px 8px"><p style="margin:0">لا توجد دروس بعد.</p></div></td></tr>`}
+          </tbody></table></div>
           <button class="btn" style="margin-top:10px" data-addlesson="${u.id}">+ إضافة درس</button>
         </div>
-      `).join("") || `<div class="emptyState">لا توجد وحدات بعد.</div>`}
+      `).join("") || `<div class="emptyStatePro"><h4>لا توجد وحدات بعد</h4><p>ابدأ بإضافة أول وحدة.</p></div>`}
     `;
     body.querySelector("#leaderNewUnitBtn").onclick = ()=> openUnitModal(cid, null, ()=>Admin.go("lcontent"));
     body.querySelectorAll("[data-editunit]").forEach(b=>{

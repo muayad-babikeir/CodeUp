@@ -3,23 +3,53 @@
 Admin.sections.courses = {
   label: "الكورسات",
   async render(body){
-    const { data: courses } = await db.from("courses").select("*").order("created_at",{ascending:false});
+    body.innerHTML = `<div class="card">${Array(3).fill(`<div class="skeleton skeleton-line w80" style="height:44px;margin-bottom:10px"></div>`).join("")}</div>`;
+
+    const [{ data: courses, error }, { data: unitsRows }, { data: enrollRows }] = await Promise.all([
+      db.from("courses").select("*").order("created_at",{ascending:false}),
+      db.from("units").select("course_id, lessons(id)"),
+      db.from("enrollments").select("course_id")
+    ]);
+    if(error){ body.innerHTML = `<div class="alertBox error"><span>تعذّر تحميل الكورسات.</span><button class="btn alertRetry" id="crsRetry">إعادة المحاولة</button></div>`; body.querySelector("#crsRetry").onclick=()=>Admin.go("courses"); return; }
+
+    const lessonCount = {};
+    (unitsRows||[]).forEach(u=>{ lessonCount[u.course_id] = (lessonCount[u.course_id]||0) + (u.lessons||[]).length; });
+    const studentCount = {};
+    (enrollRows||[]).forEach(e=>{ studentCount[e.course_id] = (studentCount[e.course_id]||0) + 1; });
+
     body.innerHTML = `
       <div class="toolbar"><button class="btn dark" id="newCourseBtn">+ كورس جديد</button></div>
-      <div class="card"><table>
-        <thead><tr><th>الاسم</th><th>الحالة</th><th>تاريخ الإنشاء</th><th></th></tr></thead>
+      <div class="card"><div class="tableScroll"><table>
+        <thead><tr><th>الكورس</th><th>الدروس</th><th>الطلاب</th><th>الحالة</th><th>تاريخ الإنشاء</th><th></th></tr></thead>
         <tbody>${(courses||[]).map(c=>`
           <tr>
-            <td>${CodeUp.escapeHtml(c.name)}</td>
+            <td>
+              <b>${CodeUp.escapeHtml(c.name)}</b>
+              ${c.description?`<div class="small" style="margin-top:2px;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${CodeUp.escapeHtml(c.description)}</div>`:""}
+            </td>
+            <td>${lessonCount[c.id]||0}</td>
+            <td>${studentCount[c.id]||0}</td>
             <td><span class="pill ${c.status==='published'?'approved':c.status==='draft'?'pending':'rejected'}">${courseStatusLabel(c.status)}</span></td>
-            <td>${CodeUp.formatDate(c.created_at)}</td>
-            <td><button class="btn" data-edit="${c.id}">تعديل</button></td>
-          </tr>`).join("") || `<tr><td colspan="4" class="emptyState">لا توجد كورسات بعد.</td></tr>`}
-        </tbody></table></div>`;
+            <td class="small">${CodeUp.formatDate(c.created_at)}</td>
+            <td>
+              <button class="btn" data-content="${c.id}">إدارة المحتوى</button>
+              <button class="btn" data-edit="${c.id}">تعديل</button>
+            </td>
+          </tr>`).join("") || `<tr><td colspan="6"><div class="emptyStatePro"><h4>لا توجد كورسات بعد</h4><p>أنشئ أول كورس لتبدأ ببناء تجربة CodeUp التعليمية.</p><button class="btn dark" id="emptyNewCourseBtn">+ كورس جديد</button></div></td></tr>`}
+        </tbody></table></div></div>`;
 
-    body.querySelector("#newCourseBtn").onclick = ()=> openCourseModal();
+    const wireNew = (btn)=>{ if(btn) btn.onclick = ()=> openCourseModal(); };
+    wireNew(body.querySelector("#newCourseBtn"));
+    wireNew(body.querySelector("#emptyNewCourseBtn"));
     body.querySelectorAll("[data-edit]").forEach(b=>{
       b.onclick = ()=> openCourseModal(courses.find(c=>c.id===b.dataset.edit));
+    });
+    body.querySelectorAll("[data-content]").forEach(b=>{
+      b.onclick = async ()=>{
+        Admin.currentCourseId = b.dataset.content;
+        await Admin.renderNav();
+        Admin.go("content");
+      };
     });
   }
 };
@@ -124,8 +154,10 @@ Admin.sections.course_admins = {
 Admin.sections.settings = {
   label: "إعدادات الكورس",
   async render(body){
-    const { data: course } = await db.from("courses").select("*").eq("id", Admin.currentCourseId).single();
-    if(!course){ body.innerHTML = `<div class="emptyState">اختر كورسًا أولًا.</div>`; return; }
+    if(!Admin.currentCourseId){ body.innerHTML = `<div class="emptyStatePro"><h4>لا يوجد كورس محدد</h4><p>اختر كورسًا من القائمة الجانبية أولًا.</p></div>`; return; }
+    body.innerHTML = `<div class="card">${Array(3).fill(`<div class="skeleton skeleton-line w60" style="height:30px;margin-bottom:12px"></div>`).join("")}</div>`;
+    const { data: course, error } = await db.from("courses").select("*").eq("id", Admin.currentCourseId).single();
+    if(error || !course){ body.innerHTML = `<div class="alertBox error"><span>تعذّر تحميل إعدادات الكورس.</span><button class="btn alertRetry" id="setRetry">إعادة المحاولة</button></div>`; body.querySelector("#setRetry").onclick=()=>Admin.go("settings"); return; }
     body.innerHTML = `
       <div class="card">
         <label>الاسم</label><input id="sName" value="${CodeUp.escapeHtml(course.name)}">
@@ -188,6 +220,61 @@ Admin.sections.settings = {
         }catch(e){ CodeUp.toast(e.message||"فشل الحذف — تأكد من الاسم", "error"); btn.disabled = false; }
       };
     };
+  }
+};
+
+// مركز الإعدادات — صفحة تجميع فقط، بدون أي منطق أو بيانات جديدة.
+// تربط بالصفحات الحقيقية الموجودة أصلًا (لا تُنشئ أي إعداد وهمي).
+// كل بطاقة تظهر فقط لو القسم المرتبط بها موجود فعلًا بالمشروع ومتاح للدور الحالي.
+Admin.sections.settings_hub = {
+  label: "الإعدادات",
+  async render(body){
+    const isSuper = Admin.role === "super";
+    const hasCourse = Admin.currentCourseId && Admin.currentCourseId !== HOME_SENTINEL;
+
+    const groups = [
+      { title:"هذا الكورس", items:[
+        hasCourse && {icon:"📘", label:"إعدادات الكورس", desc:"الاسم، الوصف، الرابط، الحالة، وحذف الكورس نهائيًا.", goto:"settings"},
+        hasCourse && {icon:"🗄️", label:"الأرشفة والملفات", desc:"مدة الاحتفاظ بملفات التسليمات قبل حذفها من التخزين المؤقت.", goto:"files"},
+      ].filter(Boolean) },
+      { title:"المنصة (Super Admin)", items: isSuper ? [
+        {icon:"📣", label:"الإعلانات العامة", desc:"إعلانات تظهر لكل مستخدمي CodeUp بالصفحة الرئيسية.", goto:"home_announcements", home:true},
+        {icon:"📝", label:"الإشراف على منشورات المستجدات", desc:"حذف أي منشور حر غير مناسب من الصفحة الرئيسية.", goto:"home_posts", home:true},
+        {icon:"💬", label:"مدة الاحتفاظ بالرسائل الخاصة", desc:"عدد الأيام قبل حذف الرسائل الخاصة تلقائيًا.", goto:"message_settings", home:true},
+        {icon:"🎓", label:"قسم الجامعة", desc:"الفصول الدراسية والمواد المستقلة عن نظام الكورسات.", goto:"university", home:true},
+      ] : [] }
+    ].filter(g=>g.items.length);
+
+    if(!groups.length){
+      body.innerHTML = `<div class="emptyStatePro"><h4>لا توجد إعدادات متاحة هنا</h4><p>اختر كورسًا من القائمة الجانبية لعرض إعداداته.</p></div>`;
+      return;
+    }
+
+    body.innerHTML = groups.map(g=>`
+      <div class="card" style="margin-bottom:14px">
+        <b>${CodeUp.escapeHtml(g.title)}</b>
+        <div style="margin-top:10px;display:flex;flex-direction:column;gap:2px">
+          ${g.items.map(it=>`
+            <button class="quickAction" style="width:100%;justify-content:flex-start" data-hubgo="${it.goto}" data-home="${!!it.home}">
+              <span class="qaIcon">${it.icon}</span>
+              <span style="display:flex;flex-direction:column;align-items:flex-start;text-align:start">
+                <b style="font-size:13.5px">${CodeUp.escapeHtml(it.label)}</b>
+                <span class="small">${CodeUp.escapeHtml(it.desc)}</span>
+              </span>
+            </button>`).join("")}
+        </div>
+      </div>`).join("");
+
+    body.querySelectorAll("[data-hubgo]").forEach(b=>{
+      b.onclick = async ()=>{
+        // بعض الصفحات (الإعلانات العامة، الجامعة...) لا تُقرأ إلا بسياق "الصفحة الرئيسية" وليس داخل كورس محدد
+        if(b.dataset.home === "true" && Admin.currentCourseId !== HOME_SENTINEL){
+          Admin.currentCourseId = HOME_SENTINEL;
+          await Admin.renderNav();
+        }
+        Admin.go(b.dataset.hubgo);
+      };
+    });
   }
 };
 

@@ -4,10 +4,11 @@ Admin.sections.join_requests = {
   label: "طلبات الانضمام",
   async render(body){
     const cid = Admin.currentCourseId;
+    body.innerHTML = `<div class="card">${Array(2).fill(`<div class="skeleton skeleton-line w80" style="height:34px;margin-bottom:10px"></div>`).join("")}</div>`;
     const { data, error } = await db.from("squad_join_requests")
       .select("*, profiles!user_id(full_name,email), squads!inner(name,course_id)")
       .eq("squads.course_id", cid).order("created_at",{ascending:false});
-    if(error){ body.innerHTML = `<div class="emptyState">تعذّر تحميل طلبات الانضمام: ${CodeUp.escapeHtml(error.message)}</div>`; return; }
+    if(error){ body.innerHTML = `<div class="alertBox error"><span>تعذّر تحميل طلبات الانضمام.</span><button class="btn alertRetry" id="jrRetry">إعادة المحاولة</button></div>`; body.querySelector("#jrRetry").onclick=()=>Admin.go("join_requests"); return; }
     renderRequestQueue(body, data||[], {
       title: (r)=> `${CodeUp.escapeHtml(r.profiles?.full_name||r.profiles?.email||"")} → ${CodeUp.escapeHtml(r.squads?.name||"")}`,
       subtitle: (r)=> r.message ? CodeUp.escapeHtml(r.message) : "بدون رسالة",
@@ -22,10 +23,11 @@ Admin.sections.leader_applications = {
   label: "طلبات القيادة",
   async render(body){
     const cid = Admin.currentCourseId;
+    body.innerHTML = `<div class="card">${Array(2).fill(`<div class="skeleton skeleton-line w80" style="height:34px;margin-bottom:10px"></div>`).join("")}</div>`;
     const { data, error } = await db.from("leader_applications")
       .select("*, profiles!user_id(full_name,email)")
       .eq("course_id", cid).order("created_at",{ascending:false});
-    if(error){ body.innerHTML = `<div class="emptyState">تعذّر تحميل طلبات القيادة: ${CodeUp.escapeHtml(error.message)}</div>`; return; }
+    if(error){ body.innerHTML = `<div class="alertBox error"><span>تعذّر تحميل طلبات القيادة.</span><button class="btn alertRetry" id="laRetry">إعادة المحاولة</button></div>`; body.querySelector("#laRetry").onclick=()=>Admin.go("leader_applications"); return; }
     const { data: squads } = await db.from("squads").select("id,name").eq("course_id", cid).eq("status","active");
 
     renderRequestQueue(body, data||[], {
@@ -63,25 +65,25 @@ function renderRequestQueue(body, items, opts){
 
   body.innerHTML = `
     <div class="card"><b>بانتظار المراجعة (${pending.length})</b>
-      <table><thead><tr><th>الطلب</th><th>ملاحظة</th><th>التاريخ</th><th></th></tr></thead>
+      <div class="tableScroll"><table><thead><tr><th>الطلب</th><th>ملاحظة</th><th>التاريخ</th><th></th></tr></thead>
       <tbody id="pendingBody">${pending.map(r=>`
         <tr data-id="${r.id}">
           <td>${opts.title(r)}</td>
           <td>${opts.subtitle(r)}</td>
-          <td>${CodeUp.timeAgo(r.created_at)}</td>
+          <td class="small">${CodeUp.timeAgo(r.created_at)}</td>
           <td>
             <button class="btn ok" data-approve="${r.id}">قبول</button>
             <button class="btn danger" data-reject="${r.id}">رفض</button>
           </td>
-        </tr>`).join("") || `<tr><td colspan="4" class="emptyState">لا توجد طلبات قيد المراجعة.</td></tr>`}
-      </tbody></table></div>
+        </tr>`).join("") || `<tr><td colspan="4"><div class="emptyStatePro"><p style="margin:0">لا توجد طلبات قيد المراجعة — كل شيء تمام.</p></div></td></tr>`}
+      </tbody></table></div></div>
 
     <div class="card"><b>السجل</b>
-      <table><thead><tr><th>الطلب</th><th>الحالة</th><th>التاريخ</th></tr></thead>
+      <div class="tableScroll"><table><thead><tr><th>الطلب</th><th>الحالة</th><th>التاريخ</th></tr></thead>
       <tbody>${others.map(r=>`
-        <tr><td>${opts.title(r)}</td><td><span class="pill ${r.status}">${statusAr(r.status)}</span></td><td>${CodeUp.timeAgo(r.reviewed_at||r.created_at)}</td></tr>
-      `).join("") || `<tr><td colspan="3" class="emptyState">لا يوجد سجل بعد.</td></tr>`}
-      </tbody></table></div>`;
+        <tr><td>${opts.title(r)}</td><td><span class="pill ${r.status}">${statusAr(r.status)}</span></td><td class="small">${CodeUp.timeAgo(r.reviewed_at||r.created_at)}</td></tr>
+      `).join("") || `<tr><td colspan="3"><div class="emptyStatePro"><p style="margin:0">لا يوجد سجل بعد.</p></div></td></tr>`}
+      </tbody></table></div></div>`;
 
   body.querySelectorAll("[data-approve]").forEach(b=>{
     b.onclick = async ()=>{

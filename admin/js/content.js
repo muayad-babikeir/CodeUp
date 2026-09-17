@@ -4,8 +4,10 @@ Admin.sections.content = {
   label: "المحتوى التعليمي",
   async render(body){
     const cid = Admin.currentCourseId;
-    if(!cid){ body.innerHTML = `<div class="emptyState">اختر كورسًا أولًا.</div>`; return; }
-    const { data: units } = await db.from("units").select("*, lessons(*)").eq("course_id", cid).order("order_index");
+    if(!cid){ body.innerHTML = `<div class="emptyStatePro"><h4>لا يوجد كورس محدد</h4><p>اختر كورسًا من القائمة الجانبية أولًا.</p></div>`; return; }
+    body.innerHTML = `<div class="card">${Array(2).fill(`<div class="skeleton skeleton-line w60" style="height:20px;margin-bottom:14px"></div>`).join("")}</div>`;
+    const { data: units, error } = await db.from("units").select("*, lessons(*)").eq("course_id", cid).order("order_index");
+    if(error){ body.innerHTML = `<div class="alertBox error"><span>تعذّر تحميل المحتوى.</span><button class="btn alertRetry" id="ctRetry">إعادة المحاولة</button></div>`; body.querySelector("#ctRetry").onclick=()=>Admin.go("content"); return; }
 
     body.innerHTML = `
       <div class="toolbar"><button class="btn dark" id="newUnitBtn">+ وحدة جديدة</button></div>
@@ -18,9 +20,10 @@ Admin.sections.content = {
               <button class="btn danger" data-delunit="${u.id}">حذف الوحدة</button>
             </div>
           </div>
-          <table style="margin-top:10px"><thead><tr><th>الدرس</th><th>رابط الفيديو</th><th>ترتيب</th><th></th></tr></thead>
-          <tbody>${(u.lessons||[]).sort((a,b)=>a.order_index-b.order_index).map(l=>`
-            <tr>
+          <div class="tableScroll"><table style="margin-top:10px"><thead><tr><th></th><th>الدرس</th><th>رابط الفيديو</th><th>ترتيب</th><th></th></tr></thead>
+          <tbody data-lessonsof="${u.id}">${(u.lessons||[]).sort((a,b)=>a.order_index-b.order_index).map(l=>`
+            <tr data-lessonrow="${l.id}" draggable="true">
+              <td class="dragHandle" title="اسحب لإعادة الترتيب">⠿</td>
               <td>${CodeUp.escapeHtml(l.title)}</td>
               <td>${l.video_url?`<a href="${l.video_url}" target="_blank">رابط ↗</a>`:"—"}</td>
               <td>${l.order_index}</td>
@@ -28,11 +31,12 @@ Admin.sections.content = {
                 <button class="btn" data-editlesson="${l.id}" data-unit="${u.id}">تعديل</button>
                 <button class="btn danger" data-dellesson="${l.id}">حذف</button>
               </td>
-            </tr>`).join("") || `<tr><td colspan="4" class="emptyState">لا توجد دروس في هذه الوحدة بعد.</td></tr>`}
-          </tbody></table>
+            </tr>`).join("") || `<tr><td colspan="5"><div class="emptyStatePro" style="padding:20px 8px"><p style="margin:0">لا توجد دروس في هذه الوحدة بعد.</p></div></td></tr>`}
+          </tbody></table></div>
+          ${(u.lessons||[]).length>1?`<p class="small" style="margin-top:6px">💡 اسحب أي درس من مقبض ⠿ لإعادة ترتيبه.</p>`:""}
           <button class="btn" style="margin-top:10px" data-addlesson="${u.id}">+ إضافة درس</button>
         </div>
-      `).join("") || `<div class="emptyState">لا توجد وحدات بعد. ابدأ بإضافة وحدة.</div>`}
+      `).join("") || `<div class="emptyStatePro"><h4>لا توجد وحدات بعد</h4><p>ابدأ بإضافة أول وحدة لهذا الكورس.</p></div>`}
     `;
 
     body.querySelector("#newUnitBtn").onclick = ()=> openUnitModal(cid);
@@ -41,7 +45,7 @@ Admin.sections.content = {
     });
     body.querySelectorAll("[data-delunit]").forEach(b=>{
       b.onclick = async ()=>{
-        if(!confirm("سيتم حذف الوحدة وكل دروسها. متابعة؟")) return;
+        if(!confirm("حذف الوحدة؟\n\nسيتم حذف كل دروسها معها، ولا يمكن التراجع عن هذا الإجراء.")) return;
         const { error } = await db.from("units").delete().eq("id", b.dataset.delunit);
         if(error){ CodeUp.toast(error.message, "error"); return; }
         Admin.go("content");
@@ -57,14 +61,45 @@ Admin.sections.content = {
     });
     body.querySelectorAll("[data-dellesson]").forEach(b=>{
       b.onclick = async ()=>{
-        if(!confirm("تأكيد حذف هذا الدرس؟")) return;
+        if(!confirm("حذف هذا الدرس؟\n\nلا يمكن التراجع عن هذا الإجراء.")) return;
         const { error } = await db.from("lessons").delete().eq("id", b.dataset.dellesson);
         if(error){ CodeUp.toast(error.message, "error"); return; }
         Admin.go("content");
       };
     });
+    body.querySelectorAll("[data-lessonsof]").forEach(tbody=>{
+      wireLessonDragDrop(tbody);
+    });
   }
 };
+
+// إعادة الترتيب بالسحب — تحدّث فقط عمود order_index الموجود أصلًا على lessons، بدون أي تغيير بالبنية
+function wireLessonDragDrop(tbody){
+  let draggedRow = null;
+  tbody.querySelectorAll("tr[data-lessonrow]").forEach(row=>{
+    row.addEventListener("dragstart", ()=>{ draggedRow = row; row.classList.add("dragging"); });
+    row.addEventListener("dragend", ()=> row.classList.remove("dragging"));
+    row.addEventListener("dragover", (e)=>{
+      e.preventDefault();
+      if(!draggedRow || draggedRow===row) return;
+      const rect = row.getBoundingClientRect();
+      const before = (e.clientY - rect.top) < rect.height/2;
+      tbody.insertBefore(draggedRow, before ? row : row.nextSibling);
+    });
+    row.addEventListener("drop", async (e)=>{
+      e.preventDefault();
+      if(!draggedRow) return;
+      const rows = Array.from(tbody.querySelectorAll("tr[data-lessonrow]"));
+      const updates = rows.map((r,i)=>({ id:r.dataset.lessonrow, order_index:i }));
+      draggedRow = null;
+      try{
+        await Promise.all(updates.map(u=> db.from("lessons").update({order_index:u.order_index}).eq("id",u.id).throwOnError()));
+        CodeUp.toast("تم تحديث الترتيب", "success");
+      }catch(err){ CodeUp.toast(err.message || "تعذّر حفظ الترتيب", "error"); }
+      Admin.go("content");
+    });
+  });
+}
 
 function openUnitModal(courseId, unit, onDone){
   onDone = onDone || (()=>Admin.go("content"));

@@ -4,21 +4,38 @@ Admin.sections.assignments = {
   label: "الواجبات",
   async render(body){
     const cid = Admin.currentCourseId;
-    const { data: assignments } = await db.from("assignments").select("*").eq("course_id", cid).order("deadline");
+    body.innerHTML = `<div class="card">${Array(3).fill(`<div class="skeleton skeleton-line w80" style="height:40px;margin-bottom:10px"></div>`).join("")}</div>`;
+    const [{ data: assignments, error }, { data: subRows }] = await Promise.all([
+      db.from("assignments").select("*").eq("course_id", cid).order("deadline"),
+      db.from("submissions").select("assignment_id, status, assignments!inner(course_id)").eq("assignments.course_id", cid)
+    ]);
+    if(error){ body.innerHTML = `<div class="alertBox error"><span>تعذّر تحميل الواجبات.</span><button class="btn alertRetry" id="asgRetry">إعادة المحاولة</button></div>`; body.querySelector("#asgRetry").onclick=()=>Admin.go("assignments"); return; }
+
+    const subsCount = {}, pendingCount = {};
+    (subRows||[]).forEach(s=>{
+      subsCount[s.assignment_id] = (subsCount[s.assignment_id]||0)+1;
+      if(s.status==="submitted"||s.status==="late") pendingCount[s.assignment_id] = (pendingCount[s.assignment_id]||0)+1;
+    });
+
     body.innerHTML = `
       <div class="toolbar"><button class="btn dark" id="newAssignBtn">+ واجب جديد</button></div>
-      <div class="card"><table><thead><tr><th>العنوان</th><th>النوع</th><th>الموعد النهائي</th><th></th></tr></thead>
+      <div class="card"><div class="tableScroll"><table><thead><tr><th>العنوان</th><th>النوع</th><th>الموعد النهائي</th><th>التسليمات</th><th>بانتظار المراجعة</th><th></th></tr></thead>
       <tbody>${(assignments||[]).map(a=>`
         <tr>
           <td>${CodeUp.escapeHtml(a.title)}</td>
           <td>${a.type==='daily'?'يومي':'أسبوعي'}</td>
-          <td>${CodeUp.formatDate(a.deadline)}</td>
+          <td class="small">${CodeUp.formatDate(a.deadline)}</td>
+          <td>${subsCount[a.id]||0}</td>
+          <td>${pendingCount[a.id]?`<span class="pill pending" style="cursor:pointer" data-viewsubs="1">${pendingCount[a.id]}</span>`:'<span class="pill neutral">0</span>'}</td>
           <td><button class="btn" data-edit="${a.id}">تعديل</button></td>
-        </tr>`).join("") || `<tr><td colspan="4" class="emptyState">لا توجد واجبات بعد.</td></tr>`}
-      </tbody></table></div>`;
+        </tr>`).join("") || `<tr><td colspan="6"><div class="emptyStatePro"><h4>لا توجد واجبات بعد</h4><p>أضف أول واجب لهذا الكورس.</p></div></td></tr>`}
+      </tbody></table></div></div>`;
     body.querySelector("#newAssignBtn").onclick = ()=> openAssignmentModal(cid);
     body.querySelectorAll("[data-edit]").forEach(b=>{
       b.onclick = ()=> openAssignmentModal(cid, assignments.find(a=>a.id===b.dataset.edit));
+    });
+    body.querySelectorAll("[data-viewsubs]").forEach(b=>{
+      b.onclick = ()=> Admin.go("submissions");
     });
   }
 };
@@ -140,33 +157,42 @@ Admin.sections.submissions = {
   label: "التسليمات",
   async render(body){
     const cid = Admin.currentCourseId;
-    const { data: subs } = await db.from("submissions")
+    body.innerHTML = `<div class="card">${Array(4).fill(`<div class="skeleton skeleton-line w80" style="height:38px;margin-bottom:10px"></div>`).join("")}</div>`;
+    const { data: subs, error } = await db.from("submissions")
       .select("*, assignments!inner(title,course_id), profiles(full_name,email)")
       .eq("assignments.course_id", cid).order("submitted_at",{ascending:false}).limit(100);
+    if(error){ body.innerHTML = `<div class="alertBox error"><span>تعذّر تحميل التسليمات.</span><button class="btn alertRetry" id="subRetry">إعادة المحاولة</button></div>`; body.querySelector("#subRetry").onclick=()=>Admin.go("submissions"); return; }
 
     body.innerHTML = `
-      <div class="toolbar">
+      <div class="toolbar" style="gap:10px;flex-wrap:wrap">
+        <div class="searchBox">
+          <span class="searchIcon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
+          <input id="subSearch" placeholder="بحث باسم الطالب…">
+        </div>
         <select id="statusFilter">
           <option value="">كل الحالات</option>
           <option value="submitted">تم التسليم</option><option value="late">متأخر</option>
           <option value="reviewed">تمت المراجعة</option><option value="missing">لم يُسلَّم</option>
         </select>
       </div>
-      <div class="card"><table><thead><tr><th>الطالب</th><th>الواجب</th><th>الحالة</th><th>الدرجة</th><th></th></tr></thead>
-      <tbody id="subsBody"></tbody></table></div>`;
+      <div class="card"><div class="tableScroll"><table><thead><tr><th>الطالب</th><th>الواجب</th><th>الحالة</th><th>الدرجة</th><th>تاريخ التسليم</th><th></th></tr></thead>
+      <tbody id="subsBody"></tbody></table></div></div>`;
 
     const tbody = body.querySelector("#subsBody");
+    let q = "";
     const draw = (list)=>{
-      tbody.innerHTML = list.map(s=>`
+      const filtered = q ? list.filter(s=>(s.profiles?.full_name||s.profiles?.email||"").toLowerCase().includes(q)) : list;
+      tbody.innerHTML = filtered.map(s=>`
         <tr>
           <td>${CodeUp.escapeHtml(s.profiles?.full_name||s.profiles?.email||"")}</td>
           <td>${CodeUp.escapeHtml(s.assignments?.title||"")}</td>
           <td><span class="pill ${s.status==='reviewed'?'approved':s.status==='late'?'pending':''}">${subStatusAr(s.status)}</span></td>
           <td>${s.grade??"—"}</td>
+          <td class="small">${CodeUp.timeAgo(s.submitted_at)}</td>
           <td><button class="btn" data-review="${s.id}">مراجعة</button></td>
-        </tr>`).join("") || `<tr><td colspan="5" class="emptyState">لا توجد تسليمات بعد.</td></tr>`;
+        </tr>`).join("") || `<tr><td colspan="6"><div class="emptyStatePro"><h4>لا توجد تسليمات مطابقة</h4><p>جرّب تعديل البحث أو الفلتر.</p></div></td></tr>`;
       tbody.querySelectorAll("[data-review]").forEach(b=>{
-        b.onclick = ()=> openReviewModal(list.find(s=>s.id===b.dataset.review));
+        b.onclick = ()=> openReviewModal(filtered.find(s=>s.id===b.dataset.review));
       });
     };
     draw(subs||[]);
@@ -174,6 +200,11 @@ Admin.sections.submissions = {
       const v = e.target.value;
       draw(v ? (subs||[]).filter(s=>s.status===v) : (subs||[]));
     };
+    body.querySelector("#subSearch").oninput = CodeUp.debounce(e=>{
+      q = e.target.value.trim().toLowerCase();
+      const v = body.querySelector("#statusFilter").value;
+      draw(v ? (subs||[]).filter(s=>s.status===v) : (subs||[]));
+    }, 200);
   }
 };
 
