@@ -227,6 +227,7 @@ th.sortable.sorted .sortArrow{opacity:1;color:var(--indigo)}
 .adminShell.sidebarCollapsed #courseSwitcher{display:none}
 .adminShell.sidebarCollapsed .navItem{justify-content:center}
 .sidebarToggle{display:none}
+.sidebarScrim{display:none}
 @media(min-width:821px){
   .sidebarToggle{display:inline-flex;margin-inline-start:4px}
 }
@@ -234,7 +235,7 @@ th.sortable.sorted .sortArrow{opacity:1;color:var(--indigo)}
   .sidebar{position:fixed;inset-inline-start:0;top:0;bottom:0;width:250px;transform:translateX(var(--sidebar-hidden-x,-105%));transition:transform .2s ease;z-index:90}
   [dir="rtl"] .sidebar{--sidebar-hidden-x:105%}
   .sidebar.open{transform:none}
-  .sidebarScrim{display:none;position:fixed;inset:0;background:rgba(2,2,4,.6);z-index:89}
+  .sidebarScrim{position:fixed;inset:0;background:rgba(2,2,4,.6);z-index:89}
   .sidebarScrim.show{display:block}
   .mobileMenuBtn{display:inline-grid!important}
   .main{padding:16px}
