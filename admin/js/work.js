@@ -43,6 +43,7 @@ Admin.sections.assignments = {
 async function openAssignmentModal(courseId, a){
   const isEdit = !!a;
   const { data: squads } = await db.from("squads").select("id,name").eq("course_id", courseId).eq("status","active");
+  const { data: units } = await db.from("units").select("id,title,lessons(id,title,order_index)").eq("course_id", courseId).order("order_index");
   let targetedSquadIds = [];
   if(isEdit){
     const { data: links } = await db.from("assignment_squads").select("squad_id").eq("assignment_id", a.id);
@@ -61,6 +62,13 @@ async function openAssignmentModal(courseId, a){
     <label>النوع</label>
     <select id="aType"><option value="weekly" ${!a||a.type==='weekly'?'selected':''}>أسبوعي</option><option value="daily" ${a?.type==='daily'?'selected':''}>يومي</option></select>
     <label>الموعد النهائي</label><input id="aDeadline" type="date" value="${a?.deadline||""}">
+    <label>ربط بدرس (اختياري — يظهر كتطبيق عملي بصفحة الدرس)</label>
+    <select id="aLesson">
+      <option value="">بدون ربط بدرس محدد</option>
+      ${(units||[]).map(u=>`<optgroup label="${CodeUp.escapeHtml(u.title)}">
+        ${(u.lessons||[]).sort((x,y)=>x.order_index-y.order_index).map(l=>`<option value="${l.id}" ${a?.lesson_id===l.id?"selected":""}>${CodeUp.escapeHtml(l.title)}</option>`).join("")}
+      </optgroup>`).join("")}
+    </select>
     <label>يظهر لـ</label>
     <div style="display:flex;flex-direction:column;gap:6px;margin:6px 0">
       <label style="display:flex;align-items:center;gap:6px;font-size:13px">
@@ -110,7 +118,8 @@ async function openAssignmentModal(courseId, a){
       title: m.el.querySelector("#aTitle").value.trim(),
       description: m.el.querySelector("#aDesc").value.trim(),
       type: m.el.querySelector("#aType").value,
-      deadline: m.el.querySelector("#aDeadline").value || null
+      deadline: m.el.querySelector("#aDeadline").value || null,
+      lesson_id: m.el.querySelector("#aLesson").value || null
     };
     if(!payload.title){ msgEl.style.display="block"; msgEl.textContent="العنوان إلزامي"; saveBtn.disabled=false; saveBtn.textContent="حفظ"; return; }
     try{

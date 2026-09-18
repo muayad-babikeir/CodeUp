@@ -231,19 +231,57 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
 .unitAccordion.open .unitAccordionBody{max-height:none}
 .unitAccordion:not(.open) .unitAccordionBody{display:none}
 
-.lessonRow{padding:12px 14px;border-top:1px solid var(--line)}
-.lessonRowMain{display:flex;align-items:flex-start;gap:10px}
-.lessonNum{color:var(--ink40);font-size:12px;margin-top:2px;flex-shrink:0}
+.lessonRow{display:flex;align-items:center;gap:10px;width:100%;padding:12px 14px;border-top:1px solid var(--line);background:none;border-inline:none;border-bottom:none;color:var(--ink);text-align:start;cursor:pointer;font-family:inherit}
+.lessonRow:hover{background:rgba(255,255,255,.03)}
+.lessonNum{color:var(--ink40);font-size:12px;flex-shrink:0}
 .lessonTitle{font-size:13.5px}
-.lessonMeta{display:flex;align-items:center;gap:10px;margin-top:4px;margin-inline-start:22px;flex-wrap:wrap}
+.lessonMeta{display:flex;align-items:center;gap:10px;margin-top:4px;flex-wrap:wrap}
 .lessonTypeTag{display:inline-flex;align-items:center;gap:4px;color:var(--ink60)}
 .lessonTypeTag svg{width:13px;height:13px}
 .lessonStatusTag{padding:1px 8px;border-radius:999px;font-size:11px}
 .lessonStatusTag-completed{background:var(--green-soft);color:var(--green)}
 .lessonStatusTag-current{background:rgba(29,155,240,.14);color:var(--accent)}
 .lessonStatusTag-available{background:rgba(255,255,255,.05);color:var(--ink60)}
-.lessonInline{margin-inline-start:22px;margin-top:8px}
+.lessonRowArrow{color:var(--ink40);flex-shrink:0}
+.lessonRowArrow svg{width:16px;height:16px}
 .lessonRow.status-current{background:rgba(29,155,240,.05)}
+
+/* ============ صفحة الدرس المستقلة (Phase 3) ============ */
+.backToContentBtn{margin-bottom:14px;display:inline-flex;align-items:center}
+.lessonPageBody{display:flex;flex-direction:column;gap:16px}
+.lessonMain{min-width:0}
+.lessonPageTitle{margin:2px 0 8px;font-size:19px}
+.lessonSectionTitle{font-size:13.5px}
+.lessonCompleteBtn{width:100%;margin-top:14px;display:inline-flex;align-items:center;justify-content:center;gap:6px}
+.lessonNavRow{display:flex;justify-content:space-between;align-items:center;margin-top:14px;gap:10px}
+.lessonNavBtn{display:inline-flex;align-items:center;gap:2px}
+
+.lessonSidebar{display:none}
+.lessonSidebarHead{padding:12px 14px;border-bottom:1px solid var(--line)}
+.lsUnit{padding:8px 0}
+.lsUnitTitle{padding:6px 14px;color:var(--ink60)}
+.lsLesson{display:flex;align-items:center;gap:10px;width:100%;padding:8px 14px;background:none;border:none;color:var(--ink);text-align:start;cursor:pointer;font-family:inherit;font-size:12.5px}
+.lsLesson:hover{background:rgba(255,255,255,.03)}
+.lsLesson.active{background:rgba(29,155,240,.1);color:var(--accent)}
+.lsLessonIcon{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;flex-shrink:0;font-size:10px;background:rgba(255,255,255,.06);color:var(--ink60)}
+.lsLessonIcon svg{width:11px;height:11px}
+.lsLessonIcon-completed{background:var(--green-soft);color:var(--green)}
+.lsLessonIcon-current{background:rgba(29,155,240,.16);color:var(--accent)}
+.lsLessonTitle{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+.mobileContentToggle{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:12px;border-radius:14px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer;font-family:inherit;font-size:13.5px;margin-top:16px}
+.mobileContentToggle svg{width:16px;height:16px}
+.lessonDrawerBg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:120}
+.lessonDrawerBg.show{display:block}
+.lessonDrawer{position:fixed;top:0;bottom:0;inset-inline-end:0;width:min(320px,85vw);background:var(--surface-solid);border-inline-start:1px solid var(--line-strong);z-index:121;overflow-y:auto;transform:translateX(var(--ld-hidden,105%));transition:transform .2s ease}
+[dir="rtl"] .lessonDrawer{--ld-hidden:105%}
+.lessonDrawer.open{transform:none}
+
+@media(min-width:900px){
+  .lessonPageBody{display:grid;grid-template-columns:1fr 300px;align-items:start}
+  .lessonSidebar{display:block;position:sticky;top:16px;background:var(--surface);border:1px solid var(--line);border-radius:16px;overflow:hidden;max-height:calc(100vh - 32px);overflow-y:auto}
+  .mobileContentToggle,.lessonDrawerBg,.lessonDrawer{display:none!important}
+}
 .inlineBtnIcon{display:inline-flex;vertical-align:-3px;margin-inline-end:2px}
 .inlineBtnIcon svg{width:14px;height:14px}
 .subtabs{display:flex;gap:4px;overflow-x:auto;background:var(--surface);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);border-radius:14px;padding:5px;margin:14px 0;scrollbar-width:thin}
@@ -680,6 +718,27 @@ async function bootApp(user){
   await App.init(user);
 }
 
+// يحدد "الدرس الحالي" (أول درس غير مكتمل بترتيب الوحدات ثم الدروس) — مصدر واحد
+// لهذا المنطق يُستخدم بكل من قائمة المحتوى وصفحة الدرس المستقلة، بدل تكراره
+function computeCurrentLesson(sortedUnits, doneSet){
+  let currentLessonId = null;
+  outer: for(const u of sortedUnits){
+    for(const l of u.lessons){
+      if(!doneSet.has(l.id)){ currentLessonId = l.id; break outer; }
+    }
+  }
+  const currentUnitId = currentLessonId
+    ? sortedUnits.find(u=>u.lessons.some(l=>l.id===currentLessonId))?.id
+    : (sortedUnits[0]?.id ?? null);
+  return {currentLessonId, currentUnitId};
+}
+function lessonContentType(l){
+  if(l.video_url) return {label:"فيديو", icon:"play"};
+  if(l.text_content) return {label:"قراءة", icon:"learning"};
+  if(l.pdf_url) return {label:"PDF", icon:"file"};
+  return {label:"محتوى", icon:"file"};
+}
+
 const App = {
   ctx: null,
   view: {name:"home"},
@@ -782,7 +841,10 @@ const App = {
     const parts = hash.split("/").filter(Boolean);
     if(parts[0] === "course" && parts[1]){
       const {data: course} = await db.from("courses").select("id").eq("slug", parts[1]).single();
-      if(course){ this.go({name:"course", courseId: course.id, tab: parts[2]||"learning"}, pushState); return; }
+      if(course){
+        if(parts[2] === "lesson" && parts[3]){ this.go({name:"lesson", courseId: course.id, courseSlug: parts[1], lessonId: parts[3]}, pushState); return; }
+        this.go({name:"course", courseId: course.id, courseSlug: parts[1], tab: parts[2]||"learning"}, pushState); return;
+      }
     }
     this.go({name:"home"}, pushState);
   },
@@ -800,6 +862,8 @@ const App = {
     if(updateHash){
       if(view.name === "course" && view.courseSlug){
         history.pushState(null, "", `#/course/${view.courseSlug}/${view.tab||"learning"}`);
+      }else if(view.name === "lesson" && view.courseSlug){
+        history.pushState(null, "", `#/course/${view.courseSlug}/lesson/${view.lessonId}`);
       }else if(view.name === "home"){
         history.pushState(null, "", location.pathname);
       }
@@ -1353,6 +1417,7 @@ const App = {
     this.updateBottomNavActive();
     if(this.view.name==="home") return this.renderHome(this.view.homeTab);
     if(this.view.name==="course") return this.renderCourse(this.view.courseId, this.view.tab||"learning");
+    if(this.view.name==="lesson") return this.renderLessonPage(this.view.courseId, this.view.courseSlug, this.view.lessonId);
     if(this.view.name==="messages") return this.renderMessages(this.view.conversationId);
     if(this.view.name==="profile") return this.renderProfile(this.view.profileId);
     if(this.view.name==="search") return this.renderSearch();
@@ -2128,6 +2193,155 @@ const App = {
     if(tab==="leaderboard") return this.renderLeaderboard(body, course);
   },
 
+  async renderLessonPage(courseId, courseSlug, lessonId){
+    this.root.innerHTML = `<div class="emptyState">جارِ التحميل…</div>`;
+    const [{data: course}, {data: units}, {data: linkedAssignments}] = await Promise.all([
+      db.from("courses").select("*").eq("id", courseId).single(),
+      db.from("units").select("*, lessons(*)").eq("course_id", courseId).order("order_index"),
+      db.from("assignments").select("*").eq("lesson_id", lessonId)
+    ]);
+    if(!course || !units){ this.root.innerHTML = `<div class="emptyState">الكورس غير موجود.</div>`; return; }
+
+    const sortedUnits = units.map(u=>({...u, lessons:(u.lessons||[]).sort((a,b)=>a.order_index-b.order_index)}));
+    const flatLessons = sortedUnits.flatMap(u=>u.lessons.map(l=>({...l, unitTitle:u.title, unitId:u.id})));
+    const lesson = flatLessons.find(l=>l.id===lessonId);
+    if(!lesson){ this.root.innerHTML = `<div class="emptyState">الدرس غير موجود أو تم حذفه.</div>`; return; }
+
+    const allLessonIds = flatLessons.map(l=>l.id);
+    const {data: myProgress} = await db.from("lesson_progress").select("lesson_id,status").eq("profile_id", this.ctx.user.id).in("lesson_id", allLessonIds);
+    const doneSet = new Set((myProgress||[]).filter(p=>p.status==="completed").map(p=>p.lesson_id));
+    const {currentLessonId} = computeCurrentLesson(sortedUnits, doneSet);
+
+    const idx = flatLessons.findIndex(l=>l.id===lessonId);
+    const prevLesson = idx>0 ? flatLessons[idx-1] : null;
+    const nextLesson = idx<flatLessons.length-1 ? flatLessons[idx+1] : null;
+    const isLast = idx === flatLessons.length-1;
+    const doneCount = flatLessons.filter(l=>doneSet.has(l.id)).length;
+    const donePct = flatLessons.length ? Math.round((doneCount/flatLessons.length)*100) : 0;
+    const numberInUnit = sortedUnits.find(u=>u.id===lesson.unitId).lessons.findIndex(l=>l.id===lessonId)+1;
+
+    this.crumbTrail([
+      {label: course.name, onClick: ()=>this.go({name:"course",courseId,courseSlug,tab:"learning"})},
+      {label: lesson.title, onClick: ()=>{}}
+    ]);
+
+    const goLesson = (id)=> this.go({name:"lesson", courseId, courseSlug, lessonId: id});
+
+    const sidebarHtml = `
+      <div class="lessonSidebarHead"><b>محتوى الكورس</b></div>
+      ${sortedUnits.map(u=>{
+        const uDone = u.lessons.filter(l=>doneSet.has(l.id)).length;
+        return `
+        <div class="lsUnit">
+          <div class="lsUnitTitle small">${CodeUp.escapeHtml(u.title)} <span class="mono">— ${uDone}/${u.lessons.length}</span></div>
+          ${u.lessons.map((l,i)=>{
+            const st = doneSet.has(l.id) ? "completed" : (l.id===currentLessonId ? "current" : "available");
+            return `<button class="lsLesson ${l.id===lessonId?'active':''}" data-golesson="${l.id}">
+              <span class="lsLessonIcon lsLessonIcon-${st}">${st==="completed"?Icon("check"):String(i+1).padStart(2,"0")}</span>
+              <span class="lsLessonTitle">${CodeUp.escapeHtml(l.title)}</span>
+            </button>`;
+          }).join("")}
+        </div>`;
+      }).join("")}
+    `;
+
+    const ct = lessonContentType(lesson);
+    const isDone = doneSet.has(lesson.id);
+
+    this.root.innerHTML = `
+      <button class="btn backToContentBtn" id="backToContentBtn"><span class="inlineBtnIcon">${Icon("arrow_right")}</span> العودة إلى المحتوى</button>
+      <div class="lessonPageBody">
+        <div class="lessonMain">
+          <div class="small">الوحدة ${sortedUnits.findIndex(u=>u.id===lesson.unitId)+1} — ${CodeUp.escapeHtml(lesson.unitTitle)}</div>
+          <h2 class="lessonPageTitle">الدرس ${String(numberInUnit).padStart(2,"0")} — ${CodeUp.escapeHtml(lesson.title)}</h2>
+          <div class="lessonTypeTag" style="margin-bottom:14px">${Icon(ct.icon)} ${ct.label}</div>
+
+          ${lesson.video_url ? youtubeEmbedHtml(lesson.video_url) : ""}
+          ${lesson.text_content ? `<div class="card2"><p class="small" style="white-space:pre-wrap;color:var(--ink)">${CodeUp.escapeHtml(lesson.text_content)}</p></div>` : ""}
+
+          ${lesson.pdf_url ? `
+          <div class="card2">
+            <b class="lessonSectionTitle">ملفات الدرس</b>
+            <a class="btn" style="margin-top:8px;display:inline-flex;align-items:center" href="${lesson.pdf_url}" target="_blank"><span class="inlineBtnIcon">${Icon("file")}</span> فتح ملف PDF</a>
+          </div>` : ""}
+
+          ${(lesson.anki_ar_url || lesson.anki_en_url) ? `
+          <div class="card2">
+            <b class="lessonSectionTitle">Anki</b>
+            <p class="small" style="margin:4px 0 8px">بطاقات المراجعة لهذا الدرس</p>
+            ${lesson.anki_ar_url?`<a class="btn" style="margin-inline-end:8px;display:inline-flex;align-items:center" href="${lesson.anki_ar_url}" target="_blank"><span class="inlineBtnIcon">${Icon("download")}</span> العربية</a>`:""}
+            ${lesson.anki_en_url?`<a class="btn" style="display:inline-flex;align-items:center" href="${lesson.anki_en_url}" target="_blank"><span class="inlineBtnIcon">${Icon("download")}</span> English</a>`:""}
+          </div>` : ""}
+
+          ${(linkedAssignments||[]).length ? `
+          <div class="card2">
+            <b class="lessonSectionTitle">التطبيق العملي</b>
+            ${linkedAssignments.map(a=>`
+              <div style="margin-top:8px;display:flex;justify-content:space-between;align-items:center;gap:8px">
+                <span class="small">${CodeUp.escapeHtml(a.title)}</span>
+                <button class="btn dark" data-openassignment="${a.id}">فتح التمرين</button>
+              </div>`).join("")}
+          </div>` : ""}
+
+          <div class="card2">
+            <div class="row"><b>تقدمك في هذا الكورس</b><span class="mono small">${doneCount} / ${flatLessons.length} — ${donePct}%</span></div>
+            <div class="progressTrack" style="margin-top:8px"><div class="progressFill" style="width:${donePct}%"></div></div>
+          </div>
+
+          <button class="btn ${isDone?'':'dark'} lessonCompleteBtn" id="completeLessonBtn">
+            ${isDone?`<span class="inlineBtnIcon">${Icon("check")}</span> تم إكمال الدرس`:"إكمال الدرس"}
+          </button>
+
+          <div class="lessonNavRow">
+            ${prevLesson?`<button class="btn lessonNavBtn" data-golesson="${prevLesson.id}"><span class="inlineBtnIcon">${Icon("arrow_right")}</span> الدرس السابق</button>`:`<span></span>`}
+            ${isLast
+              ? `<span class="small" style="align-self:center">${doneCount>=flatLessons.length?"أكملت جميع دروس الكورس":"هذا آخر درس بالكورس"}</span>`
+              : `<button class="btn dark lessonNavBtn" data-golesson="${nextLesson.id}">الدرس التالي <span class="inlineBtnIcon">${Icon("arrow_left")}</span></button>`}
+          </div>
+        </div>
+
+        <aside class="lessonSidebar">${sidebarHtml}</aside>
+      </div>
+
+      <button class="mobileContentToggle" id="mobileContentToggle">${Icon("learning")} محتوى الكورس</button>
+      <div class="lessonDrawerBg" id="lessonDrawerBg"></div>
+      <div class="lessonDrawer" id="lessonDrawer">${sidebarHtml}</div>
+    `;
+
+    if(lesson.video_url) wireYoutubeEmbeds(this.root);
+
+    document.getElementById("backToContentBtn").onclick = ()=> this.go({name:"course",courseId,courseSlug,tab:"learning"});
+
+    this.root.querySelectorAll("[data-golesson]").forEach(btn=>{
+      btn.onclick = ()=> goLesson(btn.dataset.golesson);
+    });
+    this.root.querySelectorAll("[data-openassignment]").forEach(btn=>{
+      btn.onclick = ()=> this.go({name:"course",courseId,courseSlug,tab:"assignments"});
+    });
+
+    document.getElementById("completeLessonBtn").onclick = async (e)=>{
+      const btn = e.currentTarget;
+      btn.disabled = true;
+      const nowDone = !isDone;
+      try{
+        await db.from("lesson_progress").upsert({
+          lesson_id: lesson.id, profile_id: this.ctx.user.id,
+          status: nowDone ? "completed" : "not_started",
+          completed_at: nowDone ? new Date().toISOString() : null
+        }, {onConflict: "lesson_id,profile_id"}).throwOnError();
+        this.renderLessonPage(courseId, courseSlug, lessonId); // إعادة رسم لتحديث التقدم والدرس الحالي وحالة القائمة الجانبية
+      }catch(err){ CodeUp.toast(err.message,"error"); btn.disabled = false; }
+    };
+
+    // Drawer المحتوى بالهاتف فقط (لا Sidebar ثابت يضغط المحتوى)
+    const drawerBg = document.getElementById("lessonDrawerBg");
+    const drawer = document.getElementById("lessonDrawer");
+    const openDrawer = ()=>{ drawerBg.classList.add("show"); drawer.classList.add("open"); };
+    const closeDrawer = ()=>{ drawerBg.classList.remove("show"); drawer.classList.remove("open"); };
+    document.getElementById("mobileContentToggle").onclick = openDrawer;
+    drawerBg.onclick = closeDrawer;
+  },
+
   async renderLearning(body, course){
     body.innerHTML = `<div class="card2">${Array(2).fill(`<div class="skeleton skeleton-line w60" style="height:16px;margin:10px 0"></div>`).join("")}</div>`;
     const {data: units} = await db.from("units").select("*, lessons(*)").eq("course_id", course.id).order("order_index");
@@ -2145,22 +2359,9 @@ const App = {
 
     // تحديد "الدرس الحالي": أول درس غير مكتمل بترتيب الوحدات ثم الدروس — لا يوجد نظام Unlock،
     // فكل الدروس AVAILABLE بخلاف المكتمل والحالي؛ ما نضيف حالة LOCKED من عندنا
-    let currentLessonId = null;
-    outer: for(const u of sortedUnits){
-      for(const l of u.lessons){
-        if(!doneSet.has(l.id)){ currentLessonId = l.id; break outer; }
-      }
-    }
-    const currentUnitId = currentLessonId
-      ? sortedUnits.find(u=>u.lessons.some(l=>l.id===currentLessonId))?.id
-      : (sortedUnits[0]?.id ?? null); // كل الدروس مكتملة أو ما فيه دروس بعد → افتح أول وحدة
+    const {currentLessonId, currentUnitId} = computeCurrentLesson(sortedUnits, doneSet);
 
-    const contentTypeOf = (l)=>{
-      if(l.video_url) return {label:"فيديو", icon:"play"};
-      if(l.text_content) return {label:"قراءة", icon:"learning"};
-      if(l.pdf_url) return {label:"PDF", icon:"file"};
-      return {label:"محتوى", icon:"file"};
-    };
+    const contentTypeOf = lessonContentType;
 
     body.innerHTML = sortedUnits.map(u=>{
       const total = u.lessons.length;
@@ -2183,52 +2384,28 @@ const App = {
             const statusLabelAr = {completed:"مكتمل", current:"الدرس الحالي", available:"متاح"}[status];
             const ct = contentTypeOf(l);
             return `
-            <div class="lessonRow status-${status}" data-lessonid="${l.id}">
-              <div class="lessonRowMain">
-                <span class="lessonNum mono">${String(i+1).padStart(2,"0")}</span>
-                <div style="min-width:0;flex:1">
-                  <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-                    <input type="checkbox" data-lessondone="${l.id}" ${doneSet.has(l.id)?"checked":""}>
-                    <span class="lessonTitle">${CodeUp.escapeHtml(l.title)}</span>
-                  </label>
-                  <div class="lessonMeta small">
-                    <span class="lessonTypeTag">${Icon(ct.icon)} ${ct.label}</span>
-                    <span class="lessonStatusTag lessonStatusTag-${status}">${statusLabelAr}</span>
-                  </div>
+            <button class="lessonRow status-${status}" data-lessonid="${l.id}" data-courseslug="${CodeUp.escapeHtml(course.slug)}">
+              <span class="lessonNum mono">${String(i+1).padStart(2,"0")}</span>
+              <div style="min-width:0;flex:1">
+                <span class="lessonTitle">${CodeUp.escapeHtml(l.title)}</span>
+                <div class="lessonMeta small">
+                  <span class="lessonTypeTag">${Icon(ct.icon)} ${ct.label}</span>
+                  <span class="lessonStatusTag lessonStatusTag-${status}">${statusLabelAr}</span>
                 </div>
               </div>
-              <div class="lessonInline">
-                ${l.video_url?youtubeEmbedHtml(l.video_url):""}
-                ${l.text_content?`<p class="small" style="white-space:pre-wrap;margin-top:6px">${CodeUp.escapeHtml(l.text_content)}</p>`:""}
-                ${l.pdf_url?`<a class="btn" style="margin-top:6px;margin-inline-end:6px;display:inline-flex;align-items:center" href="${l.pdf_url}" target="_blank"><span class="inlineBtnIcon">${Icon("file")}</span> فتح ملف PDF</a>`:""}
-                ${l.anki_ar_url?`<a class="btn" style="margin-top:6px;margin-inline-end:6px;display:inline-flex;align-items:center" href="${l.anki_ar_url}" target="_blank"><span class="inlineBtnIcon">${Icon("download")}</span> بطاقات Anki (عربي)</a>`:""}
-                ${l.anki_en_url?`<a class="btn" style="margin-top:6px;display:inline-flex;align-items:center" href="${l.anki_en_url}" target="_blank"><span class="inlineBtnIcon">${Icon("download")}</span> Anki Cards (English)</a>`:""}
-              </div>
-            </div>`;
+              <span class="lessonRowArrow">${Icon("arrow_left")}</span>
+            </button>`;
           }).join("") || `<p class="small" style="padding:10px">لا توجد دروس بعد.</p>`}
         </div>
       </div>`;
     }).join("");
-    wireYoutubeEmbeds(body);
 
     body.querySelectorAll("[data-toggleunit]").forEach(btn=>{
       btn.onclick = ()=> btn.closest(".unitAccordion").classList.toggle("open");
     });
 
-    body.querySelectorAll("[data-lessondone]").forEach(cb=>{
-      cb.onchange = async ()=>{
-        const lessonId = cb.dataset.lessondone;
-        cb.disabled = true;
-        try{
-          await db.from("lesson_progress").upsert({
-            lesson_id: lessonId, profile_id: this.ctx.user.id,
-            status: cb.checked ? "completed" : "not_started",
-            completed_at: cb.checked ? new Date().toISOString() : null
-          }, {onConflict: "lesson_id,profile_id"}).throwOnError();
-          this.renderLearning(body, course); // إعادة رسم لتحديث نسبة التقدم والحالة الحالية
-        }catch(e){ CodeUp.toast(e.message,"error"); cb.checked = !cb.checked; }
-        finally{ cb.disabled = false; }
-      };
+    body.querySelectorAll("[data-lessonid]").forEach(row=>{
+      row.onclick = ()=> this.go({name:"lesson", courseId: course.id, courseSlug: row.dataset.courseslug, lessonId: row.dataset.lessonid});
     });
   },
 
