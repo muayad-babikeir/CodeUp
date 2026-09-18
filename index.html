@@ -1463,6 +1463,12 @@ const App = {
       courses = this._coursesCache.data;
     }else{
       const res = await db.from("courses").select("*").eq("status","published").order("created_at");
+      if(res.error){
+        body.innerHTML = `<div class="emptyState">تعذّر تحميل الكورسات. <button class="btn" id="coursesRetryBtn">إعادة المحاولة</button></div>`;
+        const retryBtn = document.getElementById("coursesRetryBtn");
+        if(retryBtn) retryBtn.onclick = ()=> this.renderHomeCourses(body);
+        return;
+      }
       courses = res.data;
       this._coursesCache = {data: courses, at: Date.now()};
     }
@@ -2108,8 +2114,18 @@ const App = {
   },
 
   async renderCourse(courseId, tab){
-    const {data: course} = await db.from("courses").select("*").eq("id", courseId).single();
-    if(!course){ this.root.innerHTML = `<div class="emptyState">الكورس غير موجود.</div>`; return; }
+    this.root.innerHTML = `<div class="courseHeader skeleton-row" aria-hidden="true">
+      <div class="courseHeaderTop"><div class="skeleton skeleton-avatar" style="width:44px;height:44px;border-radius:10px"></div>
+        <div style="flex:1"><div class="skeleton skeleton-line w40" style="height:16px;margin-bottom:8px"></div><div class="skeleton skeleton-line w80"></div></div>
+      </div>
+    </div>`;
+    const {data: course, error: courseErr} = await db.from("courses").select("*").eq("id", courseId).single();
+    if(courseErr || !course){
+      this.root.innerHTML = `<div class="emptyState">تعذّر تحميل الكورس. <button class="btn" id="courseRetryBtn">إعادة المحاولة</button></div>`;
+      const retryBtn = document.getElementById("courseRetryBtn");
+      if(retryBtn) retryBtn.onclick = ()=> this.renderCourse(courseId, tab);
+      return;
+    }
 
     let myEnrollment = this.ctx.enrollments.find(e=>e.course_id===courseId);
 
@@ -2120,8 +2136,8 @@ const App = {
 
     // تقدّم المحتوى التعليمي (lesson_progress) — يُحسب مرة وحدة هنا ويُستخدم بالهيدر
     // وبتبويب "التعلم"، بدل ما يتكرر الاستعلام بكل تبويب
-    const { data: unitsForHeader } = await db.from("units").select("id, lessons(id)").eq("course_id", courseId);
-    const allLessonIdsForHeader = (unitsForHeader||[]).flatMap(u=>(u.lessons||[]).map(l=>l.id));
+    const { data: unitsForHeader, error: unitsErr } = await db.from("units").select("id, lessons(id)").eq("course_id", courseId);
+    const allLessonIdsForHeader = unitsErr ? [] : (unitsForHeader||[]).flatMap(u=>(u.lessons||[]).map(l=>l.id));
     let headerDoneCount = 0;
     if(allLessonIdsForHeader.length){
       const { data: doneRows } = await db.from("lesson_progress").select("lesson_id").eq("profile_id", this.ctx.user.id).eq("status","completed").in("lesson_id", allLessonIdsForHeader);
@@ -2194,13 +2210,24 @@ const App = {
   },
 
   async renderLessonPage(courseId, courseSlug, lessonId){
-    this.root.innerHTML = `<div class="emptyState">جارِ التحميل…</div>`;
-    const [{data: course}, {data: units}, {data: linkedAssignments}] = await Promise.all([
+    this.root.innerHTML = `<div class="lessonPageBody">
+      <div class="lessonMain skeleton-row" aria-hidden="true">
+        <div class="skeleton skeleton-line w40" style="height:14px;margin-bottom:10px"></div>
+        <div class="skeleton skeleton-line w80" style="height:20px;margin-bottom:14px"></div>
+        <div class="skeleton skeleton-media" style="height:220px"></div>
+      </div>
+    </div>`;
+    const [{data: course, error: courseErr}, {data: units, error: unitsErr}, {data: linkedAssignments}] = await Promise.all([
       db.from("courses").select("*").eq("id", courseId).single(),
       db.from("units").select("*, lessons(*)").eq("course_id", courseId).order("order_index"),
       db.from("assignments").select("*").eq("lesson_id", lessonId)
     ]);
-    if(!course || !units){ this.root.innerHTML = `<div class="emptyState">الكورس غير موجود.</div>`; return; }
+    if(courseErr || unitsErr || !course || !units){
+      this.root.innerHTML = `<div class="emptyState">تعذّر تحميل الدرس. <button class="btn" id="lessonRetryBtn">إعادة المحاولة</button></div>`;
+      const retryBtn = document.getElementById("lessonRetryBtn");
+      if(retryBtn) retryBtn.onclick = ()=> this.renderLessonPage(courseId, courseSlug, lessonId);
+      return;
+    }
 
     const sortedUnits = units.map(u=>({...u, lessons:(u.lessons||[]).sort((a,b)=>a.order_index-b.order_index)}));
     const flatLessons = sortedUnits.flatMap(u=>u.lessons.map(l=>({...l, unitTitle:u.title, unitId:u.id})));
@@ -2344,7 +2371,13 @@ const App = {
 
   async renderLearning(body, course){
     body.innerHTML = `<div class="card2">${Array(2).fill(`<div class="skeleton skeleton-line w60" style="height:16px;margin:10px 0"></div>`).join("")}</div>`;
-    const {data: units} = await db.from("units").select("*, lessons(*)").eq("course_id", course.id).order("order_index");
+    const {data: units, error} = await db.from("units").select("*, lessons(*)").eq("course_id", course.id).order("order_index");
+    if(error){
+      body.innerHTML = `<div class="emptyState">تعذّر تحميل محتوى الكورس. <button class="btn" id="learningRetryBtn">إعادة المحاولة</button></div>`;
+      const retryBtn = document.getElementById("learningRetryBtn");
+      if(retryBtn) retryBtn.onclick = ()=> this.renderLearning(body, course);
+      return;
+    }
     if(!units || !units.length){
       body.innerHTML = `<div class="emptyStatePro"><h4>لا يوجد محتوى تعليمي منشور بعد</h4><p>راجعنا هالمكان بعدين — الدروس بتتوفر قريبًا.</p></div>`;
       return;
