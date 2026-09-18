@@ -273,8 +273,7 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
 .mobileContentToggle svg{width:16px;height:16px}
 .lessonDrawerBg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:120}
 .lessonDrawerBg.show{display:block}
-.lessonDrawer{position:fixed;top:0;bottom:0;inset-inline-end:0;width:min(320px,85vw);background:var(--surface-solid);border-inline-start:1px solid var(--line-strong);z-index:121;overflow-y:auto;transform:translateX(var(--ld-hidden,105%));transition:transform .2s ease}
-[dir="rtl"] .lessonDrawer{--ld-hidden:105%}
+.lessonDrawer{position:fixed;top:0;bottom:0;left:0;width:min(320px,85vw);background:var(--surface-solid);border-inline-start:1px solid var(--line-strong);z-index:121;overflow-y:auto;transform:translateX(-105%);transition:transform .2s ease}
 .lessonDrawer.open{transform:none}
 
 @media(min-width:900px){
@@ -1515,7 +1514,7 @@ const App = {
           <div class="ccProgress">
             <div class="progressTrack"><div class="progressFill" style="width:${pct}%"></div></div>
             <div class="ccProgressRow">
-              <span class="small">${done} / ${total} دروس</span>
+              <span class="small"><bdi dir="ltr">${done} / ${total}</bdi> دروس</span>
               <span class="small mono">${pct}%</span>
             </div>
           </div>`:""}
@@ -2165,7 +2164,7 @@ const App = {
         <div class="courseHeaderProgress">
           <div class="progressTrack"><div class="progressFill" style="width:${headerPct}%"></div></div>
           <div class="ccProgressRow">
-            <span class="small">${headerDoneCount} / ${headerTotal} دروس</span>
+            <span class="small"><bdi dir="ltr">${headerDoneCount} / ${headerTotal}</bdi> دروس</span>
             <span class="small mono">${headerPct}%</span>
           </div>
         </div>
@@ -2260,7 +2259,7 @@ const App = {
         const uDone = u.lessons.filter(l=>doneSet.has(l.id)).length;
         return `
         <div class="lsUnit">
-          <div class="lsUnitTitle small">${CodeUp.escapeHtml(u.title)} <span class="mono">— ${uDone}/${u.lessons.length}</span></div>
+          <div class="lsUnitTitle small">${CodeUp.escapeHtml(u.title)} <bdi dir="ltr" class="mono">— ${uDone}/${u.lessons.length}</bdi></div>
           ${u.lessons.map((l,i)=>{
             const st = doneSet.has(l.id) ? "completed" : (l.id===currentLessonId ? "current" : "available");
             return `<button class="lsLesson ${l.id===lessonId?'active':''}" data-golesson="${l.id}">
@@ -2311,7 +2310,7 @@ const App = {
           </div>` : ""}
 
           <div class="card2">
-            <div class="row"><b>تقدمك في هذا الكورس</b><span class="mono small">${doneCount} / ${flatLessons.length} — ${donePct}%</span></div>
+            <div class="row"><b>تقدمك في هذا الكورس</b><bdi dir="ltr" class="mono small">${doneCount} / ${flatLessons.length} — ${donePct}%</bdi></div>
             <div class="progressTrack" style="margin-top:8px"><div class="progressFill" style="width:${donePct}%"></div></div>
           </div>
 
@@ -2406,7 +2405,7 @@ const App = {
         <button class="unitAccordionHead" data-toggleunit="${u.id}">
           <div style="min-width:0;flex:1">
             <b class="unitTitle">${CodeUp.escapeHtml(u.title)}</b>
-            <div class="ccProgressRow"><span class="small">${done} / ${total} دروس</span><span class="small mono">${pct}%</span></div>
+            <div class="ccProgressRow"><span class="small"><bdi dir="ltr">${done} / ${total}</bdi> دروس</span><span class="small mono">${pct}%</span></div>
             <div class="progressTrack" style="margin-top:4px"><div class="progressFill" style="width:${pct}%"></div></div>
           </div>
           <span class="unitChevron">${Icon("chevron_down")}</span>
