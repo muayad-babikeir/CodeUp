@@ -212,6 +212,38 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
 .courseCardV2:hover{border-color:var(--accent);transform:none}
 .materialTypeIcon{display:inline-flex;color:var(--ink60)}
 .materialTypeIcon svg{width:19px;height:19px}
+.courseHeader{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:18px;margin-bottom:16px;display:flex;flex-direction:column;gap:12px}
+.courseHeaderTop{display:flex;align-items:flex-start;gap:12px}
+.courseHeaderIcon{width:44px;height:44px}
+.courseHeaderIcon svg{width:22px;height:22px}
+.courseHeaderTitle{margin:0 0 4px;font-size:18px;font-weight:700}
+.courseHeaderDesc{margin:0;color:var(--ink60);font-size:13.5px;line-height:1.6}
+.courseHeaderCta{align-self:flex-start;min-width:160px}
+@media(max-width:640px){.courseHeaderCta{align-self:stretch}}
+
+.unitAccordion{background:var(--surface);border:1px solid var(--line);border-radius:16px;margin-bottom:10px;overflow:hidden}
+.unitAccordionHead{display:flex;align-items:center;gap:10px;width:100%;padding:14px;background:none;border:none;color:var(--ink);text-align:start;cursor:pointer;font-family:inherit}
+.unitTitle{font-size:14.5px}
+.unitChevron{color:var(--ink60);flex-shrink:0;transition:transform .2s ease}
+.unitChevron svg{width:18px;height:18px}
+.unitAccordion.open .unitChevron{transform:rotate(180deg)}
+.unitAccordionBody{max-height:0;overflow:hidden;transition:max-height .25s ease}
+.unitAccordion.open .unitAccordionBody{max-height:none}
+.unitAccordion:not(.open) .unitAccordionBody{display:none}
+
+.lessonRow{padding:12px 14px;border-top:1px solid var(--line)}
+.lessonRowMain{display:flex;align-items:flex-start;gap:10px}
+.lessonNum{color:var(--ink40);font-size:12px;margin-top:2px;flex-shrink:0}
+.lessonTitle{font-size:13.5px}
+.lessonMeta{display:flex;align-items:center;gap:10px;margin-top:4px;margin-inline-start:22px;flex-wrap:wrap}
+.lessonTypeTag{display:inline-flex;align-items:center;gap:4px;color:var(--ink60)}
+.lessonTypeTag svg{width:13px;height:13px}
+.lessonStatusTag{padding:1px 8px;border-radius:999px;font-size:11px}
+.lessonStatusTag-completed{background:var(--green-soft);color:var(--green)}
+.lessonStatusTag-current{background:rgba(29,155,240,.14);color:var(--accent)}
+.lessonStatusTag-available{background:rgba(255,255,255,.05);color:var(--ink60)}
+.lessonInline{margin-inline-start:22px;margin-top:8px}
+.lessonRow.status-current{background:rgba(29,155,240,.05)}
 .inlineBtnIcon{display:inline-flex;vertical-align:-3px;margin-inline-end:2px}
 .inlineBtnIcon svg{width:14px;height:14px}
 .subtabs{display:flex;gap:4px;overflow-x:auto;background:var(--surface);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);border-radius:14px;padding:5px;margin:14px 0;scrollbar-width:thin}
@@ -2021,12 +2053,44 @@ const App = {
     const isAdmin = this.ctx.courseAdminCourseIds.includes(courseId);
     const isLeader = this.ctx.leaderCourseIds.includes(courseId);
 
+    // تقدّم المحتوى التعليمي (lesson_progress) — يُحسب مرة وحدة هنا ويُستخدم بالهيدر
+    // وبتبويب "التعلم"، بدل ما يتكرر الاستعلام بكل تبويب
+    const { data: unitsForHeader } = await db.from("units").select("id, lessons(id)").eq("course_id", courseId);
+    const allLessonIdsForHeader = (unitsForHeader||[]).flatMap(u=>(u.lessons||[]).map(l=>l.id));
+    let headerDoneCount = 0;
+    if(allLessonIdsForHeader.length){
+      const { data: doneRows } = await db.from("lesson_progress").select("lesson_id").eq("profile_id", this.ctx.user.id).eq("status","completed").in("lesson_id", allLessonIdsForHeader);
+      headerDoneCount = (doneRows||[]).length;
+    }
+    const headerTotal = allLessonIdsForHeader.length;
+    const headerPct = headerTotal ? Math.round((headerDoneCount/headerTotal)*100) : 0;
+    const headerCta = (headerTotal>0 && headerDoneCount>0) ? "متابعة التعلم" : "ابدأ التعلم";
+
     const tabIcons = {learning:"learning",assignments:"assignments",timeline:"timeline",squads:"squads",progress:"progress",leaderboard:"leaderboard"};
     const tabs = [
       ["learning","التعلم"],["assignments","الواجبات"],["timeline","المستجدات"],
       ["squads","المجموعات"],["progress","تقدمي"],["leaderboard","المتصدرون"]
     ];
     let html = `
+      <div class="courseHeader">
+        <div class="courseHeaderTop">
+          <div class="ccIcon courseHeaderIcon">${Icon("learning")}</div>
+          <div style="min-width:0;flex:1">
+            <h2 class="courseHeaderTitle">${CodeUp.escapeHtml(course.name)}</h2>
+            ${course.description?`<p class="courseHeaderDesc">${CodeUp.escapeHtml(course.description)}</p>`:""}
+          </div>
+        </div>
+        ${headerTotal>0?`
+        <div class="courseHeaderProgress">
+          <div class="progressTrack"><div class="progressFill" style="width:${headerPct}%"></div></div>
+          <div class="ccProgressRow">
+            <span class="small">${headerDoneCount} / ${headerTotal} دروس</span>
+            <span class="small mono">${headerPct}%</span>
+          </div>
+        </div>
+        <button class="btn dark courseHeaderCta" id="courseHeaderCtaBtn">${headerCta}</button>
+        `:``}
+      </div>
       <div class="fbTabBar">
         ${tabs.map(([key,label])=>`<button data-tab="${key}" class="${key===tab?'active':''}"><span class="tabIcon">${Icon(tabIcons[key])}</span>${label}</button>`).join("")}
       </div>
@@ -2037,6 +2101,8 @@ const App = {
       </div>` : ``}
       <div id="tabBody"></div>`;
     this.root.innerHTML = html;
+    const headerCtaBtn = document.getElementById("courseHeaderCtaBtn");
+    if(headerCtaBtn) headerCtaBtn.onclick = ()=>{ if(tab!=="learning") this.go({name:"course",courseId,courseSlug:course.slug,tab:"learning"}); else document.getElementById("tabBody")?.scrollIntoView({behavior:"smooth"}); };
     this.root.querySelectorAll(".fbTabBar [data-tab]").forEach(b=>{
       b.onclick = ()=>{ if(b.dataset.tab!==tab) this.go({name:"course",courseId,courseSlug:course.slug,tab:b.dataset.tab}); };
     });
@@ -2063,43 +2129,91 @@ const App = {
   },
 
   async renderLearning(body, course){
+    body.innerHTML = `<div class="card2">${Array(2).fill(`<div class="skeleton skeleton-line w60" style="height:16px;margin:10px 0"></div>`).join("")}</div>`;
     const {data: units} = await db.from("units").select("*, lessons(*)").eq("course_id", course.id).order("order_index");
-    if(!units || !units.length){ body.innerHTML = `<div class="emptyState">لا يوجد محتوى تعليمي منشور بعد.</div>`; return; }
+    if(!units || !units.length){
+      body.innerHTML = `<div class="emptyStatePro"><h4>لا يوجد محتوى تعليمي منشور بعد</h4><p>راجعنا هالمكان بعدين — الدروس بتتوفر قريبًا.</p></div>`;
+      return;
+    }
 
-    const allLessonIds = units.flatMap(u=>(u.lessons||[]).map(l=>l.id));
+    const sortedUnits = units.map(u=>({...u, lessons:(u.lessons||[]).sort((a,b)=>a.order_index-b.order_index)}));
+    const allLessonIds = sortedUnits.flatMap(u=>u.lessons.map(l=>l.id));
     const {data: myProgress} = allLessonIds.length
       ? await db.from("lesson_progress").select("lesson_id,status").eq("profile_id", this.ctx.user.id).in("lesson_id", allLessonIds)
       : {data:[]};
     const doneSet = new Set((myProgress||[]).filter(p=>p.status==="completed").map(p=>p.lesson_id));
-    const total = allLessonIds.length;
-    const donePct = total ? Math.round((doneSet.size/total)*100) : 0;
 
-    body.innerHTML = `
-      <div class="card2" style="margin-bottom:14px">
-        <div class="row"><b>تقدّمك بالمحتوى</b><span class="mono">${donePct}%</span></div>
-        <div class="progressBar"><div class="progressFill" style="width:${donePct}%"></div></div>
-      </div>` +
-      units.map(u=>`
-      <div class="card2">
-        <b>${CodeUp.escapeHtml(u.title)}</b>
-        <div style="margin-top:8px">
-          ${(u.lessons||[]).sort((a,b)=>a.order_index-b.order_index).map(l=>`
-            <div class="lessonBlock" style="padding:8px 0;border-top:1px dashed rgba(255,255,255,.12)">
-              <div class="row">
-                <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-                  <input type="checkbox" data-lessondone="${l.id}" ${doneSet.has(l.id)?"checked":""}>
-                  <span>${CodeUp.escapeHtml(l.title)}</span>
-                </label>
+    // تحديد "الدرس الحالي": أول درس غير مكتمل بترتيب الوحدات ثم الدروس — لا يوجد نظام Unlock،
+    // فكل الدروس AVAILABLE بخلاف المكتمل والحالي؛ ما نضيف حالة LOCKED من عندنا
+    let currentLessonId = null;
+    outer: for(const u of sortedUnits){
+      for(const l of u.lessons){
+        if(!doneSet.has(l.id)){ currentLessonId = l.id; break outer; }
+      }
+    }
+    const currentUnitId = currentLessonId
+      ? sortedUnits.find(u=>u.lessons.some(l=>l.id===currentLessonId))?.id
+      : (sortedUnits[0]?.id ?? null); // كل الدروس مكتملة أو ما فيه دروس بعد → افتح أول وحدة
+
+    const contentTypeOf = (l)=>{
+      if(l.video_url) return {label:"فيديو", icon:"play"};
+      if(l.text_content) return {label:"قراءة", icon:"learning"};
+      if(l.pdf_url) return {label:"PDF", icon:"file"};
+      return {label:"محتوى", icon:"file"};
+    };
+
+    body.innerHTML = sortedUnits.map(u=>{
+      const total = u.lessons.length;
+      const done = u.lessons.filter(l=>doneSet.has(l.id)).length;
+      const pct = total ? Math.round((done/total)*100) : 0;
+      const isOpen = u.id === currentUnitId;
+      return `
+      <div class="unitAccordion ${isOpen?'open':''}" data-unit="${u.id}">
+        <button class="unitAccordionHead" data-toggleunit="${u.id}">
+          <div style="min-width:0;flex:1">
+            <b class="unitTitle">${CodeUp.escapeHtml(u.title)}</b>
+            <div class="ccProgressRow"><span class="small">${done} / ${total} دروس</span><span class="small mono">${pct}%</span></div>
+            <div class="progressTrack" style="margin-top:4px"><div class="progressFill" style="width:${pct}%"></div></div>
+          </div>
+          <span class="unitChevron">${Icon("chevron_down")}</span>
+        </button>
+        <div class="unitAccordionBody">
+          ${u.lessons.map((l,i)=>{
+            const status = doneSet.has(l.id) ? "completed" : (l.id===currentLessonId ? "current" : "available");
+            const statusLabelAr = {completed:"مكتمل", current:"الدرس الحالي", available:"متاح"}[status];
+            const ct = contentTypeOf(l);
+            return `
+            <div class="lessonRow status-${status}" data-lessonid="${l.id}">
+              <div class="lessonRowMain">
+                <span class="lessonNum mono">${String(i+1).padStart(2,"0")}</span>
+                <div style="min-width:0;flex:1">
+                  <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                    <input type="checkbox" data-lessondone="${l.id}" ${doneSet.has(l.id)?"checked":""}>
+                    <span class="lessonTitle">${CodeUp.escapeHtml(l.title)}</span>
+                  </label>
+                  <div class="lessonMeta small">
+                    <span class="lessonTypeTag">${Icon(ct.icon)} ${ct.label}</span>
+                    <span class="lessonStatusTag lessonStatusTag-${status}">${statusLabelAr}</span>
+                  </div>
+                </div>
               </div>
-              ${l.video_url?youtubeEmbedHtml(l.video_url):""}
-              ${l.text_content?`<p class="small" style="white-space:pre-wrap;margin-top:6px">${CodeUp.escapeHtml(l.text_content)}</p>`:""}
-              ${l.pdf_url?`<a class="btn" style="margin-top:6px;display:inline-block" href="${l.pdf_url}" target="_blank">فتح ملف PDF ↗</a>`:""}
-              ${l.anki_ar_url?`<a class="btn" style="margin-top:6px;margin-inline-start:6px;display:inline-block" href="${l.anki_ar_url}" target="_blank">🇸🇩 النسخة العربية</a>`:""}
-              ${l.anki_en_url?`<a class="btn" style="margin-top:6px;margin-inline-start:6px;display:inline-block" href="${l.anki_en_url}" target="_blank">🇬🇧 English Version</a>`:""}
-            </div>`).join("") || `<p class="small">لا توجد دروس بعد.</p>`}
+              <div class="lessonInline">
+                ${l.video_url?youtubeEmbedHtml(l.video_url):""}
+                ${l.text_content?`<p class="small" style="white-space:pre-wrap;margin-top:6px">${CodeUp.escapeHtml(l.text_content)}</p>`:""}
+                ${l.pdf_url?`<a class="btn" style="margin-top:6px;margin-inline-end:6px;display:inline-flex;align-items:center" href="${l.pdf_url}" target="_blank"><span class="inlineBtnIcon">${Icon("file")}</span> فتح ملف PDF</a>`:""}
+                ${l.anki_ar_url?`<a class="btn" style="margin-top:6px;margin-inline-end:6px;display:inline-flex;align-items:center" href="${l.anki_ar_url}" target="_blank"><span class="inlineBtnIcon">${Icon("download")}</span> بطاقات Anki (عربي)</a>`:""}
+                ${l.anki_en_url?`<a class="btn" style="margin-top:6px;display:inline-flex;align-items:center" href="${l.anki_en_url}" target="_blank"><span class="inlineBtnIcon">${Icon("download")}</span> Anki Cards (English)</a>`:""}
+              </div>
+            </div>`;
+          }).join("") || `<p class="small" style="padding:10px">لا توجد دروس بعد.</p>`}
         </div>
-      </div>`).join("");
+      </div>`;
+    }).join("");
     wireYoutubeEmbeds(body);
+
+    body.querySelectorAll("[data-toggleunit]").forEach(btn=>{
+      btn.onclick = ()=> btn.closest(".unitAccordion").classList.toggle("open");
+    });
 
     body.querySelectorAll("[data-lessondone]").forEach(cb=>{
       cb.onchange = async ()=>{
@@ -2111,7 +2225,7 @@ const App = {
             status: cb.checked ? "completed" : "not_started",
             completed_at: cb.checked ? new Date().toISOString() : null
           }, {onConflict: "lesson_id,profile_id"}).throwOnError();
-          this.renderLearning(body, course); // إعادة رسم لتحديث نسبة التقدم
+          this.renderLearning(body, course); // إعادة رسم لتحديث نسبة التقدم والحالة الحالية
         }catch(e){ CodeUp.toast(e.message,"error"); cb.checked = !cb.checked; }
         finally{ cb.disabled = false; }
       };
