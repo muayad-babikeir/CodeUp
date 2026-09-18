@@ -61,10 +61,10 @@ async function renderSuperDashboard(body){
       db.from("file_uploads").select("id",{count:"exact",head:true}).eq("course_id",cid).eq("archive_status","failed")
     ]);
     pendingHere = pendSub||0; pendingHereWeek = pendSubWeek||0;
-    if(jr>0) attention.push(attentionItem("👥", `${jr} طلب انضمام بانتظار المراجعة`, "للكورس الحالي", "join_requests"));
-    if(la>0) attention.push(attentionItem("🎓", `${la} طلب قيادة مجموعة بانتظار المراجعة`, "للكورس الحالي", "leader_applications"));
-    if(pendingHere>0) attention.push(attentionItem("📝", `${pendingHere} تسليم بانتظار المراجعة`, "للكورس الحالي", "submissions"));
-    if(failedFiles>0) attention.push(attentionItem("⚠️", `${failedFiles} ملف فشل إرساله لأرشيف تيليجرام`, "سيُعاد المحاولة تلقائيًا", "files"));
+    if(jr>0) attention.push(attentionItem(Icon("squads"), `${jr} طلب انضمام بانتظار المراجعة`, "للكورس الحالي", "join_requests"));
+    if(la>0) attention.push(attentionItem(Icon("university"), `${la} طلب قيادة مجموعة بانتظار المراجعة`, "للكورس الحالي", "leader_applications"));
+    if(pendingHere>0) attention.push(attentionItem(Icon("assignments"), `${pendingHere} تسليم بانتظار المراجعة`, "للكورس الحالي", "submissions"));
+    if(failedFiles>0) attention.push(attentionItem(Icon("alert_triangle"), `${failedFiles} ملف فشل إرساله لأرشيف تيليجرام`, "سيُعاد المحاولة تلقائيًا", "files"));
   }
 
   const learningOverviewHtml = await buildLearningOverview(topCourses||[]);
@@ -73,10 +73,10 @@ async function renderSuperDashboard(body){
     ${greetingHeader("نظرة CodeUp العامة", "هذا ملخص ما يحدث الآن عبر كل المنصة.")}
 
     <div class="quickActions">
-      ${quickActionBtn("📚","+ كورس جديد","newCourseQA")}
-      ${hasCourse ? quickActionBtn("📄","+ واجب جديد","newAssignQA") : ""}
-      ${hasCourse ? quickActionBtn("📣","+ إعلان جديد","goAnnQA") : ""}
-      ${quickActionBtn("🧩","إدارة المحتوى","goContentQA")}
+      ${quickActionBtn(Icon("layers"),"+ كورس جديد","newCourseQA")}
+      ${hasCourse ? quickActionBtn(Icon("file"),"+ واجب جديد","newAssignQA") : ""}
+      ${hasCourse ? quickActionBtn(Icon("announcement"),"+ إعلان جديد","goAnnQA") : ""}
+      ${quickActionBtn(Icon("learning"),"إدارة المحتوى","goContentQA")}
     </div>
 
     <div class="statGrid">
@@ -150,18 +150,18 @@ async function renderCourseAdminDashboard(body, cid){
 
   const avgProgress = avgOf((progRows||[]).map(r=>r.progress));
   const attention = [];
-  if(jr>0) attention.push(attentionItem("👥", `${jr} طلب انضمام بانتظار المراجعة`, "", "join_requests"));
-  if(la>0) attention.push(attentionItem("🎓", `${la} طلب قيادة مجموعة بانتظار المراجعة`, "", "leader_applications"));
-  if(pendSub>0) attention.push(attentionItem("📝", `${pendSub} تسليم بانتظار المراجعة`, "", "submissions"));
-  if(failedFiles>0) attention.push(attentionItem("⚠️", `${failedFiles} ملف فشل إرساله لأرشيف تيليجرام`, "سيُعاد المحاولة تلقائيًا", "files"));
+  if(jr>0) attention.push(attentionItem(Icon("squads"), `${jr} طلب انضمام بانتظار المراجعة`, "", "join_requests"));
+  if(la>0) attention.push(attentionItem(Icon("university"), `${la} طلب قيادة مجموعة بانتظار المراجعة`, "", "leader_applications"));
+  if(pendSub>0) attention.push(attentionItem(Icon("assignments"), `${pendSub} تسليم بانتظار المراجعة`, "", "submissions"));
+  if(failedFiles>0) attention.push(attentionItem(Icon("alert_triangle"), `${failedFiles} ملف فشل إرساله لأرشيف تيليجرام`, "سيُعاد المحاولة تلقائيًا", "files"));
 
   body.innerHTML = `
     ${greetingHeader(`نظرة على ${CodeUp.escapeHtml(courseName)}`, "هذا ملخص ما يحدث الآن في كورسك.")}
 
     <div class="quickActions">
-      ${quickActionBtn("📄","+ واجب جديد","newAssignQA")}
-      ${quickActionBtn("📣","+ إعلان جديد","goAnnQA")}
-      ${quickActionBtn("🧩","إدارة المحتوى","goContentQA")}
+      ${quickActionBtn(Icon("file"),"+ واجب جديد","newAssignQA")}
+      ${quickActionBtn(Icon("announcement"),"+ إعلان جديد","goAnnQA")}
+      ${quickActionBtn(Icon("learning"),"إدارة المحتوى","goContentQA")}
     </div>
 
     <div class="statGrid">

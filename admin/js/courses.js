@@ -235,13 +235,13 @@ Admin.sections.settings_hub = {
     const groups = [
       { title:"هذا الكورس", items:[
         hasCourse && {icon:"📘", label:"إعدادات الكورس", desc:"الاسم، الوصف، الرابط، الحالة، وحذف الكورس نهائيًا.", goto:"settings"},
-        hasCourse && {icon:"🗄️", label:"الأرشفة والملفات", desc:"مدة الاحتفاظ بملفات التسليمات قبل حذفها من التخزين المؤقت.", goto:"files"},
+        hasCourse && {icon:Icon("archive"), label:"الأرشفة والملفات", desc:"مدة الاحتفاظ بملفات التسليمات قبل حذفها من التخزين المؤقت.", goto:"files"},
       ].filter(Boolean) },
       { title:"المنصة (Super Admin)", items: isSuper ? [
-        {icon:"📣", label:"الإعلانات العامة", desc:"إعلانات تظهر لكل مستخدمي CodeUp بالصفحة الرئيسية.", goto:"home_announcements", home:true},
-        {icon:"📝", label:"الإشراف على منشورات المستجدات", desc:"حذف أي منشور حر غير مناسب من الصفحة الرئيسية.", goto:"home_posts", home:true},
-        {icon:"💬", label:"مدة الاحتفاظ بالرسائل الخاصة", desc:"عدد الأيام قبل حذف الرسائل الخاصة تلقائيًا.", goto:"message_settings", home:true},
-        {icon:"🎓", label:"قسم الجامعة", desc:"الفصول الدراسية والمواد المستقلة عن نظام الكورسات.", goto:"university", home:true},
+        {icon:Icon("announcement"), label:"الإعلانات العامة", desc:"إعلانات تظهر لكل مستخدمي CodeUp بالصفحة الرئيسية.", goto:"home_announcements", home:true},
+        {icon:Icon("assignments"), label:"الإشراف على منشورات المستجدات", desc:"حذف أي منشور حر غير مناسب من الصفحة الرئيسية.", goto:"home_posts", home:true},
+        {icon:Icon("comment"), label:"مدة الاحتفاظ بالرسائل الخاصة", desc:"عدد الأيام قبل حذف الرسائل الخاصة تلقائيًا.", goto:"message_settings", home:true},
+        {icon:Icon("university"), label:"قسم الجامعة", desc:"الفصول الدراسية والمواد المستقلة عن نظام الكورسات.", goto:"university", home:true},
       ] : [] }
     ].filter(g=>g.items.length);
 

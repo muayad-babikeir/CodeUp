@@ -98,6 +98,7 @@ th{color:var(--ink60);font-weight:600;font-size:12px;font-family:'IBM Plex Mono'
 .small{font-size:12.5px;color:var(--ink60);line-height:1.6}
 .card2{background:var(--bg2);border:1px solid var(--line);border-radius:12px;padding:10px}
 .dragHandle{cursor:grab;color:var(--ink40);text-align:center;width:24px;user-select:none;font-size:15px}
+.dragHandle svg{width:15px;height:15px}
 tr[draggable="true"].dragging{opacity:.35}
 
 /* ======================================================================
@@ -204,11 +205,13 @@ th.sortable.sorted .sortArrow{opacity:1;color:var(--indigo)}
 .quickAction{display:flex;align-items:center;gap:10px;padding:14px;border:1px solid var(--line);border-radius:14px;background:var(--surface);cursor:pointer;color:var(--ink);text-align:start}
 .quickAction:hover{border-color:var(--indigo);background:rgba(29,155,240,.06)}
 .quickAction .qaIcon{width:34px;height:34px;border-radius:10px;background:rgba(29,155,240,.12);color:var(--indigo);display:grid;place-items:center;flex-shrink:0}
+.quickAction .qaIcon svg{width:17px;height:17px}
 
 /* ---------- Needs Attention (Dashboard) ---------- */
 .attentionItem{display:flex;align-items:center;gap:12px;padding:12px 4px;border-bottom:1px solid var(--line)}
 .attentionItem:last-child{border-bottom:none}
 .attentionItem .aiIcon{width:34px;height:34px;border-radius:10px;background:rgba(240,180,41,.12);color:var(--amber);display:grid;place-items:center;flex-shrink:0}
+.attentionItem .aiIcon svg{width:17px;height:17px}
 .attentionItem .aiBody{flex:1;min-width:0;font-size:13.5px}
 .attentionItem .aiBody .aiMeta{color:var(--ink60);font-size:12px;margin-top:2px}
 

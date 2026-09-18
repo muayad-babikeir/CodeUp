@@ -196,6 +196,24 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
 .courseCard:hover{border-color:var(--accent);transform:translateY(-2px)}
 .courseCard h3{margin:0 0 6px;font-size:15.5px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .courseCard p{margin:0;color:var(--ink60);font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* Course Card v2 — إضافات فقط لبطاقة الكورس (تقدّم الدروس الحقيقي + CTA)، بدون لمس القواعد الأساسية أعلاه */
+.courseCardV2{display:flex;flex-direction:column;gap:12px}
+.ccHead{display:flex;align-items:flex-start;gap:10px}
+.ccHead h3{white-space:normal;overflow:visible}
+.ccHead p{white-space:normal;overflow:visible;-webkit-line-clamp:2;display:-webkit-box;-webkit-box-orient:vertical}
+.ccIcon{width:36px;height:36px;border-radius:10px;background:rgba(29,155,240,.12);color:var(--accent);display:grid;place-items:center;flex-shrink:0}
+.ccIcon svg{width:18px;height:18px}
+.progressTrack{height:7px;border-radius:999px;background:rgba(255,255,255,.07);overflow:hidden}
+.progressFill{height:100%;border-radius:999px;background:linear-gradient(90deg,var(--accent),var(--green))}
+.ccProgressRow{display:flex;justify-content:space-between;margin-top:6px;color:var(--ink60);font-size:12px}
+.ccMeta{display:flex;gap:12px;flex-wrap:wrap;color:var(--ink60)}
+.ccCta{width:100%;text-align:center;cursor:pointer}
+.courseCardV2:hover{border-color:var(--accent);transform:none}
+.materialTypeIcon{display:inline-flex;color:var(--ink60)}
+.materialTypeIcon svg{width:19px;height:19px}
+.inlineBtnIcon{display:inline-flex;vertical-align:-3px;margin-inline-end:2px}
+.inlineBtnIcon svg{width:14px;height:14px}
 .subtabs{display:flex;gap:4px;overflow-x:auto;background:var(--surface);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);border-radius:14px;padding:5px;margin:14px 0;scrollbar-width:thin}
 .subtabs button{white-space:nowrap;border:0;background:transparent;padding:9px 13px;border-radius:10px;cursor:pointer;color:var(--ink60);font-weight:600;font-family:inherit;font-size:13.5px;flex-shrink:0}
 .subtabs button.active{background:var(--ink);color:var(--bg0)}
@@ -1356,13 +1374,56 @@ const App = {
     let html = "";
 
     if(myCourses.length){
+      // تقدّم "المحتوى التعليمي" (lesson_progress) منفصل تمامًا عن enrollments.progress/xp/streak
+      // (المرتبط بالواجبات) — نجيبه هنا باستعلامين شاملين فقط لكل كورسات الطالب دفعة وحدة، مو لكل كورس لحاله
+      const myCourseIds = myCourses.map(e=>e.course_id);
+      const { data: unitsRows } = await db.from("units").select("course_id, lessons(id)").in("course_id", myCourseIds);
+      const totalByCourse = {}, lessonIdsByCourse = {}, allLessonIds = [];
+      (unitsRows||[]).forEach(u=>{
+        const ids = (u.lessons||[]).map(l=>l.id);
+        totalByCourse[u.course_id] = (totalByCourse[u.course_id]||0) + ids.length;
+        lessonIdsByCourse[u.course_id] = (lessonIdsByCourse[u.course_id]||[]).concat(ids);
+        allLessonIds.push(...ids);
+      });
+      let completedSet = new Set();
+      if(allLessonIds.length){
+        const { data: doneRows } = await db.from("lesson_progress").select("lesson_id").eq("profile_id", this.ctx.user.id).eq("status","completed").in("lesson_id", allLessonIds);
+        completedSet = new Set((doneRows||[]).map(r=>r.lesson_id));
+      }
+
       html += `<div class="sectionHead"><h3 class="eyebrow">كورساتي</h3></div><div class="grid">`;
-      html += myCourses.map(e=>`
-        <div class="courseCard" data-course="${e.course_id}" data-slug="${CodeUp.escapeHtml(e.courses?.slug||"")}">
-          <div class="row"><h3>${CodeUp.escapeHtml(e.courses?.name||"")}</h3><span class="tag ${e.status}">${statusLabel(e.status)}</span></div>
-          <p>${e.squads?CodeUp.escapeHtml(e.squads.name):"بلا مجموعة بعد"}</p>
-          <p class="small mono" style="margin-top:8px">تقدم ${e.progress}% · ${e.xp} XP · streak ${e.streak}</p>
-        </div>`).join("");
+      html += myCourses.map(e=>{
+        const total = totalByCourse[e.course_id]||0;
+        const done = (lessonIdsByCourse[e.course_id]||[]).filter(id=>completedSet.has(id)).length;
+        const pct = total ? Math.round((done/total)*100) : 0;
+        const contentState = total===0 ? null : (done===0 ? "لم تبدأ الدروس بعد" : (done>=total ? "أكملت كل الدروس" : "قيد التعلم"));
+        const ctaLabel = (total>0 && done>0) ? "متابعة التعلم" : "ابدأ التعلم";
+        return `
+        <div class="courseCard courseCardV2" data-course="${e.course_id}" data-slug="${CodeUp.escapeHtml(e.courses?.slug||"")}">
+          <div class="ccHead">
+            <div class="ccIcon">${Icon("learning")}</div>
+            <div style="min-width:0;flex:1">
+              <div class="row" style="margin:0"><h3 style="margin:0">${CodeUp.escapeHtml(e.courses?.name||"")}</h3></div>
+              <p style="margin-top:2px">${CodeUp.escapeHtml(e.courses?.description||(e.squads?e.squads.name:"بلا مجموعة بعد"))}</p>
+            </div>
+            <span class="tag ${e.status}">${statusLabel(e.status)}</span>
+          </div>
+          ${total>0?`
+          <div class="ccProgress">
+            <div class="progressTrack"><div class="progressFill" style="width:${pct}%"></div></div>
+            <div class="ccProgressRow">
+              <span class="small">${done} / ${total} دروس</span>
+              <span class="small mono">${pct}%</span>
+            </div>
+          </div>`:""}
+          <div class="ccMeta small mono">
+            ${contentState?`<span>${CodeUp.escapeHtml(contentState)}</span>`:""}
+            <span>${e.xp} XP</span>
+            <span>streak ${e.streak}</span>
+          </div>
+          <button class="btn dark ccCta" data-course="${e.course_id}" data-slug="${CodeUp.escapeHtml(e.courses?.slug||"")}">${ctaLabel}</button>
+        </div>`;
+      }).join("");
       html += `</div>`;
     }
 
@@ -1370,9 +1431,15 @@ const App = {
     if(otherCourses.length){
       html += `<div class="sectionHead"><h3 class="eyebrow">كورسات متاحة</h3></div><div class="grid">`;
       html += otherCourses.map(c=>`
-        <div class="courseCard" data-course="${c.id}" data-slug="${CodeUp.escapeHtml(c.slug||"")}">
-          <h3>${CodeUp.escapeHtml(c.name)}</h3>
-          <p>${CodeUp.escapeHtml(c.description||"")}</p>
+        <div class="courseCard courseCardV2" data-course="${c.id}" data-slug="${CodeUp.escapeHtml(c.slug||"")}">
+          <div class="ccHead">
+            <div class="ccIcon">${Icon("learning")}</div>
+            <div style="min-width:0;flex:1">
+              <h3>${CodeUp.escapeHtml(c.name)}</h3>
+              <p>${CodeUp.escapeHtml(c.description||"")}</p>
+            </div>
+          </div>
+          <button class="btn dark ccCta" data-course="${c.id}" data-slug="${CodeUp.escapeHtml(c.slug||"")}">ابدأ الكورس</button>
         </div>`).join("");
       html += `</div>`;
     }
@@ -1382,14 +1449,23 @@ const App = {
     }
     body.innerHTML = html;
     body.querySelectorAll(".courseCard").forEach(el=>{
-      el.onclick = ()=> this.go({name:"course", courseId: el.dataset.course, courseSlug: el.dataset.slug, tab:"learning"});
+      el.onclick = (ev)=>{
+        if(ev.target.closest(".ccCta")) return; // الزر يفتح نفس الشي، نتجنب فتح مزدوج للحدث
+        this.go({name:"course", courseId: el.dataset.course, courseSlug: el.dataset.slug, tab:"learning"});
+      };
+    });
+    body.querySelectorAll(".ccCta").forEach(btn=>{
+      btn.onclick = (ev)=>{
+        ev.stopPropagation();
+        this.go({name:"course", courseId: btn.dataset.course, courseSlug: btn.dataset.slug, tab:"learning"});
+      };
     });
   },
 
   // قسم "الجامعة" — مستقل تمامًا عن نظام الكورسات البرمجية. تصفّح محلي
   // (فصل → مادة → روابط) بدون تغيير الـ hash، مشابه لتصفح كورس عادي.
   async renderHomeUniversity(body){
-    const MATERIAL_ICON = {video:"🎬", telegram:"📎", link:"🔗"};
+    const MATERIAL_ICON = {video:Icon("play"), telegram:Icon("paperclip"), link:Icon("link")};
 
     const showSemesters = async ()=>{
       body.innerHTML = `<div class="emptyState">جارِ التحميل…</div>`;
@@ -1443,7 +1519,7 @@ const App = {
           `<div class="sectionHead"><h3 class="eyebrow">${CodeUp.escapeHtml(subject.title)}</h3></div>` +
           materials.map(m=>`
             <a href="${CodeUp.escapeHtml(m.url)}" target="_blank" rel="noopener noreferrer" class="card2" style="display:flex;align-items:center;gap:10px;margin-bottom:8px;text-decoration:none;color:inherit">
-              <span style="font-size:20px">${MATERIAL_ICON[m.material_type]||"🔗"}</span>
+              <span class="materialTypeIcon">${MATERIAL_ICON[m.material_type]||Icon("link")}</span>
               <span>${CodeUp.escapeHtml(m.title)}</span>
             </a>`).join("");
       }
@@ -2297,7 +2373,7 @@ const App = {
             <div class="body"><b>${CodeUp.escapeHtml(p.name)}</b><br><span class="small">${CodeUp.escapeHtml(daysLabel)}${timeLabel?" · "+timeLabel:""}</span></div>
             <div class="row" style="margin-top:8px">
               <span class="small mono">${votes.length}/${p.min_approvals} موافقين</span>
-              <button class="btn ${iVoted?'':'dark'}" data-votepropose="${p.id}" ${iVoted?"disabled":""}>${iVoted?"وافقت ✓":"موافق"}</button>
+              <button class="btn ${iVoted?'':'dark'}" data-votepropose="${p.id}" ${iVoted?"disabled":""}>${iVoted?`<span class="inlineBtnIcon">${Icon("check")}</span> وافقت`:"موافق"}</button>
             </div>
           </div>`;
         }
@@ -2428,7 +2504,7 @@ const App = {
           b.disabled = true;
           try{
             const {data} = await db.rpc("vote_squad_proposal", {p_proposal_id: b.dataset.votepropose});
-            if(data?.status === "approved") CodeUp.toast("وصلت المجموعة للحد المطلوب — تكوّنت تلقائيًا! 🎉", "success");
+            if(data?.status === "approved") CodeUp.toast("وصلت المجموعة للحد المطلوب — تكوّنت تلقائيًا", "success");
             else CodeUp.toast("تم تسجيل موافقتك", "success");
             load(currentFilter, true);
           }catch(e){ CodeUp.toast(e.message,"error"); b.disabled = false; }
