@@ -2094,6 +2094,8 @@ const App = {
               ${l.video_url?youtubeEmbedHtml(l.video_url):""}
               ${l.text_content?`<p class="small" style="white-space:pre-wrap;margin-top:6px">${CodeUp.escapeHtml(l.text_content)}</p>`:""}
               ${l.pdf_url?`<a class="btn" style="margin-top:6px;display:inline-block" href="${l.pdf_url}" target="_blank">فتح ملف PDF ↗</a>`:""}
+              ${l.anki_ar_url?`<a class="btn" style="margin-top:6px;margin-inline-start:6px;display:inline-block" href="${l.anki_ar_url}" target="_blank">🇸🇩 النسخة العربية</a>`:""}
+              ${l.anki_en_url?`<a class="btn" style="margin-top:6px;margin-inline-start:6px;display:inline-block" href="${l.anki_en_url}" target="_blank">🇬🇧 English Version</a>`:""}
             </div>`).join("") || `<p class="small">لا توجد دروس بعد.</p>`}
         </div>
       </div>`).join("");

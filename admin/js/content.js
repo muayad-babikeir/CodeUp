@@ -129,43 +129,19 @@ async function openLessonModal(unitId, lesson, onDone){
   onDone = onDone || (()=>Admin.go("content"));
   const isEdit = !!lesson;
 
-  // ملفات Anki الحالية لهذا الدرس (لو موجود) — نفس جدول file_uploads الموجود أصلًا،
-  // بقيمتين جديدتين لعمود related_type (anki_ar / anki_en)، بدون أي جدول جديد وبدون نظام بطاقات
-  let ankiFiles = { anki_ar:null, anki_en:null };
-  if(isEdit){
-    const { data } = await db.from("file_uploads").select("*").eq("related_id", lesson.id).in("related_type", ["anki_ar","anki_en"]);
-    (data||[]).forEach(f=>{ ankiFiles[f.related_type] = f; });
-  }
-
-  const ankiRowHtml = (lang, label)=>{
-    const f = ankiFiles[lang];
-    return `
-      <div class="card2" style="margin-top:8px">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
-          <b style="font-size:13px">${label}</b>
-          ${f?`<span class="pill approved">مرفوع</span>`:`<span class="pill neutral">لا يوجد</span>`}
-        </div>
-        ${f?`<div class="small" style="margin-top:6px">${CodeUp.escapeHtml(f.file_name)}</div>`:""}
-        <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
-          <input type="file" accept=".apkg" id="ankiFile_${lang}" style="flex:1">
-          <button class="btn" data-ankiupload="${lang}">${f?"استبدال":"رفع"}</button>
-          ${f?`<button class="btn danger" data-ankidelete="${lang}">حذف</button>`:""}
-        </div>
-      </div>`;
-  };
-
+  // بطاقات Anki: نفس فكرة رابط PDF بالضبط — رابط مباشر يُخزَّن كنص بجدول lessons
+  // (anki_ar_url / anki_en_url)، بدون أي رفع ملفات وبدون Supabase Storage إطلاقًا.
   const m = Admin.modal(`
     <h3>${isEdit?"تعديل الدرس":"درس جديد"}</h3>
     <label>العنوان</label><input id="lTitle" value="${lesson?CodeUp.escapeHtml(lesson.title):""}">
     <label>رابط الفيديو (اختياري)</label><input id="lVideo" value="${lesson?CodeUp.escapeHtml(lesson.video_url||""):""}" placeholder="https://...">
     <label>محتوى نصي (اختياري)</label><textarea id="lText" rows="4" placeholder="شرح مكتوب يظهر بصفحة الدرس للطالب">${lesson?CodeUp.escapeHtml(lesson.text_content||""):""}</textarea>
     <label>رابط PDF (اختياري)</label><input id="lPdf" value="${lesson?CodeUp.escapeHtml(lesson.pdf_url||""):""}" placeholder="https://...">
+    <label style="margin-top:14px;display:block">بطاقات Anki — النسخة العربية (رابط مباشر، اختياري)</label>
+    <input id="lAnkiAr" value="${lesson?CodeUp.escapeHtml(lesson.anki_ar_url||""):""}" placeholder="https://...">
+    <label style="margin-top:10px;display:block">بطاقات Anki — English Version (رابط مباشر، اختياري)</label>
+    <input id="lAnkiEn" value="${lesson?CodeUp.escapeHtml(lesson.anki_en_url||""):""}" placeholder="https://...">
     <label>الترتيب</label><input id="lOrder" type="number" value="${lesson?.order_index??0}">
-    ${isEdit?`
-      <label style="margin-top:14px;display:block">بطاقات Anki (ملفات APKG جاهزة — يرفعها الأدمن كما هي، بدون تعديل)</label>
-      ${ankiRowHtml("anki_ar","النسخة العربية")}
-      ${ankiRowHtml("anki_en","English Version")}
-    `:`<p class="small" style="margin-top:10px">احفظ الدرس أولًا حتى تقدر ترفع ملفات Anki له.</p>`}
     <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
       <button class="btn" id="lCancel">إلغاء</button><button class="btn dark" id="lSave">حفظ</button>
     </div><div id="lMsg" class="emptyState" style="display:none;padding:8px;color:#F2555F"></div>
@@ -178,6 +154,8 @@ async function openLessonModal(unitId, lesson, onDone){
       video_url: m.el.querySelector("#lVideo").value.trim() || null,
       text_content: m.el.querySelector("#lText").value.trim() || null,
       pdf_url: m.el.querySelector("#lPdf").value.trim() || null,
+      anki_ar_url: m.el.querySelector("#lAnkiAr").value.trim() || null,
+      anki_en_url: m.el.querySelector("#lAnkiEn").value.trim() || null,
       order_index: Number(m.el.querySelector("#lOrder").value)||0
     };
     if(!payload.title){ msgEl.style.display="block"; msgEl.textContent="العنوان إلزامي"; return; }
@@ -187,50 +165,4 @@ async function openLessonModal(unitId, lesson, onDone){
       CodeUp.toast("تم الحفظ", "success"); m.close(); onDone();
     }catch(e){ msgEl.style.display="block"; msgEl.textContent = e.message; }
   };
-
-  if(isEdit){
-    m.el.querySelectorAll("[data-ankiupload]").forEach(btn=>{
-      btn.onclick = async ()=>{
-        const lang = btn.dataset.ankiupload;
-        const fileInput = m.el.querySelector(`#ankiFile_${lang}`);
-        const file = fileInput.files[0];
-        if(!file){ CodeUp.toast("اختر ملف APKG أولًا", "error"); return; }
-        if(!file.name.toLowerCase().endsWith(".apkg")){ CodeUp.toast("الملف يجب أن يكون بصيغة .apkg", "error"); return; }
-        btn.disabled = true; const oldLabel = btn.textContent; btn.textContent = "جارِ الرفع…";
-        try{
-          const cleanName = file.name.replace(/[^\w.\-]+/g, "_");
-          const path = `anki/${lesson.id}/${lang}/${Date.now()}_${cleanName}`;
-          const { error: upErr } = await db.storage.from("course-assets").upload(path, file, { upsert:false });
-          if(upErr) throw upErr;
-          const old = ankiFiles[lang];
-          await db.from("file_uploads").insert({
-            uploader_id: Admin.ctx.user.id, related_type: lang, related_id: lesson.id,
-            course_id: Admin.currentCourseId, storage_path: path,
-            file_name: file.name, mime_type: "application/octet-stream", file_size: file.size,
-            archive_status: "live"
-          }).throwOnError();
-          if(old){
-            await db.storage.from("course-assets").remove([old.storage_path]).catch(()=>{});
-            await db.from("file_uploads").delete().eq("id", old.id);
-          }
-          CodeUp.toast("تم رفع الملف", "success");
-          m.close(); openLessonModal(unitId, lesson, onDone);
-        }catch(e){ CodeUp.toast(e.message || "تعذّر رفع الملف", "error"); btn.disabled=false; btn.textContent = oldLabel; }
-      };
-    });
-    m.el.querySelectorAll("[data-ankidelete]").forEach(btn=>{
-      btn.onclick = async ()=>{
-        const lang = btn.dataset.ankidelete;
-        const f = ankiFiles[lang];
-        if(!f) return;
-        if(!confirm("حذف ملف Anki هذا نهائيًا؟\n\nلا يمكن التراجع عن هذا الإجراء.")) return;
-        try{
-          await db.storage.from("course-assets").remove([f.storage_path]).catch(()=>{});
-          await db.from("file_uploads").delete().eq("id", f.id).throwOnError();
-          CodeUp.toast("تم الحذف", "success");
-          m.close(); openLessonModal(unitId, lesson, onDone);
-        }catch(e){ CodeUp.toast(e.message || "تعذّر الحذف", "error"); }
-      };
-    });
-  }
 }
