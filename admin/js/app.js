@@ -16,6 +16,7 @@ const Admin = {
   isTechWeekAdmin: false, // صلاحية عامة واحدة على كل محتوى الأسبوع التقني (مرنة عمدًا، تُضيَّق لاحقًا لو احتجنا)
   section: "dashboard",
   sections: {}, // يُعبّأ من ملفات admin/js/*.js الأخرى: {key:{label,icon,scope,render}}
+  openNavGroup: null, // اسم مجموعة السايدبار المفتوحة حاليًا (أقسام قابلة للطي)
 
   async boot(){
     // 1) Check Auth
@@ -268,6 +269,11 @@ const Admin = {
       return;
     }
     const cfg = this.navConfig();
+    // أقسام قابلة للطي — يفتح تلقائيًا بس القسم اللي فيه الصفحة الحالية، والباقي مطوي
+    if(!this.openNavGroup || !cfg.some(g=>g.group===this.openNavGroup)){
+      const activeGroup = cfg.find(g=>g.items.includes(this.section));
+      this.openNavGroup = activeGroup ? activeGroup.group : (cfg[0] && cfg[0].group);
+    }
     let html = "";
     if(this.role === "super" || (this.courses && this.courses.length > 1)){
       html += `<div class="navGroup"><div class="navLabel">الكورس</div>
@@ -277,28 +283,58 @@ const Admin = {
         </select></div>`;
     }
     cfg.forEach(group=>{
-      html += `<div class="navGroup"><div class="navLabel">${group.group}</div>`;
+      const isOpen = group.group === this.openNavGroup;
+      html += `<div class="navGroup ${isOpen?"":"collapsed"}">
+        <div class="navLabel navLabelToggle" data-grouptoggle="${CodeUp.escapeHtml(group.group)}">
+          <span>${group.group}</span><span class="navChevron">${Icon("chevron_down")}</span>
+        </div>
+        <div class="navGroupBody">`;
       group.items.forEach(key=>{
         const s = this.sections[key];
         if(!s) return;
         const badge = counts[key] ? `<span class="navBadge">${counts[key]}</span>` : "";
         html += `<div class="navItem" data-section="${key}"><span>${s.label}</span>${badge}</div>`;
       });
-      html += `</div>`;
+      html += `</div></div>`;
     });
     root.innerHTML = html;
     const switcher = document.getElementById("courseSwitcher");
     if(switcher) switcher.onchange = async ()=>{
       this.currentCourseId = switcher.value;
+      this.openNavGroup = null; // يتحدد تلقائيًا من جديد حسب أول قسم بالكورس المختار
       await this.renderNav();
       const firstSection = this.navConfig().flatMap(g=>g.items).find(k=>this.sections[k]);
       this.go(firstSection || this.section);
     };
+    root.querySelectorAll("[data-grouptoggle]").forEach(el=>{
+      el.onclick = ()=>{
+        const name = el.dataset.grouptoggle;
+        if(this.openNavGroup === name){
+          this.openNavGroup = null;
+          el.closest(".navGroup").classList.add("collapsed");
+        } else {
+          this.expandNavGroup(name);
+        }
+      };
+    });
     root.querySelectorAll(".navItem").forEach(el=>el.onclick=()=>{ this.go(el.dataset.section); this.closeMobileSidebar?.(); });
+  },
+
+  // يفتح مجموعة واحدة بالسايدبار ويطوي البقية، بدون إعادة استعلام العدادات
+  expandNavGroup(name){
+    this.openNavGroup = name;
+    document.querySelectorAll("#navRoot .navGroup").forEach(g=>g.classList.add("collapsed"));
+    document.querySelectorAll("#navRoot .navLabelToggle").forEach(lbl=>{
+      if(lbl.dataset.grouptoggle === name) lbl.closest(".navGroup").classList.remove("collapsed");
+    });
   },
 
   async go(sectionKey){
     this.section = sectionKey;
+    if(this.role !== "leader"){
+      const owner = this.navConfig()?.find(g=>g.items.includes(sectionKey));
+      if(owner) this.expandNavGroup(owner.group);
+    }
     document.querySelectorAll(".navItem").forEach(el=>el.classList.toggle("active", el.dataset.section===sectionKey));
     const body = document.getElementById("pageBody");
     body.innerHTML = `<div class="emptyState">جارِ التحميل…</div>`;

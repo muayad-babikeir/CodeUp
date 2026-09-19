@@ -24,8 +24,15 @@ body{
 .sidebar .brand{display:flex;align-items:center;gap:9px;color:#fff;font-weight:700;padding:8px 10px 20px}
 .sidebar .brand .mark{width:30px;height:30px;border-radius:9px;background:var(--surface);border:1px solid var(--line);color:var(--accent-ink);display:grid;place-items:center;font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:13px;overflow:hidden}
 .sidebar .brand .mark img{width:68%;height:68%;object-fit:contain}
-.navGroup{margin-bottom:14px}
-.navGroup .navLabel{font-family:'IBM Plex Mono',monospace;font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink40);padding:6px 10px}
+.navGroup{margin-bottom:6px}
+.navGroup .navLabel{font-family:'IBM Plex Mono',monospace;font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink40);padding:10px 10px}
+.navLabelToggle{display:flex;align-items:center;justify-content:space-between;gap:6px;cursor:pointer;border-radius:8px;user-select:none}
+.navLabelToggle:hover{background:rgba(255,255,255,.04);color:var(--ink70,#9a9db0)}
+.navChevron{display:inline-flex;transition:transform .15s ease;opacity:.7}
+.navChevron svg{width:13px;height:13px}
+.navGroup.collapsed .navChevron{transform:rotate(-90deg)}
+.navGroup.collapsed .navGroupBody{display:none}
+.navGroupBody{padding-top:2px}
 .navItem{display:flex;align-items:center;padding:10px 12px;border-radius:10px;cursor:pointer;font-size:13.5px;color:#C7C9D6}
 .navBadge{margin-inline-start:auto;background:var(--red);color:#fff;font-size:10.5px;border-radius:999px;padding:1px 7px;font-family:'IBM Plex Mono',monospace;font-weight:600}
 .navItem:hover{background:rgba(255,255,255,.05)}
@@ -232,6 +239,7 @@ th.sortable.sorted .sortArrow{opacity:1;color:var(--indigo)}
 .adminShell.sidebarCollapsed .navItem span:not(.navBadge),
 .adminShell.sidebarCollapsed #courseSwitcher{display:none}
 .adminShell.sidebarCollapsed .navItem{justify-content:center}
+.adminShell.sidebarCollapsed .navGroupBody{display:block}
 .sidebarToggle{display:none}
 .sidebarScrim{display:none}
 @media(min-width:821px){

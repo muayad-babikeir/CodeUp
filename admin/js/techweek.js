@@ -90,6 +90,7 @@ Admin.sections.tech_week_events = {
 function openEventModal(event){
   const isEdit = !!event;
   const toLocalInput = (iso)=> iso ? new Date(iso).toISOString().slice(0,16) : "";
+  const mode = event?.registration_mode || "individual";
   const m = Admin.modal(`
     <h3>${isEdit?"تعديل فعالية":"فعالية جديدة"}</h3>
     <label>العنوان</label><input id="evTitle" value="${event?CodeUp.escapeHtml(event.title):""}">
@@ -100,7 +101,23 @@ function openEventModal(event){
     <label>المكان (اختياري)</label><input id="evLocation" value="${event?CodeUp.escapeHtml(event.location||""):""}">
     <label>يبدأ</label><input id="evStart" type="datetime-local" value="${toLocalInput(event?.starts_at)}">
     <label>ينتهي (اختياري)</label><input id="evEnd" type="datetime-local" value="${toLocalInput(event?.ends_at)}">
-    <label>السعة القصوى (اختياري — اتركه فاضي لبدون حد)</label><input id="evCapacity" type="number" min="1" value="${event?.capacity??""}">
+
+    <label>نمط التسجيل</label>
+    <select id="evRegMode">
+      <option value="individual" ${mode==="individual"?"selected":""}>فردي — كل طالب يسجّل بنفسه</option>
+      <option value="team" ${mode==="team"?"selected":""}>فرق — الطلاب يسجّلون كفرق (مسابقات مثلًا)</option>
+    </select>
+
+    <div id="evIndivWrap" style="display:${mode==="individual"?"block":"none"}">
+      <label>السعة القصوى (اختياري — اتركه فاضي لبدون حد)</label><input id="evCapacity" type="number" min="1" value="${event?.capacity??""}">
+    </div>
+
+    <div id="evTeamWrap" style="display:${mode==="team"?"block":"none"}">
+      <label>الحد الأقصى لعدد الفرق (اختياري — اتركه فاضي لبدون حد)</label><input id="evTeamCapacity" type="number" min="1" value="${event?.capacity??""}">
+      <label>أقل عدد أعضاء بالفريق (اختياري)</label><input id="evTeamMin" type="number" min="1" value="${event?.team_min_size??""}">
+      <label>أعلى عدد أعضاء بالفريق (اختياري)</label><input id="evTeamMax" type="number" min="1" value="${event?.team_max_size??""}">
+    </div>
+
     <label style="display:flex;align-items:center;gap:8px;margin-top:10px">
       <input type="checkbox" id="evRegOpen" ${event?.registration_open!==false?"checked":""}> التسجيل مفتوح حاليًا
     </label>
@@ -118,9 +135,15 @@ function openEventModal(event){
     </div>
     <div id="evMsg" class="emptyState" style="display:none;padding:8px;color:#F2555F"></div>
   `);
+  m.el.querySelector("#evRegMode").onchange = (e)=>{
+    const isTeam = e.target.value === "team";
+    m.el.querySelector("#evIndivWrap").style.display = isTeam?"none":"block";
+    m.el.querySelector("#evTeamWrap").style.display = isTeam?"block":"none";
+  };
   m.el.querySelector("#evCancel").onclick = m.close;
   m.el.querySelector("#evSave").onclick = async ()=>{
     const msgEl = m.el.querySelector("#evMsg");
+    const regMode = m.el.querySelector("#evRegMode").value;
     const payload = {
       title: m.el.querySelector("#evTitle").value.trim(),
       type: m.el.querySelector("#evType").value,
@@ -129,7 +152,12 @@ function openEventModal(event){
       location: m.el.querySelector("#evLocation").value.trim() || null,
       starts_at: m.el.querySelector("#evStart").value ? new Date(m.el.querySelector("#evStart").value).toISOString() : null,
       ends_at: m.el.querySelector("#evEnd").value ? new Date(m.el.querySelector("#evEnd").value).toISOString() : null,
-      capacity: m.el.querySelector("#evCapacity").value ? Number(m.el.querySelector("#evCapacity").value) : null,
+      registration_mode: regMode,
+      capacity: regMode==="team"
+        ? (m.el.querySelector("#evTeamCapacity").value ? Number(m.el.querySelector("#evTeamCapacity").value) : null)
+        : (m.el.querySelector("#evCapacity").value ? Number(m.el.querySelector("#evCapacity").value) : null),
+      team_min_size: regMode==="team" && m.el.querySelector("#evTeamMin").value ? Number(m.el.querySelector("#evTeamMin").value) : null,
+      team_max_size: regMode==="team" && m.el.querySelector("#evTeamMax").value ? Number(m.el.querySelector("#evTeamMax").value) : null,
       registration_open: m.el.querySelector("#evRegOpen").checked,
       status: m.el.querySelector("#evStatus").value
     };
@@ -153,13 +181,14 @@ Admin.sections.tech_week_registrations = {
   label: "تسجيلات الأسبوع التقني",
   async render(body){
     body.innerHTML = `<div class="card">${Array(2).fill(`<div class="skeleton skeleton-line w80" style="height:34px;margin-bottom:10px"></div>`).join("")}</div>`;
-    const { data: events, error } = await db.from("tech_week_events").select("id,title,type,capacity").order("starts_at",{ascending:true,nullsFirst:false});
+    const { data: events, error } = await db.from("tech_week_events").select("id,title,type,capacity,registration_mode").order("starts_at",{ascending:true,nullsFirst:false});
     if(error){ body.innerHTML = `<div class="alertBox error"><span>تعذّر تحميل الفعاليات.</span><button class="btn alertRetry" id="twrRetry">إعادة المحاولة</button></div>`; body.querySelector("#twrRetry").onclick=()=>Admin.go("tech_week_registrations"); return; }
     if(!events || !events.length){ body.innerHTML = `<div class="emptyStatePro"><h4>لا توجد فعاليات بعد</h4><p>أضف فعالية أولًا من صفحة الفعاليات.</p></div>`; return; }
 
-    body.innerHTML = `<div class="card"><div class="tableScroll"><table><thead><tr><th>الفعالية</th><th>النوع</th><th></th></tr></thead>
+    body.innerHTML = `<div class="card"><div class="tableScroll"><table><thead><tr><th>الفعالية</th><th>النوع</th><th>نمط التسجيل</th><th></th></tr></thead>
       <tbody>${events.map(e=>`
         <tr><td>${CodeUp.escapeHtml(e.title)}</td><td>${TW_TYPE_LABEL[e.type]||e.type}</td>
+        <td>${e.registration_mode==='team'?'فرق':'فردي'}</td>
         <td><button class="btn" data-viewregs="${e.id}">عرض المسجّلين</button></td></tr>`).join("")}
       </tbody></table></div></div>`;
 
@@ -171,23 +200,49 @@ Admin.sections.tech_week_registrations = {
 
 async function openRegistrationsDrawer(event){
   const d = Admin.drawer(`<div class="emptyState">جارِ التحميل…</div>`);
-  const { data: regs, error } = await db.from("tech_week_registrations").select("*, profiles(full_name,email)").eq("event_id", event.id).order("created_at");
+  const isTeamMode = event.registration_mode === "team";
+  const [{ data: regs, error }, teamsRes] = await Promise.all([
+    db.from("tech_week_registrations").select("*, profiles(full_name,email)").eq("event_id", event.id).order("created_at"),
+    isTeamMode ? db.from("tech_week_teams").select("*").eq("event_id", event.id).order("created_at") : Promise.resolve({data:[]})
+  ]);
   if(error){ d.el.innerHTML = `<div class="alertBox error"><span>تعذّر تحميل المسجّلين.</span></div>`; return; }
+  const teams = teamsRes.data || [];
+
+  const markAttendedBtn = (r)=> r.status==='registered'?`<button class="btn" data-markattended="${r.id}">تم الحضور</button>`:"";
+  const memberLine = (r)=>`
+        <div class="attentionItem">
+          <div class="aiBody">${CodeUp.escapeHtml(r.profiles?.full_name||r.profiles?.email||"")}
+            <div class="aiMeta">${r.status==='registered'?'مسجّل':r.status==='attended'?'حضر':'ألغى التسجيل'}</div>
+          </div>
+          ${markAttendedBtn(r)}
+        </div>`;
 
   const draw = ()=>{
+    let listHtml;
+    if(isTeamMode){
+      listHtml = teams.map(t=>{
+        const members = regs.filter(r=>r.team_id===t.id);
+        const activeCount = members.filter(r=>r.status!=='cancelled').length;
+        return `<div class="card2" style="margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <b>${CodeUp.escapeHtml(t.name)}</b>
+            <span class="small">${activeCount}${event.team_max_size?` / ${event.team_max_size}`:""} عضو</span>
+          </div>
+          <div style="margin-top:8px">${members.map(memberLine).join("") || `<p class="small" style="margin:0">لا يوجد أعضاء بعد.</p>`}</div>
+        </div>`;
+      }).join("") || `<div class="emptyStatePro"><p style="margin:0">لا توجد فرق مسجّلة بعد.</p></div>`;
+    }else{
+      listHtml = regs.map(memberLine).join("") || `<div class="emptyStatePro"><p style="margin:0">لا يوجد تسجيلات بعد.</p></div>`;
+    }
     d.el.innerHTML = `
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
         <b>${CodeUp.escapeHtml(event.title)}</b>
         <button class="iconBtn" id="regsDrawerClose" aria-label="إغلاق">${Icon("x")}</button>
       </div>
-      <p class="small">${regs.filter(r=>r.status==='registered').length} مسجّل${event.capacity?` من أصل ${event.capacity}`:""}</p>
-      ${regs.map(r=>`
-        <div class="attentionItem">
-          <div class="aiBody">${CodeUp.escapeHtml(r.profiles?.full_name||r.profiles?.email||"")}
-            <div class="aiMeta">${r.status==='registered'?'مسجّل':r.status==='attended'?'حضر':'ألغى التسجيل'}</div>
-          </div>
-          ${r.status==='registered'?`<button class="btn" data-markattended="${r.id}">تم الحضور</button>`:""}
-        </div>`).join("") || `<div class="emptyStatePro"><p style="margin:0">لا يوجد تسجيلات بعد.</p></div>`}
+      <p class="small">${isTeamMode
+        ? `${teams.length} فريق${event.capacity?` من أصل ${event.capacity}`:""}`
+        : `${regs.filter(r=>r.status==='registered').length} مسجّل${event.capacity?` من أصل ${event.capacity}`:""}`}</p>
+      ${listHtml}
     `;
     d.el.querySelector("#regsDrawerClose").onclick = d.close;
     d.el.querySelectorAll("[data-markattended]").forEach(b=>{
@@ -209,12 +264,15 @@ Admin.sections.tech_week_announcements = {
     const { data: anns, error } = await db.from("tech_week_announcements").select("*").order("created_at",{ascending:false});
     if(error){ body.innerHTML = `<div class="alertBox error"><span>تعذّر تحميل الإعلانات.</span><button class="btn alertRetry" id="twaRetry">إعادة المحاولة</button></div>`; body.querySelector("#twaRetry").onclick=()=>Admin.go("tech_week_announcements"); return; }
 
+    const isSuper = Admin.role === "super" || !!Admin.ctx?.profile?.is_super_admin;
+
     body.innerHTML = `
       <div class="toolbar"><button class="btn dark" id="newTwAnnBtn">+ إعلان جديد</button></div>
-      <div class="card"><div class="tableScroll"><table><thead><tr><th>العنوان</th><th>التاريخ</th><th></th></tr></thead>
+      <div class="card"><div class="tableScroll"><table><thead><tr><th>العنوان</th><th>التاريخ</th><th>بالرئيسية العامة؟</th><th></th></tr></thead>
       <tbody>${(anns||[]).map(a=>`
         <tr><td>${CodeUp.escapeHtml(a.title)}</td><td class="small">${CodeUp.timeAgo(a.created_at)}</td>
-        <td><button class="btn danger" data-del="${a.id}">حذف</button></td></tr>`).join("") || `<tr><td colspan="3"><div class="emptyStatePro"><p style="margin:0">لا توجد إعلانات بعد.</p></div></td></tr>`}
+        <td>${a.posted_to_home?`<span class="pill approved">نعم</span>`:`<span class="pill pending">لا</span>`}</td>
+        <td><button class="btn danger" data-del="${a.id}">حذف</button></td></tr>`).join("") || `<tr><td colspan="4"><div class="emptyStatePro"><p style="margin:0">لا توجد إعلانات بعد.</p></div></td></tr>`}
       </tbody></table></div></div>`;
 
     body.querySelector("#newTwAnnBtn").onclick = ()=>{
@@ -222,6 +280,10 @@ Admin.sections.tech_week_announcements = {
         <h3>إعلان جديد — الأسبوع التقني</h3>
         <label>العنوان</label><input id="twaTitle">
         <label>المحتوى</label><textarea id="twaContent" rows="4"></textarea>
+        <label style="display:flex;align-items:center;gap:8px;margin-top:10px${isSuper?"":";opacity:.5"}">
+          <input type="checkbox" id="twaPostHome" ${isSuper?"":"disabled"}> انشر أيضًا بتبويب الرئيسية العام (يظهر لكل مستخدمي المنصة)
+        </label>
+        ${isSuper?"":`<p class="small" style="margin-top:4px">النشر بالرئيسية العامة يتطلب صلاحية المشرف العام.</p>`}
         <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
           <button class="btn" id="twaCancel">إلغاء</button><button class="btn dark" id="twaSave">نشر</button>
         </div><div id="twaMsg" class="emptyState" style="display:none;padding:8px;color:#F2555F"></div>
@@ -229,12 +291,19 @@ Admin.sections.tech_week_announcements = {
       m.el.querySelector("#twaCancel").onclick = m.close;
       m.el.querySelector("#twaSave").onclick = async ()=>{
         const msgEl = m.el.querySelector("#twaMsg");
+        msgEl.style.display = "none";
         const title = m.el.querySelector("#twaTitle").value.trim();
+        const content = m.el.querySelector("#twaContent").value.trim() || null;
+        const postHome = isSuper && m.el.querySelector("#twaPostHome").checked;
         if(!title){ msgEl.style.display="block"; msgEl.textContent="العنوان مطلوب"; return; }
         try{
           await db.from("tech_week_announcements").insert({
-            title, content: m.el.querySelector("#twaContent").value.trim() || null, created_by: Admin.ctx.user.id
+            title, content, created_by: Admin.ctx.user.id, posted_to_home: postHome
           }).throwOnError();
+          if(postHome){
+            try{ await CodeUp.rpc.createAnnouncement(null, `[الأسبوع التقني] ${title}`, content, null); }
+            catch(e){ CodeUp.toast("تم نشر إعلان الأسبوع التقني، لكن تعذّر نشره بالرئيسية العامة: "+e.message, "error"); }
+          }
           m.close(); Admin.go("tech_week_announcements");
         }catch(e){ msgEl.style.display="block"; msgEl.textContent = e.message; }
       };

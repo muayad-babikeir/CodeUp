@@ -1455,10 +1455,11 @@ const App = {
   // الطالب من رؤية تسجيلات غيره) — يظهر فقط بلوحة تحكم الأدمن.
   async renderHomeTechWeek(body){
     body.innerHTML = `<div class="emptyState">جارِ التحميل…</div>`;
-    const [{ data: events, error }, { data: myRegs }, { data: announcements }] = await Promise.all([
+    const [{ data: events, error }, { data: myRegs }, { data: announcements }, { data: allTeams }] = await Promise.all([
       db.from("tech_week_events").select("*").eq("status","published").order("starts_at",{ascending:true,nullsFirst:false}),
-      db.from("tech_week_registrations").select("event_id,status").eq("profile_id", this.ctx.user.id),
-      db.from("tech_week_announcements").select("*").order("created_at",{ascending:false}).limit(10)
+      db.from("tech_week_registrations").select("event_id,status,team_id").eq("profile_id", this.ctx.user.id),
+      db.from("tech_week_announcements").select("*").order("created_at",{ascending:false}).limit(10),
+      db.from("tech_week_teams").select("*, tech_week_registrations(id,profile_id,status,profiles(full_name))")
     ]);
     if(error){
       body.innerHTML = `<div class="emptyState">تعذّر تحميل الأسبوع التقني. <button class="btn" id="twRetryBtn">إعادة المحاولة</button></div>`;
@@ -1468,14 +1469,54 @@ const App = {
     }
 
     const myRegMap = {};
-    (myRegs||[]).forEach(r=>{ myRegMap[r.event_id] = r.status; });
+    (myRegs||[]).forEach(r=>{ myRegMap[r.event_id] = r; });
     const TYPE_LABEL = {workshop:"ورشة", course:"دورة", competition:"مسابقة", talk:"جلسة نقاشية"};
+    const teamsByEvent = {};
+    (allTeams||[]).forEach(t=>{ (teamsByEvent[t.event_id] ||= []).push(t); });
+
+    const teamCardHtml = (e, myTeamId)=>{
+      const teams = (teamsByEvent[e.id]||[]);
+      if(myTeamId){
+        const myTeam = teams.find(t=>t.id===myTeamId);
+        const members = (myTeam?.tech_week_registrations||[]).filter(r=>r.status!=='cancelled');
+        return `
+          <div style="margin-top:10px;padding:10px;border:1px solid var(--line);border-radius:10px">
+            <b>فريقك: ${CodeUp.escapeHtml(myTeam?.name||"")}</b>
+            <div class="small" style="margin-top:4px">${members.map(m=>CodeUp.escapeHtml(m.profiles?.full_name||"")).join("، ")}</div>
+            <button class="btn danger" data-cancelreg="${e.id}" style="margin-top:8px">مغادرة الفريق</button>
+          </div>`;
+      }
+      const joinable = teams.filter(t=>{
+        const active = (t.tech_week_registrations||[]).filter(r=>r.status!=='cancelled').length;
+        return !e.team_max_size || active < e.team_max_size;
+      });
+      return `
+        <div style="margin-top:10px">
+          <button class="btn dark" data-newteam="${e.id}">+ أنشئ فريق جديد</button>
+          ${joinable.length ? `<div style="margin-top:8px">${joinable.map(t=>{
+            const active = (t.tech_week_registrations||[]).filter(r=>r.status!=='cancelled').length;
+            return `<div class="card2" style="margin-top:6px;display:flex;justify-content:space-between;align-items:center">
+              <span>${CodeUp.escapeHtml(t.name)} <span class="small">(${active}${e.team_max_size?`/${e.team_max_size}`:""})</span></span>
+              <button class="btn" data-jointeam="${t.id}" data-jointeamevent="${e.id}">انضم</button>
+            </div>`;
+          }).join("")}</div>` : `<p class="small" style="margin-top:6px">ما فيه فرق متاحة بعد — كون أول فريق!</p>`}
+        </div>`;
+    };
 
     const eventCard = (e)=>{
-      const myStatus = myRegMap[e.id];
+      const myReg = myRegMap[e.id];
+      const myStatus = myReg?.status;
       const isRegistered = myStatus === "registered" || myStatus === "attended";
       let actionHtml;
-      if(myStatus === "attended"){
+      if(e.registration_mode === "team"){
+        if(myStatus === "attended"){
+          actionHtml = `<span class="pill approved">حضر فريقك هذي الفعالية</span>`;
+        }else if(!e.registration_open){
+          actionHtml = `<span class="pill neutral">التسجيل مغلق حاليًا</span>`;
+        }else{
+          actionHtml = teamCardHtml(e, isRegistered ? myReg.team_id : null);
+        }
+      }else if(myStatus === "attended"){
         actionHtml = `<span class="pill approved">حضرت هذي الفعالية</span>`;
       }else if(isRegistered){
         actionHtml = `<button class="btn danger" data-cancelreg="${e.id}">إلغاء التسجيل</button>`;
@@ -1489,6 +1530,7 @@ const App = {
           <div class="row" style="align-items:flex-start">
             <div style="min-width:0;flex:1">
               <span class="pill info">${TYPE_LABEL[e.type]||e.type}</span>
+              ${e.registration_mode==='team'?`<span class="pill neutral">تسجيل بالفرق</span>`:""}
               <h3 style="margin:6px 0 2px">${CodeUp.escapeHtml(e.title)}</h3>
               ${e.description?`<p class="small" style="margin:0 0 6px">${CodeUp.escapeHtml(e.description)}</p>`:""}
               <div class="small" style="display:flex;flex-direction:column;gap:2px">
@@ -1538,6 +1580,36 @@ const App = {
           CodeUp.toast("تم إلغاء التسجيل", "success");
           this.renderHomeTechWeek(body);
         }catch(e){ CodeUp.toast(e.message,"error"); btn.disabled = false; }
+      };
+    });
+    body.querySelectorAll("[data-newteam]").forEach(btn=>{
+      btn.onclick = async ()=>{
+        const name = prompt("اسم الفريق:");
+        if(!name || !name.trim()) return;
+        btn.disabled = true;
+        try{
+          const { data: team, error: teamErr } = await db.from("tech_week_teams").insert({
+            event_id: btn.dataset.newteam, name: name.trim(), created_by: this.ctx.user.id
+          }).select().single();
+          if(teamErr) throw teamErr;
+          await db.from("tech_week_registrations").insert({
+            event_id: btn.dataset.newteam, profile_id: this.ctx.user.id, status: "registered", team_id: team.id
+          }).throwOnError();
+          CodeUp.toast("تم إنشاء الفريق والانضمام له", "success");
+          this.renderHomeTechWeek(body);
+        }catch(e){ CodeUp.toast(e.message || "تعذّر إنشاء الفريق", "error"); btn.disabled = false; }
+      };
+    });
+    body.querySelectorAll("[data-jointeam]").forEach(btn=>{
+      btn.onclick = async ()=>{
+        btn.disabled = true;
+        try{
+          await db.from("tech_week_registrations").insert({
+            event_id: btn.dataset.jointeamevent, profile_id: this.ctx.user.id, status: "registered", team_id: btn.dataset.jointeam
+          }).throwOnError();
+          CodeUp.toast("انضممت للفريق", "success");
+          this.renderHomeTechWeek(body);
+        }catch(e){ CodeUp.toast(e.message || "تعذّر الانضمام — قد يكون الفريق اكتمل", "error"); btn.disabled = false; }
       };
     });
   },
