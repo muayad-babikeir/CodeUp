@@ -288,7 +288,7 @@ const CodeUp = (() => {
       enrollments: enrollments || [],
       universityAdmins: universityAdmins || [],
       universityAdminIds: (universityAdmins || []).map(u => u.university_id),
-      isTechWeekAdmin: !!techWeekAdminRow
+      isTechWeekAdmin: !!techWeekAdminRow || !!profile?.is_super_admin
     };
   }
 
