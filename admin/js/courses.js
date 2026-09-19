@@ -241,7 +241,8 @@ Admin.sections.settings_hub = {
         {icon:Icon("announcement"), label:"الإعلانات العامة", desc:"إعلانات تظهر لكل مستخدمي CodeUp بالصفحة الرئيسية.", goto:"home_announcements", home:true},
         {icon:Icon("assignments"), label:"الإشراف على منشورات المستجدات", desc:"حذف أي منشور حر غير مناسب من الصفحة الرئيسية.", goto:"home_posts", home:true},
         {icon:Icon("comment"), label:"مدة الاحتفاظ بالرسائل الخاصة", desc:"عدد الأيام قبل حذف الرسائل الخاصة تلقائيًا.", goto:"message_settings", home:true},
-        {icon:Icon("university"), label:"قسم الجامعة", desc:"الفصول الدراسية والمواد المستقلة عن نظام الكورسات.", goto:"university", home:true},
+        {icon:Icon("university"), label:"قسم الجامعة", desc:"الفصول الدراسية والمواد لكل جامعة مضافة.", goto:"university", home:true},
+        {icon:Icon("layers"), label:"الجامعات وأدمنها", desc:"إضافة جامعة جديدة أو تعيين أدمن لإدارة محتوى جامعة معيّنة.", goto:"universities", home:true},
       ] : [] }
     ].filter(g=>g.items.length);
 

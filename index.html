@@ -1565,37 +1565,81 @@ const App = {
   },
 
   // قسم "الجامعة" — مستقل تمامًا عن نظام الكورسات البرمجية. تصفّح محلي
-  // (فصل → مادة → روابط) بدون تغيير الـ hash، مشابه لتصفح كورس عادي.
+  // (جامعة → فصل → مادة → روابط) بدون تغيير الـ hash، مشابه لتصفح كورس عادي.
   async renderHomeUniversity(body){
     const MATERIAL_ICON = {video:Icon("play"), telegram:Icon("paperclip"), link:Icon("link")};
 
-    const showSemesters = async ()=>{
+    const showUniversities = async ()=>{
       body.innerHTML = `<div class="emptyState">جارِ التحميل…</div>`;
-      const CACHE_TTL = 60000; // نفس منطق كاش الكورسات — فصول الجامعة تتغيّر نادرًا (إدارة فقط)
-      let semesters;
-      if(this._universitySemestersCache && (Date.now() - this._universitySemestersCache.at) < CACHE_TTL){
-        semesters = this._universitySemestersCache.data;
+      const CACHE_TTL = 60000; // الجامعات تتغيّر نادرًا جدًا (إدارة فقط)
+      let universities;
+      if(this._universitiesCache && (Date.now() - this._universitiesCache.at) < CACHE_TTL){
+        universities = this._universitiesCache.data;
       }else{
-        const res = await db.from("university_semesters").select("*").order("order_index");
-        semesters = res.data;
-        this._universitySemestersCache = {data: semesters, at: Date.now()};
+        const res = await db.from("universities").select("*").order("order_index");
+        if(res.error){
+          body.innerHTML = `<div class="emptyState">تعذّر تحميل الجامعات. <button class="btn" id="univsRetryBtn">إعادة المحاولة</button></div>`;
+          const retryBtn = document.getElementById("univsRetryBtn");
+          if(retryBtn) retryBtn.onclick = showUniversities;
+          return;
+        }
+        universities = res.data;
+        this._universitiesCache = {data: universities, at: Date.now()};
       }
-      if(!semesters || !semesters.length){
-        body.innerHTML = `<div class="emptyState">لا توجد فصول دراسية مضافة بعد.</div>`;
+      if(!universities || !universities.length){
+        body.innerHTML = `<div class="emptyState">لا توجد جامعات مضافة بعد.</div>`;
         return;
       }
-      body.innerHTML = `<div class="sectionHead"><h3 class="eyebrow">الفصول الدراسية</h3></div><div class="grid">` +
-        semesters.map(s=>`<div class="courseCard" data-semester="${s.id}"><h3>${CodeUp.escapeHtml(s.title)}</h3></div>`).join("") +
+      // جامعة واحدة فقط حاليًا → تخطَّ قائمة الاختيار مباشرة لمحتواها (خطوة أقل بدون فائدة)
+      if(universities.length === 1){
+        await showSemesters(universities[0], true);
+        return;
+      }
+      body.innerHTML = `<div class="sectionHead"><h3 class="eyebrow">الجامعات</h3></div><div class="grid">` +
+        universities.map(u=>`<div class="courseCard" data-university="${u.id}"><h3>${CodeUp.escapeHtml(u.name)}</h3></div>`).join("") +
         `</div>`;
-      body.querySelectorAll("[data-semester]").forEach(el=>{
-        el.onclick = ()=> showSubjects(semesters.find(s=>s.id===el.dataset.semester));
+      body.querySelectorAll("[data-university]").forEach(el=>{
+        el.onclick = ()=> showSemesters(universities.find(u=>u.id===el.dataset.university), universities.length===1);
       });
     };
 
-    const showSubjects = async (semester)=>{
+    const showSemesters = async (university, isOnlyUniversity)=>{
+      body.innerHTML = `<div class="emptyState">جارِ التحميل…</div>`;
+      const CACHE_TTL = 60000; // نفس منطق كاش الكورسات — فصول الجامعة تتغيّر نادرًا (إدارة فقط)
+      const cacheKey = "_universitySemestersCache_" + university.id;
+      let semesters;
+      if(this[cacheKey] && (Date.now() - this[cacheKey].at) < CACHE_TTL){
+        semesters = this[cacheKey].data;
+      }else{
+        const res = await db.from("university_semesters").select("*").eq("university_id", university.id).order("order_index");
+        if(res.error){
+          body.innerHTML = `<div class="emptyState">تعذّر تحميل الفصول الدراسية. <button class="btn" id="semRetryBtn">إعادة المحاولة</button></div>`;
+          const retryBtn = document.getElementById("semRetryBtn");
+          if(retryBtn) retryBtn.onclick = ()=> showSemesters(university, isOnlyUniversity);
+          return;
+        }
+        semesters = res.data;
+        this[cacheKey] = {data: semesters, at: Date.now()};
+      }
+      const backRow = isOnlyUniversity ? "" : `<button class="btn" id="uniBackToUniversities" style="margin-bottom:10px"><span class="inlineBtnIcon">${Icon("arrow_right")}</span> رجوع للجامعات</button>`;
+      if(!semesters || !semesters.length){
+        body.innerHTML = backRow + `<div class="emptyState">لا توجد فصول دراسية مضافة بعد.</div>`;
+      }else{
+        body.innerHTML = backRow +
+          `<div class="sectionHead"><h3 class="eyebrow">${isOnlyUniversity?"الفصول الدراسية":CodeUp.escapeHtml(university.name)}</h3></div><div class="grid">` +
+          semesters.map(s=>`<div class="courseCard" data-semester="${s.id}"><h3>${CodeUp.escapeHtml(s.title)}</h3></div>`).join("") +
+          `</div>`;
+        body.querySelectorAll("[data-semester]").forEach(el=>{
+          el.onclick = ()=> showSubjects(semesters.find(s=>s.id===el.dataset.semester), university, isOnlyUniversity);
+        });
+      }
+      if(!isOnlyUniversity) document.getElementById("uniBackToUniversities").onclick = showUniversities;
+    };
+
+    const showSubjects = async (semester, university, isOnlyUniversity)=>{
       body.innerHTML = `<div class="emptyState">جارِ التحميل…</div>`;
       const {data: subjects} = await db.from("university_subjects").select("*").eq("semester_id", semester.id).order("order_index");
-      const backRow = `<button class="btn" id="uniBackToSemesters" style="margin-bottom:10px">← رجوع للفصول</button>`;
+      const backRow = `<button class="btn" id="uniBackToSemesters" style="margin-bottom:10px"><span class="inlineBtnIcon">${Icon("arrow_right")}</span> رجوع للفصول</button>`;
       if(!subjects || !subjects.length){
         body.innerHTML = backRow + `<div class="emptyState">لا توجد مواد مضافة لهذا الفصل بعد.</div>`;
       }else{
@@ -1604,16 +1648,16 @@ const App = {
           subjects.map(s=>`<div class="courseCard" data-subject="${s.id}"><h3>${CodeUp.escapeHtml(s.title)}</h3></div>`).join("") +
           `</div>`;
         body.querySelectorAll("[data-subject]").forEach(el=>{
-          el.onclick = ()=> showMaterials(subjects.find(s=>s.id===el.dataset.subject), semester);
+          el.onclick = ()=> showMaterials(subjects.find(s=>s.id===el.dataset.subject), semester, university, isOnlyUniversity);
         });
       }
-      document.getElementById("uniBackToSemesters").onclick = showSemesters;
+      document.getElementById("uniBackToSemesters").onclick = ()=> showSemesters(university, isOnlyUniversity);
     };
 
-    const showMaterials = async (subject, semester)=>{
+    const showMaterials = async (subject, semester, university, isOnlyUniversity)=>{
       body.innerHTML = `<div class="emptyState">جارِ التحميل…</div>`;
       const {data: materials} = await db.from("university_materials").select("*").eq("subject_id", subject.id).order("order_index");
-      const backRow = `<button class="btn" id="uniBackToSubjects" style="margin-bottom:10px">← رجوع لمواد ${CodeUp.escapeHtml(semester.title)}</button>`;
+      const backRow = `<button class="btn" id="uniBackToSubjects" style="margin-bottom:10px"><span class="inlineBtnIcon">${Icon("arrow_right")}</span> رجوع لمواد ${CodeUp.escapeHtml(semester.title)}</button>`;
       if(!materials || !materials.length){
         body.innerHTML = backRow + `<div class="emptyState">لا توجد روابط/فيديوهات مضافة لهذه المادة بعد.</div>`;
       }else{
@@ -1625,10 +1669,10 @@ const App = {
               <span>${CodeUp.escapeHtml(m.title)}</span>
             </a>`).join("");
       }
-      document.getElementById("uniBackToSubjects").onclick = ()=> showSubjects(semester);
+      document.getElementById("uniBackToSubjects").onclick = ()=> showSubjects(semester, university, isOnlyUniversity);
     };
 
-    await showSemesters();
+    await showUniversities();
   },
 
   // الرئيسية المجمّعة: إعلانات عامة + منشورات حرة + تسليمات وتعليقات ولايكات من كل الكورسات المسجّل فيها الطالب

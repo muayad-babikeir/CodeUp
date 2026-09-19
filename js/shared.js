@@ -265,11 +265,12 @@ const CodeUp = (() => {
     const user = sessionData?.session?.user;
     if (!user) return null;
 
-    const [{ data: profile }, { data: courseAdmins }, { data: squadLeaders }, { data: enrollments }] = await Promise.all([
+    const [{ data: profile }, { data: courseAdmins }, { data: squadLeaders }, { data: enrollments }, { data: universityAdmins }] = await Promise.all([
       db.from("profiles").select("*").eq("id", user.id).single(),
       db.from("course_admins").select("course_id, role").eq("profile_id", user.id),
       db.from("squad_leaders").select("squad_id, permissions, squads(course_id, name)").eq("profile_id", user.id),
-      db.from("enrollments").select("*, courses(name, slug), squads(name, emoji)").eq("profile_id", user.id)
+      db.from("enrollments").select("*, courses(name, slug), squads(name, emoji)").eq("profile_id", user.id),
+      db.from("university_admins").select("university_id, role").eq("profile_id", user.id)
     ]);
 
     return {
@@ -280,7 +281,9 @@ const CodeUp = (() => {
       courseAdmins: courseAdmins || [],
       leaderSquads: squadLeaders || [],
       leaderCourseIds: [...new Set((squadLeaders || []).map(s => s.squads?.course_id).filter(Boolean))],
-      enrollments: enrollments || []
+      enrollments: enrollments || [],
+      universityAdmins: universityAdmins || [],
+      universityAdminIds: (universityAdmins || []).map(u => u.university_id)
     };
   }
 

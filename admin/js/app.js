@@ -7,10 +7,12 @@ const LEADER_SECTION_LABELS = {
 };
 const Admin = {
   ctx: null,          // من CodeUp.loadMyContext()
-  role: null,         // 'super' | 'course_admin' | 'leader'
+  role: null,         // 'super' | 'course_admin' | 'leader' | 'university_admin'
   accessibleCourseIds: [], // الكورسات التي يحق له إدارتها بأي صفة
   currentCourseId: null,
   currentSquadId: null, // لواجهة القائد (مقيّد بمجموعاته)
+  currentUniversityId: null, // للجامعة المُدارة حاليًا (سوبر أدمن أو أدمن جامعة)
+  universityAdminIds: [], // الجامعات التي يحق له إدارة محتواها (فارغة لغير أدمن جامعة)
   section: "dashboard",
   sections: {}, // يُعبّأ من ملفات admin/js/*.js الأخرى: {key:{label,icon,scope,render}}
 
@@ -27,8 +29,10 @@ const Admin = {
     const isSuper = this.ctx.isPlatformAdmin;
     const courseAdminIds = this.ctx.courseAdminCourseIds;
     const leaderCourseIds = this.ctx.leaderCourseIds;
+    const universityAdminIds = this.ctx.universityAdminIds || [];
+    this.universityAdminIds = universityAdminIds;
 
-    if(!isSuper && !courseAdminIds.length && !leaderCourseIds.length){
+    if(!isSuper && !courseAdminIds.length && !leaderCourseIds.length && !universityAdminIds.length){
       document.getElementById("gate").innerHTML =
         `<div style="text-align:center;font-family:system-ui"><h2>لا تملك صلاحية دخول لوحة الإدارة</h2>
          <p><a href="../index.html">العودة لتطبيق الطالب</a></p></div>`;
@@ -38,7 +42,8 @@ const Admin = {
     // 6) حدد Dashboard المناسب حسب الصلاحية الأعلى
     if(isSuper) this.role = "super";
     else if(courseAdminIds.length) this.role = "course_admin";
-    else this.role = "leader";
+    else if(leaderCourseIds.length) this.role = "leader";
+    else this.role = "university_admin"; // ما عنده أي صلاحية كورسات إطلاقًا، بس أدمن جامعة
 
     this.accessibleCourseIds = isSuper ? null /* كل الكورسات */
       : [...new Set([...courseAdminIds, ...leaderCourseIds])];
@@ -46,6 +51,9 @@ const Admin = {
     this.currentCourseId = (this.accessibleCourseIds && this.accessibleCourseIds[0]) || null;
     if(this.role === "leader" && this.ctx.leaderSquads.length){
       this.currentSquadId = this.ctx.leaderSquads[0].squad_id;
+    }
+    if(this.role === "university_admin" && universityAdminIds.length){
+      this.currentUniversityId = universityAdminIds[0];
     }
 
     document.getElementById("gate").classList.add("hidden");
@@ -61,7 +69,7 @@ const Admin = {
     await this.loadAccessibleCourses();
     this.refreshNotifBadge();
     await this.renderNav();
-    this.go(this.role === "leader" ? "mysquad" : "dashboard");
+    this.go(this.role === "leader" ? "mysquad" : (this.role === "university_admin" ? "university" : "dashboard"));
   },
 
   // ---------- Layout: Sidebar (Drawer على الموبايل + طي على Desktop) + Breadcrumb ----------
@@ -209,8 +217,11 @@ const Admin = {
   },
 
   navConfig(){
+    if(this.role === "university_admin"){
+      return [{group:"الجامعة", items:["university"]}];
+    }
     if(this.currentCourseId === HOME_SENTINEL){
-      return [{group:"الإعدادات العامة", items:["settings_hub","home_announcements","home_posts","message_settings","university"]}];
+      return [{group:"الإعدادات العامة", items:["settings_hub","home_announcements","home_posts","message_settings","universities","university"]}];
     }
     if(this.role === "super"){
       return [
@@ -319,7 +330,7 @@ const Admin = {
   }
 };
 
-function roleLabel(r){ return {super:"سوبر أدمن", course_admin:"أدمن كورس", leader:"قائد مجموعة"}[r]||r; }
+function roleLabel(r){ return {super:"سوبر أدمن", course_admin:"أدمن كورس", leader:"قائد مجموعة", university_admin:"أدمن جامعة"}[r]||r; }
 
 function leaderNavHtml(counts={}, opts={}){
   const items = [
