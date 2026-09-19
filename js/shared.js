@@ -38,7 +38,9 @@ function Icon(name){
     download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
     arrow_right: '<line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>',
     arrow_left: '<line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>',
-    link: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>'
+    link: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
+    x: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
+    settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>'
   };
   return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${paths[name]||''}</svg>`;
 }
@@ -53,7 +55,7 @@ function renderFileCard(f, bucket){
   const isAudio = mime.startsWith("audio/");
   if(f.archive_status === "archived"){
     const link = f.telegram_chat_id && f.telegram_message_id
-      ? `https://t.me/c/${String(f.telegram_chat_id).replace(/^-100/,"")}/${f.telegram_message_id}`
+      ? `https://t.me/c/${String(f.telegram_chat_id).replace(/^-100/,"")}/${f.telegram_thread_id ? f.telegram_thread_id + "/" : ""}${f.telegram_message_id}`
       : null;
     return `<div class="fileCard archived" data-filecard="${f.id}">
       <span class="tabIcon">${Icon("archive")}</span>
@@ -265,12 +267,13 @@ const CodeUp = (() => {
     const user = sessionData?.session?.user;
     if (!user) return null;
 
-    const [{ data: profile }, { data: courseAdmins }, { data: squadLeaders }, { data: enrollments }, { data: universityAdmins }] = await Promise.all([
+    const [{ data: profile }, { data: courseAdmins }, { data: squadLeaders }, { data: enrollments }, { data: universityAdmins }, { data: techWeekAdminRow }] = await Promise.all([
       db.from("profiles").select("*").eq("id", user.id).single(),
       db.from("course_admins").select("course_id, role").eq("profile_id", user.id),
       db.from("squad_leaders").select("squad_id, permissions, squads(course_id, name)").eq("profile_id", user.id),
       db.from("enrollments").select("*, courses(name, slug), squads(name, emoji)").eq("profile_id", user.id),
-      db.from("university_admins").select("university_id, role").eq("profile_id", user.id)
+      db.from("university_admins").select("university_id, role").eq("profile_id", user.id),
+      db.from("tech_week_admins").select("id, role").eq("profile_id", user.id).maybeSingle()
     ]);
 
     return {
@@ -283,7 +286,8 @@ const CodeUp = (() => {
       leaderCourseIds: [...new Set((squadLeaders || []).map(s => s.squads?.course_id).filter(Boolean))],
       enrollments: enrollments || [],
       universityAdmins: universityAdmins || [],
-      universityAdminIds: (universityAdmins || []).map(u => u.university_id)
+      universityAdminIds: (universityAdmins || []).map(u => u.university_id),
+      isTechWeekAdmin: !!techWeekAdminRow
     };
   }
 

@@ -13,6 +13,7 @@ const Admin = {
   currentSquadId: null, // لواجهة القائد (مقيّد بمجموعاته)
   currentUniversityId: null, // للجامعة المُدارة حاليًا (سوبر أدمن أو أدمن جامعة)
   universityAdminIds: [], // الجامعات التي يحق له إدارة محتواها (فارغة لغير أدمن جامعة)
+  isTechWeekAdmin: false, // صلاحية عامة واحدة على كل محتوى الأسبوع التقني (مرنة عمدًا، تُضيَّق لاحقًا لو احتجنا)
   section: "dashboard",
   sections: {}, // يُعبّأ من ملفات admin/js/*.js الأخرى: {key:{label,icon,scope,render}}
 
@@ -31,8 +32,9 @@ const Admin = {
     const leaderCourseIds = this.ctx.leaderCourseIds;
     const universityAdminIds = this.ctx.universityAdminIds || [];
     this.universityAdminIds = universityAdminIds;
+    this.isTechWeekAdmin = !!this.ctx.isTechWeekAdmin;
 
-    if(!isSuper && !courseAdminIds.length && !leaderCourseIds.length && !universityAdminIds.length){
+    if(!isSuper && !courseAdminIds.length && !leaderCourseIds.length && !universityAdminIds.length && !this.isTechWeekAdmin){
       document.getElementById("gate").innerHTML =
         `<div style="text-align:center;font-family:system-ui"><h2>لا تملك صلاحية دخول لوحة الإدارة</h2>
          <p><a href="../index.html">العودة لتطبيق الطالب</a></p></div>`;
@@ -43,7 +45,8 @@ const Admin = {
     if(isSuper) this.role = "super";
     else if(courseAdminIds.length) this.role = "course_admin";
     else if(leaderCourseIds.length) this.role = "leader";
-    else this.role = "university_admin"; // ما عنده أي صلاحية كورسات إطلاقًا، بس أدمن جامعة
+    else if(universityAdminIds.length) this.role = "university_admin";
+    else this.role = "tech_week_admin"; // ما عنده أي صلاحية ثانية إطلاقًا، بس أدمن أسبوع تقني
 
     this.accessibleCourseIds = isSuper ? null /* كل الكورسات */
       : [...new Set([...courseAdminIds, ...leaderCourseIds])];
@@ -69,7 +72,7 @@ const Admin = {
     await this.loadAccessibleCourses();
     this.refreshNotifBadge();
     await this.renderNav();
-    this.go(this.role === "leader" ? "mysquad" : (this.role === "university_admin" ? "university" : "dashboard"));
+    this.go(this.role === "leader" ? "mysquad" : (this.role === "university_admin" ? "university" : (this.role === "tech_week_admin" ? "tech_week_events" : "dashboard")));
   },
 
   // ---------- Layout: Sidebar (Drawer على الموبايل + طي على Desktop) + Breadcrumb ----------
@@ -217,11 +220,18 @@ const Admin = {
   },
 
   navConfig(){
+    if(this.role === "tech_week_admin"){
+      return [{group:"الأسبوع التقني", items:["tech_week_events","tech_week_registrations","tech_week_announcements"]}];
+    }
     if(this.role === "university_admin"){
-      return [{group:"الجامعة", items:["university"]}];
+      const cfg = [{group:"الجامعة", items:["university"]}];
+      if(this.isTechWeekAdmin) cfg.push({group:"الأسبوع التقني", items:["tech_week_events","tech_week_registrations","tech_week_announcements"]});
+      return cfg;
     }
     if(this.currentCourseId === HOME_SENTINEL){
-      return [{group:"الإعدادات العامة", items:["settings_hub","home_announcements","home_posts","message_settings","universities","university"]}];
+      const cfg = [{group:"الإعدادات العامة", items:["settings_hub","home_announcements","home_posts","message_settings","universities","university"]}];
+      if(this.isTechWeekAdmin) cfg.push({group:"الأسبوع التقني", items:["tech_week_events","tech_week_registrations","tech_week_announcements","tech_week_team"]});
+      return cfg;
     }
     if(this.role === "super"){
       return [
@@ -232,9 +242,11 @@ const Admin = {
       ];
     }
     if(this.role === "course_admin"){
-      return [
+      const cfg = [
         {group:"الكورس", items:["dashboard","content","squads","join_requests","leader_applications","assignments","submissions","timeline","announcements","progress","files","settings","settings_hub"]}
       ];
+      if(this.isTechWeekAdmin) cfg.push({group:"الأسبوع التقني", items:["tech_week_events","tech_week_registrations","tech_week_announcements"]});
+      return cfg;
     }
     // leader — القائمة الفعلية للقائد تُبنى عبر leaderNavHtml() وليس هنا
   },
@@ -330,7 +342,7 @@ const Admin = {
   }
 };
 
-function roleLabel(r){ return {super:"سوبر أدمن", course_admin:"أدمن كورس", leader:"قائد مجموعة", university_admin:"أدمن جامعة"}[r]||r; }
+function roleLabel(r){ return {super:"سوبر أدمن", course_admin:"أدمن كورس", leader:"قائد مجموعة", university_admin:"أدمن جامعة", tech_week_admin:"أدمن الأسبوع التقني"}[r]||r; }
 
 function leaderNavHtml(counts={}, opts={}){
   const items = [

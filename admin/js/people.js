@@ -121,7 +121,7 @@ async function openStudentDrawer(p){
       <div class="metaWithAvatar">${CodeUp.avatarHtml(p.full_name, null, 44)}
         <div class="metaTextCol"><b style="font-size:15px">${CodeUp.escapeHtml(p.full_name||"—")}</b><span class="small">${CodeUp.escapeHtml(p.email||"")}</span></div>
       </div>
-      <button class="iconBtn" id="drawerClose" aria-label="إغلاق">✕</button>
+      <button class="iconBtn" id="drawerClose" aria-label="إغلاق">${Icon("x")}</button>
     </div>
     <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
       ${p.is_super_admin?'<span class="pill approved">سوبر أدمن</span>':""}

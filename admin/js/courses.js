@@ -234,7 +234,7 @@ Admin.sections.settings_hub = {
 
     const groups = [
       { title:"هذا الكورس", items:[
-        hasCourse && {icon:"📘", label:"إعدادات الكورس", desc:"الاسم، الوصف، الرابط، الحالة، وحذف الكورس نهائيًا.", goto:"settings"},
+        hasCourse && {icon:Icon("settings"), label:"إعدادات الكورس", desc:"الاسم، الوصف، الرابط، الحالة، وحذف الكورس نهائيًا.", goto:"settings"},
         hasCourse && {icon:Icon("archive"), label:"الأرشفة والملفات", desc:"مدة الاحتفاظ بملفات التسليمات قبل حذفها من التخزين المؤقت.", goto:"files"},
       ].filter(Boolean) },
       { title:"المنصة (Super Admin)", items: isSuper ? [
