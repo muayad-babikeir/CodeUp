@@ -3,6 +3,56 @@
 const TW_TYPE_LABEL = {workshop:"ورشة", course:"دورة", competition:"مسابقة", talk:"جلسة نقاشية"};
 const TW_STATUS_LABEL = {draft:"مسودة", published:"منشورة", cancelled:"ملغاة"};
 
+// إعدادات عامة للفعالية نفسها (مو إعدادات صفحة) — التعريف العام، التفعيل،
+// وتواريخ الأسبوع. صف واحد ثابت بجدول tech_week_settings.
+Admin.sections.tech_week_settings = {
+  label: "إعدادات الأسبوع التقني",
+  async render(body){
+    body.innerHTML = `<div class="card">${Array(3).fill(`<div class="skeleton skeleton-line w60" style="height:30px;margin-bottom:12px"></div>`).join("")}</div>`;
+    const { data: settings, error } = await db.from("tech_week_settings").select("*").eq("id", true).single();
+    if(error){ body.innerHTML = `<div class="alertBox error"><span>تعذّر تحميل الإعدادات.</span><button class="btn alertRetry" id="twsRetry">إعادة المحاولة</button></div>`; body.querySelector("#twsRetry").onclick=()=>Admin.go("tech_week_settings"); return; }
+
+    const toLocalInput = (iso)=> iso ? new Date(iso).toISOString().slice(0,16) : "";
+    body.innerHTML = `
+      <div class="card">
+        <label style="display:flex;align-items:center;gap:8px">
+          <input type="checkbox" id="twsEnabled" ${settings.is_enabled?"checked":""}> تفعيل الأسبوع التقني على المنصة
+        </label>
+        <p class="small" style="margin-top:6px">عند الإيقاف يختفي قسم الأسبوع التقني بالكامل عن الطلاب بتطبيق الطالب. صفحات إدارته هنا تبقى متاحة لكم دائمًا بغض النظر عن هذا المفتاح.</p>
+
+        <label style="margin-top:14px">العنوان العام</label>
+        <input id="twsTitle" value="${CodeUp.escapeHtml(settings.title||"")}" placeholder="مثال: الأسبوع التقني 2026">
+
+        <label>الوصف</label>
+        <textarea id="twsDesc" rows="4" placeholder="نبذة تعريفية عن الأسبوع التقني تظهر للطلاب...">${CodeUp.escapeHtml(settings.description||"")}</textarea>
+
+        <label>يبدأ</label><input id="twsStart" type="datetime-local" value="${toLocalInput(settings.starts_at)}">
+        <label>ينتهي</label><input id="twsEnd" type="datetime-local" value="${toLocalInput(settings.ends_at)}">
+
+        <button class="btn dark" id="twsSave" style="margin-top:16px">حفظ الإعدادات</button>
+      </div>
+      <div id="twsMsg" class="emptyState" style="display:none;padding:8px;color:#F2555F"></div>`;
+
+    body.querySelector("#twsSave").onclick = async ()=>{
+      const msgEl = body.querySelector("#twsMsg");
+      msgEl.style.display = "none";
+      const payload = {
+        is_enabled: body.querySelector("#twsEnabled").checked,
+        title: body.querySelector("#twsTitle").value.trim() || null,
+        description: body.querySelector("#twsDesc").value.trim() || null,
+        starts_at: body.querySelector("#twsStart").value ? new Date(body.querySelector("#twsStart").value).toISOString() : null,
+        ends_at: body.querySelector("#twsEnd").value ? new Date(body.querySelector("#twsEnd").value).toISOString() : null,
+        updated_by: Admin.ctx.user.id,
+        updated_at: new Date().toISOString()
+      };
+      try{
+        await db.from("tech_week_settings").update(payload).eq("id", true).throwOnError();
+        CodeUp.toast("تم حفظ الإعدادات", "success");
+      }catch(e){ msgEl.style.display="block"; msgEl.textContent = e.message; }
+    };
+  }
+};
+
 Admin.sections.tech_week_events = {
   label: "فعاليات الأسبوع التقني",
   async render(body){

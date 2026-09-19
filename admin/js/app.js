@@ -221,31 +221,36 @@ const Admin = {
 
   navConfig(){
     if(this.role === "tech_week_admin"){
-      return [{group:"الأسبوع التقني", items:["tech_week_events","tech_week_registrations","tech_week_announcements"]}];
+      return [{group:"الأسبوع التقني", items:["tech_week_settings","tech_week_events","tech_week_registrations","tech_week_announcements"]}];
     }
     if(this.role === "university_admin"){
       const cfg = [{group:"الجامعة", items:["university"]}];
-      if(this.isTechWeekAdmin) cfg.push({group:"الأسبوع التقني", items:["tech_week_events","tech_week_registrations","tech_week_announcements"]});
+      if(this.isTechWeekAdmin) cfg.push({group:"الأسبوع التقني", items:["tech_week_settings","tech_week_events","tech_week_registrations","tech_week_announcements"]});
       return cfg;
     }
     if(this.currentCourseId === HOME_SENTINEL){
       const cfg = [{group:"الإعدادات العامة", items:["settings_hub","home_announcements","home_posts","message_settings","universities","university"]}];
-      if(this.isTechWeekAdmin) cfg.push({group:"الأسبوع التقني", items:["tech_week_events","tech_week_registrations","tech_week_announcements","tech_week_team"]});
+      if(this.isTechWeekAdmin) cfg.push({group:"الأسبوع التقني", items:["tech_week_settings","tech_week_events","tech_week_registrations","tech_week_announcements","tech_week_team"]});
       return cfg;
     }
     if(this.role === "super"){
-      return [
+      const cfg = [
         {group:"عام", items:["dashboard"]},
         {group:"المنصة", items:["courses","users","course_admins"]},
         {group:"الكورس الحالي", items:["content","squads","leaders","join_requests","leader_applications","assignments","submissions","timeline","announcements","progress"]},
-        {group:"النظام", items:["files","moderation","audit_log","settings","settings_hub"]}
+        {group:"النظام", items:["files","settings_hub","moderation","audit_log"]}
       ];
+      // باگ سابق: هذا التحقق كان غايبًا هنا فقط (موجود بفرع course_admin تحت)،
+      // فكان قسم الأسبوع التقني يختفي للسوبر أدمن كل ما يفتح كورس محدد بدل الصفحة الرئيسية.
+      if(this.isTechWeekAdmin) cfg.push({group:"الأسبوع التقني", items:["tech_week_settings","tech_week_events","tech_week_registrations","tech_week_announcements","tech_week_team"]});
+      return cfg;
     }
     if(this.role === "course_admin"){
       const cfg = [
-        {group:"الكورس", items:["dashboard","content","squads","join_requests","leader_applications","assignments","submissions","timeline","announcements","progress","files","settings","settings_hub"]}
+        {group:"الكورس الحالي", items:["dashboard","content","squads","join_requests","leader_applications","assignments","submissions","timeline","announcements","progress"]},
+        {group:"النظام", items:["files","settings_hub"]}
       ];
-      if(this.isTechWeekAdmin) cfg.push({group:"الأسبوع التقني", items:["tech_week_events","tech_week_registrations","tech_week_announcements"]});
+      if(this.isTechWeekAdmin) cfg.push({group:"الأسبوع التقني", items:["tech_week_settings","tech_week_events","tech_week_registrations","tech_week_announcements"]});
       return cfg;
     }
     // leader — القائمة الفعلية للقائد تُبنى عبر leaderNavHtml() وليس هنا
