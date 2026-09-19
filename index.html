@@ -1435,6 +1435,7 @@ const App = {
         <button data-hometab="feed" class="${tab==='feed'?'active':''}"><span class="tabIcon">${Icon('home')}</span>الرئيسية</button>
         <button data-hometab="courses" class="${tab==='courses'?'active':''}"><span class="tabIcon">${Icon('learning')}</span>الكورسات</button>
         <button data-hometab="university" class="${tab==='university'?'active':''}"><span class="tabIcon">${Icon('university')}</span>الجامعة</button>
+        <button data-hometab="tech_week" class="${tab==='tech_week'?'active':''}"><span class="tabIcon">${Icon('zap')}</span>الأسبوع التقني</button>
       </div>`;
     tabSlot.querySelectorAll("[data-hometab]").forEach(b=>{
       b.onclick = ()=>{ this.view = {name:"home", homeTab:b.dataset.hometab}; this.renderHome(b.dataset.hometab); };
@@ -1445,7 +1446,100 @@ const App = {
     const body = document.getElementById("homeBody");
     if(tab === "courses") return this.renderHomeCourses(body);
     if(tab === "university") return this.renderHomeUniversity(body);
+    if(tab === "tech_week") return this.renderHomeTechWeek(body);
     return this.renderHomeFeed(body);
+  },
+
+  // الأسبوع التقني — قسم مستقل تمامًا عن الكورسات والجامعة (تنظيم طلابي، فعاليات
+  // ومسابقات وورش). عدد المسجّلين الفعلي لكل فعالية لا يظهر هنا عمدًا (RLS تمنع
+  // الطالب من رؤية تسجيلات غيره) — يظهر فقط بلوحة تحكم الأدمن.
+  async renderHomeTechWeek(body){
+    body.innerHTML = `<div class="emptyState">جارِ التحميل…</div>`;
+    const [{ data: events, error }, { data: myRegs }, { data: announcements }] = await Promise.all([
+      db.from("tech_week_events").select("*").eq("status","published").order("starts_at",{ascending:true,nullsFirst:false}),
+      db.from("tech_week_registrations").select("event_id,status").eq("profile_id", this.ctx.user.id),
+      db.from("tech_week_announcements").select("*").order("created_at",{ascending:false}).limit(10)
+    ]);
+    if(error){
+      body.innerHTML = `<div class="emptyState">تعذّر تحميل الأسبوع التقني. <button class="btn" id="twRetryBtn">إعادة المحاولة</button></div>`;
+      const retryBtn = document.getElementById("twRetryBtn");
+      if(retryBtn) retryBtn.onclick = ()=> this.renderHomeTechWeek(body);
+      return;
+    }
+
+    const myRegMap = {};
+    (myRegs||[]).forEach(r=>{ myRegMap[r.event_id] = r.status; });
+    const TYPE_LABEL = {workshop:"ورشة", course:"دورة", competition:"مسابقة", talk:"جلسة نقاشية"};
+
+    const eventCard = (e)=>{
+      const myStatus = myRegMap[e.id];
+      const isRegistered = myStatus === "registered" || myStatus === "attended";
+      let actionHtml;
+      if(myStatus === "attended"){
+        actionHtml = `<span class="pill approved">حضرت هذي الفعالية</span>`;
+      }else if(isRegistered){
+        actionHtml = `<button class="btn danger" data-cancelreg="${e.id}">إلغاء التسجيل</button>`;
+      }else if(!e.registration_open){
+        actionHtml = `<span class="pill neutral">التسجيل مغلق حاليًا</span>`;
+      }else{
+        actionHtml = `<button class="btn dark" data-register="${e.id}">سجّل الآن</button>`;
+      }
+      return `
+        <div class="card2" data-eventcard="${e.id}">
+          <div class="row" style="align-items:flex-start">
+            <div style="min-width:0;flex:1">
+              <span class="pill info">${TYPE_LABEL[e.type]||e.type}</span>
+              <h3 style="margin:6px 0 2px">${CodeUp.escapeHtml(e.title)}</h3>
+              ${e.description?`<p class="small" style="margin:0 0 6px">${CodeUp.escapeHtml(e.description)}</p>`:""}
+              <div class="small" style="display:flex;flex-direction:column;gap:2px">
+                ${e.starts_at?`<span><bdi dir="ltr">${CodeUp.formatDate(e.starts_at)}</bdi></span>`:""}
+                ${e.location?`<span>${CodeUp.escapeHtml(e.location)}</span>`:""}
+                ${e.speaker?`<span>${CodeUp.escapeHtml(e.speaker)}</span>`:""}
+              </div>
+            </div>
+          </div>
+          <div style="margin-top:10px">${actionHtml}</div>
+        </div>`;
+    };
+
+    body.innerHTML = `
+      ${(announcements||[]).length ? `
+      <div class="sectionHead"><h3 class="eyebrow">إعلانات</h3></div>
+      ${announcements.map(a=>`
+        <div class="card2">
+          <b>${CodeUp.escapeHtml(a.title)}</b>
+          ${a.content?`<p class="small" style="margin-top:4px">${CodeUp.escapeHtml(a.content)}</p>`:""}
+          <div class="small" style="margin-top:4px;color:var(--ink40)">${CodeUp.timeAgo(a.created_at)}</div>
+        </div>`).join("")}
+      ` : ""}
+
+      <div class="sectionHead"><h3 class="eyebrow">الفعاليات</h3></div>
+      ${(events||[]).length ? events.map(eventCard).join("") : `<div class="emptyState">لا توجد فعاليات منشورة حاليًا — تابعونا قريبًا.</div>`}
+    `;
+
+    body.querySelectorAll("[data-register]").forEach(btn=>{
+      btn.onclick = async ()=>{
+        btn.disabled = true;
+        try{
+          await db.from("tech_week_registrations").upsert({
+            event_id: btn.dataset.register, profile_id: this.ctx.user.id, status: "registered"
+          }, {onConflict: "event_id,profile_id"}).throwOnError();
+          CodeUp.toast("تم تسجيلك بالفعالية", "success");
+          this.renderHomeTechWeek(body);
+        }catch(e){ CodeUp.toast(e.message || "تعذّر التسجيل — قد تكون السعة اكتملت أو التسجيل مغلق", "error"); btn.disabled = false; }
+      };
+    });
+    body.querySelectorAll("[data-cancelreg]").forEach(btn=>{
+      btn.onclick = async ()=>{
+        if(!confirm("إلغاء تسجيلك بهذي الفعالية؟")) return;
+        btn.disabled = true;
+        try{
+          await db.from("tech_week_registrations").update({status:"cancelled"}).eq("event_id", btn.dataset.cancelreg).eq("profile_id", this.ctx.user.id).throwOnError();
+          CodeUp.toast("تم إلغاء التسجيل", "success");
+          this.renderHomeTechWeek(body);
+        }catch(e){ CodeUp.toast(e.message,"error"); btn.disabled = false; }
+      };
+    });
   },
 
   async renderHomeCourses(body){
