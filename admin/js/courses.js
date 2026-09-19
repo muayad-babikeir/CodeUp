@@ -223,62 +223,6 @@ Admin.sections.settings = {
   }
 };
 
-// مركز الإعدادات — صفحة تجميع فقط، بدون أي منطق أو بيانات جديدة.
-// تربط بالصفحات الحقيقية الموجودة أصلًا (لا تُنشئ أي إعداد وهمي).
-// كل بطاقة تظهر فقط لو القسم المرتبط بها موجود فعلًا بالمشروع ومتاح للدور الحالي.
-Admin.sections.settings_hub = {
-  label: "الإعدادات",
-  async render(body){
-    const isSuper = Admin.role === "super";
-    const hasCourse = Admin.currentCourseId && Admin.currentCourseId !== HOME_SENTINEL;
-
-    const groups = [
-      { title:"هذا الكورس", items:[
-        hasCourse && {icon:Icon("settings"), label:"إعدادات الكورس", desc:"الاسم، الوصف، الرابط، الحالة، وحذف الكورس نهائيًا.", goto:"settings"},
-        hasCourse && {icon:Icon("archive"), label:"الأرشفة والملفات", desc:"مدة الاحتفاظ بملفات التسليمات قبل حذفها من التخزين المؤقت.", goto:"files"},
-      ].filter(Boolean) },
-      { title:"المنصة (Super Admin)", items: isSuper ? [
-        {icon:Icon("announcement"), label:"الإعلانات العامة", desc:"إعلانات تظهر لكل مستخدمي CodeUp بالصفحة الرئيسية.", goto:"home_announcements", home:true},
-        {icon:Icon("assignments"), label:"الإشراف على منشورات المستجدات", desc:"حذف أي منشور حر غير مناسب من الصفحة الرئيسية.", goto:"home_posts", home:true},
-        {icon:Icon("comment"), label:"مدة الاحتفاظ بالرسائل الخاصة", desc:"عدد الأيام قبل حذف الرسائل الخاصة تلقائيًا.", goto:"message_settings", home:true},
-        {icon:Icon("university"), label:"قسم الجامعة", desc:"الفصول الدراسية والمواد لكل جامعة مضافة.", goto:"university", home:true},
-        {icon:Icon("layers"), label:"الجامعات وأدمنها", desc:"إضافة جامعة جديدة أو تعيين أدمن لإدارة محتوى جامعة معيّنة.", goto:"universities", home:true},
-      ] : [] }
-    ].filter(g=>g.items.length);
-
-    if(!groups.length){
-      body.innerHTML = `<div class="emptyStatePro"><h4>لا توجد إعدادات متاحة هنا</h4><p>اختر كورسًا من القائمة الجانبية لعرض إعداداته.</p></div>`;
-      return;
-    }
-
-    body.innerHTML = groups.map(g=>`
-      <div class="card" style="margin-bottom:14px">
-        <b>${CodeUp.escapeHtml(g.title)}</b>
-        <div style="margin-top:10px;display:flex;flex-direction:column;gap:2px">
-          ${g.items.map(it=>`
-            <button class="quickAction" style="width:100%;justify-content:flex-start" data-hubgo="${it.goto}" data-home="${!!it.home}">
-              <span class="qaIcon">${it.icon}</span>
-              <span style="display:flex;flex-direction:column;align-items:flex-start;text-align:start">
-                <b style="font-size:13.5px">${CodeUp.escapeHtml(it.label)}</b>
-                <span class="small">${CodeUp.escapeHtml(it.desc)}</span>
-              </span>
-            </button>`).join("")}
-        </div>
-      </div>`).join("");
-
-    body.querySelectorAll("[data-hubgo]").forEach(b=>{
-      b.onclick = async ()=>{
-        // بعض الصفحات (الإعلانات العامة، الجامعة...) لا تُقرأ إلا بسياق "الصفحة الرئيسية" وليس داخل كورس محدد
-        if(b.dataset.home === "true" && Admin.currentCourseId !== HOME_SENTINEL){
-          Admin.currentCourseId = HOME_SENTINEL;
-          await Admin.renderNav();
-        }
-        Admin.go(b.dataset.hubgo);
-      };
-    });
-  }
-};
-
 Admin.sections.progress = {
   label: "التقدم",
   async render(body){

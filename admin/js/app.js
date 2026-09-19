@@ -1,10 +1,11 @@
 // admin/js/app.js
-const HOME_SENTINEL = "__home__";
 const LEADER_SECTION_LABELS = {
   mysquad:"مجموعتي", members:"الأعضاء", ljoin:"طلبات الانضمام", lassignments:"الواجبات",
   lcontent:"المحتوى التعليمي", lsubmissions:"التسليمات", ltimeline:"المستجدات",
   lactivity:"النشاط", lprogress:"التقدم"
 };
+// الأقسام اللي معناها يعتمد على كورس محدد (تُستخدم لعرض اسم الكورس بمسار التنقّل بس لما تكون الصفحة فعلًا تابعة لكورس)
+const COURSE_SCOPED_SECTIONS = new Set(["content","squads","leaders","join_requests","leader_applications","assignments","submissions","timeline","announcements","progress","files","settings"]);
 const Admin = {
   ctx: null,          // من CodeUp.loadMyContext()
   role: null,         // 'super' | 'course_admin' | 'leader' | 'university_admin'
@@ -203,7 +204,7 @@ const Admin = {
       return counts;
     }
     const cid = this.currentCourseId;
-    if(!cid || cid === HOME_SENTINEL) return counts;
+    if(!cid) return counts;
     const [{count:jr},{count:la}] = await Promise.all([
       db.from("squad_join_requests").select("id, squads!inner(course_id)",{count:"exact",head:true}).eq("squads.course_id", cid).eq("status","pending"),
       db.from("leader_applications").select("id",{count:"exact",head:true}).eq("course_id", cid).eq("status","pending")
@@ -229,27 +230,25 @@ const Admin = {
       if(this.isTechWeekAdmin) cfg.push({group:"الأسبوع التقني", items:["tech_week_settings","tech_week_events","tech_week_registrations","tech_week_announcements"]});
       return cfg;
     }
-    if(this.currentCourseId === HOME_SENTINEL){
-      const cfg = [{group:"الإعدادات العامة", items:["settings_hub","home_announcements","home_posts","message_settings","universities","university"]}];
-      if(this.isTechWeekAdmin) cfg.push({group:"الأسبوع التقني", items:["tech_week_settings","tech_week_events","tech_week_registrations","tech_week_announcements","tech_week_team"]});
-      return cfg;
-    }
+    const courseOpItems = ["content","squads","join_requests","leader_applications","assignments","submissions","timeline","announcements","progress","files","settings"];
     if(this.role === "super"){
-      const cfg = [
-        {group:"عام", items:["dashboard"]},
-        {group:"المنصة", items:["courses","users","course_admins"]},
-        {group:"الكورس الحالي", items:["content","squads","leaders","join_requests","leader_applications","assignments","submissions","timeline","announcements","progress"]},
-        {group:"النظام", items:["files","settings_hub","moderation","audit_log"]}
+      const courseItems = ["courses","course_admins"];
+      if(this.currentCourseId){
+        courseItems.push("content","squads","leaders","join_requests","leader_applications","assignments","submissions","timeline","announcements","progress","files","settings");
+      }
+      return [
+        {group:"لوحة التحكم", items:["dashboard"]},
+        {group:"الكورسات", items:courseItems, coursePicker:true},
+        {group:"الجامعة", items:["universities","university"]},
+        {group:"الأسبوع التقني", items:["tech_week_settings","tech_week_events","tech_week_registrations","tech_week_announcements","tech_week_team"]},
+        {group:"الإعدادات", items:["users","home_announcements","home_posts","message_settings","moderation","audit_log"]}
       ];
-      // باگ سابق: هذا التحقق كان غايبًا هنا فقط (موجود بفرع course_admin تحت)،
-      // فكان قسم الأسبوع التقني يختفي للسوبر أدمن كل ما يفتح كورس محدد بدل الصفحة الرئيسية.
-      if(this.isTechWeekAdmin) cfg.push({group:"الأسبوع التقني", items:["tech_week_settings","tech_week_events","tech_week_registrations","tech_week_announcements","tech_week_team"]});
-      return cfg;
     }
     if(this.role === "course_admin"){
+      const courseItems = this.currentCourseId ? courseOpItems.slice() : [];
       const cfg = [
-        {group:"الكورس الحالي", items:["dashboard","content","squads","join_requests","leader_applications","assignments","submissions","timeline","announcements","progress"]},
-        {group:"النظام", items:["files","settings_hub"]}
+        {group:"لوحة التحكم", items:["dashboard"]},
+        {group:"الكورسات", items:courseItems, coursePicker:(this.courses||[]).length>1}
       ];
       if(this.isTechWeekAdmin) cfg.push({group:"الأسبوع التقني", items:["tech_week_settings","tech_week_events","tech_week_registrations","tech_week_announcements"]});
       return cfg;
@@ -275,13 +274,6 @@ const Admin = {
       this.openNavGroup = activeGroup ? activeGroup.group : (cfg[0] && cfg[0].group);
     }
     let html = "";
-    if(this.role === "super" || (this.courses && this.courses.length > 1)){
-      html += `<div class="navGroup"><div class="navLabel">الكورس</div>
-        <select id="courseSwitcher" style="width:100%;padding:8px;border-radius:8px;border:1px solid #333;background:#1f2740;color:#fff">
-          ${this.role==="super"?`<option value="${HOME_SENTINEL}" ${this.currentCourseId===HOME_SENTINEL?"selected":""}>الصفحة الرئيسية</option>`:""}
-          ${this.courses.map(c=>`<option value="${c.id}" ${c.id===this.currentCourseId?"selected":""}>${CodeUp.escapeHtml(c.name)}</option>`).join("")}
-        </select></div>`;
-    }
     cfg.forEach(group=>{
       const isOpen = group.group === this.openNavGroup;
       html += `<div class="navGroup ${isOpen?"":"collapsed"}">
@@ -289,6 +281,12 @@ const Admin = {
           <span>${group.group}</span><span class="navChevron">${Icon("chevron_down")}</span>
         </div>
         <div class="navGroupBody">`;
+      if(group.coursePicker){
+        html += `<select id="coursePickerSelect" style="width:100%;padding:8px;border-radius:8px;border:1px solid #333;background:#1f2740;color:#fff;margin-bottom:8px">
+          <option value="">— اختر كورسًا —</option>
+          ${(this.courses||[]).map(c=>`<option value="${c.id}" ${c.id===this.currentCourseId?"selected":""}>${CodeUp.escapeHtml(c.name)}</option>`).join("")}
+        </select>`;
+      }
       group.items.forEach(key=>{
         const s = this.sections[key];
         if(!s) return;
@@ -298,13 +296,16 @@ const Admin = {
       html += `</div></div>`;
     });
     root.innerHTML = html;
-    const switcher = document.getElementById("courseSwitcher");
-    if(switcher) switcher.onchange = async ()=>{
-      this.currentCourseId = switcher.value;
-      this.openNavGroup = null; // يتحدد تلقائيًا من جديد حسب أول قسم بالكورس المختار
+    const picker = document.getElementById("coursePickerSelect");
+    if(picker) picker.onchange = async ()=>{
+      this.currentCourseId = picker.value || null;
+      this.openNavGroup = "الكورسات";
       await this.renderNav();
-      const firstSection = this.navConfig().flatMap(g=>g.items).find(k=>this.sections[k]);
-      this.go(firstSection || this.section);
+      const courseGroup = this.navConfig().find(g=>g.coursePicker);
+      const target = (courseGroup && courseGroup.items.includes(this.section))
+        ? this.section
+        : ((courseGroup && courseGroup.items.find(k=>this.sections[k])) || "courses");
+      this.go(target);
     };
     root.querySelectorAll("[data-grouptoggle]").forEach(el=>{
       el.onclick = ()=>{
@@ -352,7 +353,7 @@ const Admin = {
     const s = this.sections[sectionKey];
     if(!s){ body.innerHTML = `<div class="emptyState">القسم غير متاح.</div>`; return; }
     document.getElementById("pageTitle").textContent = s.label;
-    const courseName = (this.currentCourseId && this.currentCourseId !== HOME_SENTINEL)
+    const courseName = (COURSE_SCOPED_SECTIONS.has(sectionKey) && this.currentCourseId)
       ? (this.courses||[]).find(c=>c.id===this.currentCourseId)?.name
       : null;
     this.setBreadcrumb([courseName || "لوحة الإدارة", s.label]);

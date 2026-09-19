@@ -23,7 +23,7 @@ Admin.sections.dashboard = {
 // ============================================================
 async function renderSuperDashboard(body){
   const cid = Admin.currentCourseId;
-  const hasCourse = cid && cid !== HOME_SENTINEL;
+  const hasCourse = !!cid;
   const now = Date.now();
   const weekAgo = new Date(now - 7*86400000).toISOString();
   const prevWeekAgo = new Date(now - 14*86400000).toISOString();
@@ -352,7 +352,7 @@ function renderDailyBarChart(rows, dateField){
 // Wiring — كل الأحداث تُربط هنا بعد الحقن بالـ DOM، دفعة واحدة، بنفس أسلوب باقي صفحات الأدمن
 // ============================================================
 function wireDashboard(body, {cid}){
-  const hasCourse = cid && cid !== HOME_SENTINEL;
+  const hasCourse = !!cid;
 
   // أي عنصر (بطاقة مقياس أو عنصر Needs Attention) عليه data-goto ينتقل للقسم مباشرة
   body.querySelectorAll("[data-goto]").forEach(el=>{
