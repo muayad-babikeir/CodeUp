@@ -212,7 +212,7 @@ async function openRegistrationsDrawer(event){
   const memberLine = (r)=>`
         <div class="attentionItem">
           <div class="aiBody">${CodeUp.escapeHtml(r.profiles?.full_name||r.profiles?.email||"")}
-            <div class="aiMeta">${r.status==='registered'?'مسجّل':r.status==='attended'?'حضر':'ألغى التسجيل'}</div>
+            <div class="aiMeta">${r.status==='registered'?'مسجّل':r.status==='attended'?'حضر':r.status==='pending'?'قيد المراجعة (بانتظار موافقة القائد)':'ألغى التسجيل'}</div>
           </div>
           ${markAttendedBtn(r)}
         </div>`;

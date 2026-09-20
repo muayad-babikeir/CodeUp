@@ -1473,31 +1473,67 @@ const App = {
     const TYPE_LABEL = {workshop:"ورشة", course:"دورة", competition:"مسابقة", talk:"جلسة نقاشية"};
     const teamsByEvent = {};
     (allTeams||[]).forEach(t=>{ (teamsByEvent[t.event_id] ||= []).push(t); });
+    const myId = this.ctx.user.id;
 
-    const teamCardHtml = (e, myTeamId)=>{
+    const teamCardHtml = (e, myTeamId, myStatus)=>{
       const teams = (teamsByEvent[e.id]||[]);
       if(myTeamId){
         const myTeam = teams.find(t=>t.id===myTeamId);
-        const members = (myTeam?.tech_week_registrations||[]).filter(r=>r.status!=='cancelled');
+        const isLeader = myTeam?.leader_id === myId;
+        const members = (myTeam?.tech_week_registrations||[]).filter(r=>r.status==='registered'||r.status==='attended');
+        const pending = isLeader ? (myTeam?.tech_week_registrations||[]).filter(r=>r.status==='pending') : [];
+
+        if(myStatus === 'pending'){
+          return `
+            <div style="margin-top:10px;padding:10px;border:1px solid var(--line);border-radius:10px">
+              <b>${CodeUp.escapeHtml(myTeam?.name||"")}</b>
+              <p class="small" style="margin-top:4px">طلب انضمامك قيد المراجعة من قائد الفريق.</p>
+              <button class="btn danger" data-cancelreg="${e.id}" style="margin-top:6px">إلغاء الطلب</button>
+            </div>`;
+        }
+
         return `
           <div style="margin-top:10px;padding:10px;border:1px solid var(--line);border-radius:10px">
-            <b>فريقك: ${CodeUp.escapeHtml(myTeam?.name||"")}</b>
-            <div class="small" style="margin-top:4px">${members.map(m=>CodeUp.escapeHtml(m.profiles?.full_name||"")).join("، ")}</div>
-            <button class="btn danger" data-cancelreg="${e.id}" style="margin-top:8px">مغادرة الفريق</button>
+            <b>فريقك: ${CodeUp.escapeHtml(myTeam?.name||"")}</b> ${isLeader?`<span class="pill info">أنت القائد</span>`:""}
+            <div class="small" style="margin-top:4px">${members.map(m=>CodeUp.escapeHtml(m.profiles?.full_name||"")+(m.profile_id===myTeam?.leader_id?" (القائد)":"")).join("، ")}</div>
+
+            ${isLeader && pending.length ? `
+              <div style="margin-top:8px">
+                <p class="small" style="margin:0 0 4px">طلبات انضمام بانتظار موافقتك:</p>
+                ${pending.map(p=>`
+                  <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px">
+                    <span class="small">${CodeUp.escapeHtml(p.profiles?.full_name||"")}</span>
+                    <span style="display:flex;gap:6px">
+                      <button class="btn" data-approvejoin="${p.id}">قبول</button>
+                      <button class="btn danger" data-rejectjoin="${p.id}">رفض</button>
+                    </span>
+                  </div>`).join("")}
+              </div>` : ""}
+
+            ${isLeader && members.length > 1 ? `
+              <div style="margin-top:10px">
+                <label class="small">تسليم القيادة لعضو آخر</label>
+                <select data-newleaderselect="${myTeam.id}" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink);margin-top:4px">
+                  ${members.filter(m=>m.profile_id!==myId).map(m=>`<option value="${m.profile_id}">${CodeUp.escapeHtml(m.profiles?.full_name||"")}</option>`).join("")}
+                </select>
+                <button class="btn" data-transferleader="${myTeam.id}" style="margin-top:6px">تسليم القيادة</button>
+              </div>` : ""}
+
+            <button class="btn danger" data-cancelreg="${e.id}" style="margin-top:10px">مغادرة الفريق</button>
           </div>`;
       }
       const joinable = teams.filter(t=>{
-        const active = (t.tech_week_registrations||[]).filter(r=>r.status!=='cancelled').length;
+        const active = (t.tech_week_registrations||[]).filter(r=>r.status==='registered'||r.status==='attended').length;
         return !e.team_max_size || active < e.team_max_size;
       });
       return `
         <div style="margin-top:10px">
           <button class="btn dark" data-newteam="${e.id}">+ أنشئ فريق جديد</button>
           ${joinable.length ? `<div style="margin-top:8px">${joinable.map(t=>{
-            const active = (t.tech_week_registrations||[]).filter(r=>r.status!=='cancelled').length;
+            const active = (t.tech_week_registrations||[]).filter(r=>r.status==='registered'||r.status==='attended').length;
             return `<div class="card2" style="margin-top:6px;display:flex;justify-content:space-between;align-items:center">
-              <span>${CodeUp.escapeHtml(t.name)} <span class="small">(${active}${e.team_max_size?`/${e.team_max_size}`:""})</span></span>
-              <button class="btn" data-jointeam="${t.id}" data-jointeamevent="${e.id}">انضم</button>
+              <span>${CodeUp.escapeHtml(t.name)} <span class="small">(${active}${e.team_max_size?`/${e.team_max_size}`:""})${t.join_policy==='approval'?" — بموافقة القائد":""}</span></span>
+              <button class="btn" data-jointeam="${t.id}" data-jointeamevent="${e.id}" data-jointeampolicy="${t.join_policy}">${t.join_policy==='approval'?'اطلب الانضمام':'انضم'}</button>
             </div>`;
           }).join("")}</div>` : `<p class="small" style="margin-top:6px">ما فيه فرق متاحة بعد — كون أول فريق!</p>`}
         </div>`;
@@ -1511,10 +1547,10 @@ const App = {
       if(e.registration_mode === "team"){
         if(myStatus === "attended"){
           actionHtml = `<span class="pill approved">حضر فريقك هذي الفعالية</span>`;
-        }else if(!e.registration_open){
+        }else if(!e.registration_open && !myReg?.team_id){
           actionHtml = `<span class="pill neutral">التسجيل مغلق حاليًا</span>`;
         }else{
-          actionHtml = teamCardHtml(e, isRegistered ? myReg.team_id : null);
+          actionHtml = teamCardHtml(e, myReg?.team_id || null, myStatus);
         }
       }else if(myStatus === "attended"){
         actionHtml = `<span class="pill approved">حضرت هذي الفعالية</span>`;
@@ -1586,10 +1622,12 @@ const App = {
       btn.onclick = async ()=>{
         const name = prompt("اسم الفريق:");
         if(!name || !name.trim()) return;
+        const wantsApproval = confirm("هل تحب توافق بنفسك على كل عضو ينضم لفريقك؟\n\nموافق = ما ينضم أحد إلا بموافقتك\nإلغاء = أي أحد يقدر ينضم مباشرة");
         btn.disabled = true;
         try{
           const { data: team, error: teamErr } = await db.from("tech_week_teams").insert({
-            event_id: btn.dataset.newteam, name: name.trim(), created_by: this.ctx.user.id
+            event_id: btn.dataset.newteam, name: name.trim(), created_by: this.ctx.user.id,
+            leader_id: this.ctx.user.id, join_policy: wantsApproval ? "approval" : "open"
           }).select().single();
           if(teamErr) throw teamErr;
           await db.from("tech_week_registrations").insert({
@@ -1597,19 +1635,59 @@ const App = {
           }).throwOnError();
           CodeUp.toast("تم إنشاء الفريق والانضمام له", "success");
           this.renderHomeTechWeek(body);
-        }catch(e){ CodeUp.toast(e.message || "تعذّر إنشاء الفريق", "error"); btn.disabled = false; }
+        }catch(e){
+          const msg = e.code === "23505" ? "فيه فريق بنفس الاسم بهذي الفعالية بالفعل — اختر اسمًا آخر." : (e.message || "تعذّر إنشاء الفريق");
+          CodeUp.toast(msg, "error"); btn.disabled = false;
+        }
       };
     });
     body.querySelectorAll("[data-jointeam]").forEach(btn=>{
       btn.onclick = async ()=>{
         btn.disabled = true;
+        const isApproval = btn.dataset.jointeampolicy === "approval";
         try{
           await db.from("tech_week_registrations").insert({
-            event_id: btn.dataset.jointeamevent, profile_id: this.ctx.user.id, status: "registered", team_id: btn.dataset.jointeam
+            event_id: btn.dataset.jointeamevent, profile_id: this.ctx.user.id,
+            status: isApproval ? "pending" : "registered", team_id: btn.dataset.jointeam
           }).throwOnError();
-          CodeUp.toast("انضممت للفريق", "success");
+          CodeUp.toast(isApproval ? "تم إرسال طلب الانضمام، بانتظار موافقة القائد" : "انضممت للفريق", "success");
           this.renderHomeTechWeek(body);
         }catch(e){ CodeUp.toast(e.message || "تعذّر الانضمام — قد يكون الفريق اكتمل", "error"); btn.disabled = false; }
+      };
+    });
+    body.querySelectorAll("[data-approvejoin]").forEach(btn=>{
+      btn.onclick = async ()=>{
+        btn.disabled = true;
+        try{
+          await db.from("tech_week_registrations").update({status:"registered"}).eq("id", btn.dataset.approvejoin).throwOnError();
+          CodeUp.toast("تم قبول العضو بالفريق", "success");
+          this.renderHomeTechWeek(body);
+        }catch(e){ CodeUp.toast(e.message || "تعذّر القبول — قد يكون الفريق اكتمل", "error"); btn.disabled = false; }
+      };
+    });
+    body.querySelectorAll("[data-rejectjoin]").forEach(btn=>{
+      btn.onclick = async ()=>{
+        btn.disabled = true;
+        try{
+          await db.from("tech_week_registrations").update({status:"cancelled"}).eq("id", btn.dataset.rejectjoin).throwOnError();
+          CodeUp.toast("تم رفض الطلب", "success");
+          this.renderHomeTechWeek(body);
+        }catch(e){ CodeUp.toast(e.message,"error"); btn.disabled = false; }
+      };
+    });
+    body.querySelectorAll("[data-transferleader]").forEach(btn=>{
+      btn.onclick = async ()=>{
+        const teamId = btn.dataset.transferleader;
+        const select = body.querySelector(`[data-newleaderselect="${teamId}"]`);
+        const newLeaderId = select?.value;
+        if(!newLeaderId) return;
+        if(!confirm("تسليم قيادة الفريق لهذا العضو؟ ما راح تقدر ترجعها إلا لو سلّمك إياها هو مرة ثانية.")) return;
+        btn.disabled = true;
+        try{
+          await db.from("tech_week_teams").update({leader_id: newLeaderId}).eq("id", teamId).throwOnError();
+          CodeUp.toast("تم تسليم القيادة", "success");
+          this.renderHomeTechWeek(body);
+        }catch(e){ CodeUp.toast(e.message || "تعذّر تسليم القيادة", "error"); btn.disabled = false; }
       };
     });
   },
