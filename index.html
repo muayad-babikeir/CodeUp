@@ -836,6 +836,12 @@ const App = {
 
     const onScroll = ()=>{
       if(window.innerWidth > 720){ setHidden(false); lastY = window.scrollY; return; } // الديسكتوب غير معني بهذا السلوك إطلاقًا
+      // محتوى الصفحة قصير (بالكاد أطول من الشاشة، مثل تبويب الأسبوع التقني أحيانًا) —
+      // نطاق التمرير الفعلي صغير جدًا، فأي ارتداد (bounce) بسيط بحواف الصفحة كان يخلي
+      // الفرق (diff) يتذبذب حوالين DEAD_ZONE ذهابًا وإيابًا، ويسبب اهتزاز الهيدر إخفاء/إظهار
+      // متكرر. الحل: نتجاهل السلوك كليًا لما ما يكون فيه مساحة تمرير حقيقية أصلًا.
+      const scrollable = document.documentElement.scrollHeight - window.innerHeight;
+      if(scrollable < 150){ setHidden(false); lastY = window.scrollY; return; }
       const y = Math.max(0, window.scrollY);
       const diff = y - lastY;
       if(y <= TOP_ZONE){ setHidden(false); lastY = y; return; }
@@ -1616,6 +1622,7 @@ const App = {
             ${(!isLeader || members.length===1) ? `
               <div class="twActionsRow"><button class="btn danger" data-cancelreg="${e.id}" data-isleader="${isLeader}">مغادرة الفريق</button></div>
             ` : `<p class="small" style="margin-top:12px">لازم تسلّم القيادة لعضو آخر أولًا قبل ما تقدر تغادر الفريق.</p>`}
+            ${isLeader ? `<div class="twActionsRow"><button class="btn danger" data-deleteteam="${myTeam.id}" data-deleteteamname="${CodeUp.escapeHtml(myTeam?.name||"")}">حذف الفريق نهائيًا</button></div>` : ""}
           </div>`;
       }
       const joinable = teams.filter(t=>{
@@ -1642,14 +1649,19 @@ const App = {
       const myReg = myRegMap[e.id];
       const myStatus = myReg?.status;
       const isRegistered = myStatus === "registered" || myStatus === "attended";
+      // بعد "مغادرة الفريق" أو "إلغاء الطلب" يصير status = "cancelled"، لكن team_id يبقى
+      // بالصف كما هو (ما نصفّره عمدًا للحفاظ على السجل التاريخي) — فلازم هنا تحديدًا
+      // نتجاهله ونعامل الشخص كأنه مو بفريق، وإلا يظل عالقًا يشوف واجهة "إدارة الفريق"
+      // لفريق غادره فعلًا، بلا أي أعضاء فعّالين تظهر له (بما فيهم هو نفسه).
+      const activeTeamId = (myStatus === "registered" || myStatus === "attended" || myStatus === "pending") ? (myReg?.team_id || null) : null;
       let actionHtml;
       if(e.registration_mode === "team"){
         if(myStatus === "attended"){
           actionHtml = `<span class="pill approved">حضر فريقك هذي الفعالية</span>`;
-        }else if(!e.registration_open && !myReg?.team_id){
+        }else if(!e.registration_open && !activeTeamId){
           actionHtml = `<span class="pill neutral">التسجيل مغلق حاليًا</span>`;
         }else{
-          actionHtml = teamCardHtml(e, myReg?.team_id || null, myStatus);
+          actionHtml = teamCardHtml(e, activeTeamId, myStatus);
         }
       }else if(myStatus === "attended"){
         actionHtml = `<span class="pill approved">حضرت هذي الفعالية</span>`;
@@ -1718,7 +1730,11 @@ const App = {
         if(!ok) return;
         btn.disabled = true;
         try{
-          await db.from("tech_week_registrations").update({status:"cancelled"}).eq("event_id", btn.dataset.cancelreg).eq("profile_id", this.ctx.user.id).throwOnError();
+          const { data, error } = await db.from("tech_week_registrations").update({status:"cancelled"})
+            .eq("event_id", btn.dataset.cancelreg).eq("profile_id", this.ctx.user.id)
+            .neq("status","cancelled").select();
+          if(error) throw error;
+          if(!data || !data.length){ CodeUp.toast("يبدو إنك خارج الفريق أصلًا — جارِ تحديث الصفحة", "error"); this.renderHomeTechWeek(body); return; }
           CodeUp.toast("تم إلغاء التسجيل", "success");
           this.renderHomeTechWeek(body);
         }catch(e){ CodeUp.toast(e.message,"error"); btn.disabled = false; }
@@ -1803,7 +1819,9 @@ const App = {
       btn.onclick = async ()=>{
         btn.disabled = true;
         try{
-          await db.from("tech_week_registrations").update({status:"registered"}).eq("id", btn.dataset.approvejoin).throwOnError();
+          const { data, error } = await db.from("tech_week_registrations").update({status:"registered"}).eq("id", btn.dataset.approvejoin).select();
+          if(error) throw error;
+          if(!data || !data.length){ CodeUp.toast("تعذّر القبول — قد يكون الفريق اكتمل أو الطلب انسحب", "error"); this.renderHomeTechWeek(body); return; }
           CodeUp.toast("تم قبول العضو بالفريق", "success");
           this.renderHomeTechWeek(body);
         }catch(e){ CodeUp.toast(e.message || "تعذّر القبول — قد يكون الفريق اكتمل", "error"); btn.disabled = false; }
@@ -1819,7 +1837,9 @@ const App = {
         if(!ok) return;
         btn.disabled = true;
         try{
-          await db.from("tech_week_registrations").update({status:"cancelled"}).eq("id", btn.dataset.rejectjoin).throwOnError();
+          const { data, error } = await db.from("tech_week_registrations").update({status:"cancelled"}).eq("id", btn.dataset.rejectjoin).select();
+          if(error) throw error;
+          if(!data || !data.length){ CodeUp.toast("الطلب مو موجود بعد الحين — جارِ تحديث الصفحة", "error"); this.renderHomeTechWeek(body); return; }
           CodeUp.toast("تم رفض الطلب", "success");
           this.renderHomeTechWeek(body);
         }catch(e){ CodeUp.toast(e.message,"error"); btn.disabled = false; }
@@ -1835,7 +1855,9 @@ const App = {
         if(!ok) return;
         btn.disabled = true;
         try{
-          await db.from("tech_week_registrations").update({status:"cancelled"}).eq("id", btn.dataset.removemember).throwOnError();
+          const { data, error } = await db.from("tech_week_registrations").update({status:"cancelled"}).eq("id", btn.dataset.removemember).select();
+          if(error) throw error;
+          if(!data || !data.length){ CodeUp.toast("تعذّر إزالة العضو — جرّب تحدّث الصفحة", "error"); this.renderHomeTechWeek(body); return; }
           CodeUp.toast("تمت إزالة العضو من الفريق", "success");
           this.renderHomeTechWeek(body);
         }catch(e){ CodeUp.toast(e.message || "تعذّر إزالة العضو", "error"); btn.disabled = false; }
@@ -1856,10 +1878,30 @@ const App = {
         if(!ok) return;
         btn.disabled = true;
         try{
-          await db.from("tech_week_teams").update({leader_id: newLeaderId}).eq("id", teamId).throwOnError();
+          const { data, error } = await db.from("tech_week_teams").update({leader_id: newLeaderId}).eq("id", teamId).select();
+          if(error) throw error;
+          if(!data || !data.length){ CodeUp.toast("تعذّر تسليم القيادة — جرّب تحدّث الصفحة", "error"); this.renderHomeTechWeek(body); return; }
           CodeUp.toast("تم تسليم القيادة", "success");
           this.renderHomeTechWeek(body);
         }catch(e){ CodeUp.toast(e.message || "تعذّر تسليم القيادة", "error"); btn.disabled = false; }
+      };
+    });
+    body.querySelectorAll("[data-deleteteam]").forEach(btn=>{
+      btn.onclick = async ()=>{
+        const ok = await this.confirmDialog({
+          title: "حذف الفريق نهائيًا",
+          message: `هل أنت متأكد أنك تريد حذف فريق "${btn.dataset.deleteteamname||""}"؟ سيتم إخراج كل الأعضاء منه ولا يمكن التراجع عن هذا الإجراء.`,
+          confirmLabel: "حذف الفريق", danger: true
+        });
+        if(!ok) return;
+        btn.disabled = true;
+        try{
+          const { data, error } = await db.from("tech_week_teams").delete().eq("id", btn.dataset.deleteteam).select();
+          if(error) throw error;
+          if(!data || !data.length){ CodeUp.toast("تعذّر حذف الفريق — جرّب تحدّث الصفحة", "error"); this.renderHomeTechWeek(body); return; }
+          CodeUp.toast("تم حذف الفريق", "success");
+          this.renderHomeTechWeek(body);
+        }catch(e){ CodeUp.toast(e.message || "تعذّر حذف الفريق", "error"); btn.disabled = false; }
       };
     });
   },

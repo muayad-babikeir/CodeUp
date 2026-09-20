@@ -181,3 +181,10 @@ update tech_week_teams set leader_id = created_by where leader_id is null;
 
 -- وصف مختصر اختياري للفريق (يظهر ببطاقة الفريق بواجهة الطالب)
 alter table tech_week_teams add column if not exists description text;
+
+-- القائد الحالي (مو بس منشئ الفريق الأصلي، ممكن يكون تغيّر بتسليم قيادة) يقدر يحذف الفريق نهائيًا
+drop policy if exists "tech_week_teams: حذف" on tech_week_teams;
+create policy "tech_week_teams: حذف" on tech_week_teams
+  for delete using (
+    leader_id = auth.uid() or created_by = auth.uid() or is_tech_week_admin(auth.uid())
+  );
