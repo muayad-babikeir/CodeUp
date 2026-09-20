@@ -1647,6 +1647,7 @@ const App = {
             <div class="twTeamHead"><b>${CodeUp.escapeHtml(t.name)}</b><span class="pill neutral">${active}${e.team_max_size?`/${e.team_max_size}`:""}</span></div>
             ${t.description?`<p class="twTeamDesc">${CodeUp.escapeHtml(t.description)}</p>`:""}
             <div class="twActionsRow">
+              <button class="btn" data-viewteam="${t.id}" data-viewteamevent="${e.id}">التفاصيل والأعضاء</button>
               <button class="btn ${t.join_policy==='approval'?'':'dark'}" data-jointeam="${t.id}" data-jointeamevent="${e.id}" data-jointeampolicy="${t.join_policy}">${t.join_policy==='approval'?'اطلب الانضمام':'انضم للفريق'}</button>
             </div>
           </div>`;
@@ -1806,15 +1807,58 @@ const App = {
       };
     });
 
+    const doJoinTeam = async (teamId, eventId, isApproval)=>{
+      await db.from("tech_week_registrations").upsert({
+        event_id: eventId, profile_id: this.ctx.user.id,
+        status: isApproval ? "pending" : "registered", team_id: teamId
+      }, {onConflict: "event_id,profile_id"}).throwOnError();
+    };
+
+    body.querySelectorAll("[data-viewteam]").forEach(btn=>{
+      btn.onclick = ()=>{
+        const teamId = btn.dataset.viewteam;
+        const eventId = btn.dataset.viewteamevent;
+        const t = (teamsByEvent[eventId]||[]).find(x=>x.id===teamId);
+        if(!t) return;
+        const members = (t.tech_week_registrations||[]).filter(r=>r.status==='registered'||r.status==='attended');
+        const isApproval = t.join_policy === "approval";
+        const sh = this.sheet(`
+          <h3 style="margin:0 0 4px">${CodeUp.escapeHtml(t.name)}</h3>
+          ${t.description?`<p class="small" style="margin:0 0 12px">${CodeUp.escapeHtml(t.description)}</p>`:""}
+          <div class="small" style="margin-bottom:10px">${members.length} ${members.length===1?"عضو":"أعضاء"} • ${isApproval?"انضمام بموافقة القائد":"انضمام مفتوح"}</div>
+          <div class="twSection">
+            <p class="twSectionTitle">الأعضاء</p>
+            ${members.length ? members.map(m=>`
+              <div class="twMemberRow">
+                ${CodeUp.avatarHtml(m.profiles?.full_name, m.profiles?.avatar_url, 30)}
+                <span class="twMemberName">${CodeUp.escapeHtml(m.profiles?.full_name||"")}${m.profile_id===t.leader_id?" — القائد":""}</span>
+              </div>`).join("") : `<p class="small">ما فيه أعضاء بعد</p>`}
+          </div>
+          <div class="twActionsRow" style="margin-top:18px">
+            <button class="btn" id="vtClose">رجوع</button>
+            <button class="btn dark" id="vtJoin">${isApproval?"اطلب الانضمام":"انضم للفريق"}</button>
+          </div>
+        `);
+        sh.el.querySelector("#vtClose").onclick = sh.close;
+        sh.el.querySelector("#vtJoin").onclick = async ()=>{
+          const joinBtn = sh.el.querySelector("#vtJoin");
+          joinBtn.disabled = true;
+          try{
+            await doJoinTeam(teamId, eventId, isApproval);
+            CodeUp.toast(isApproval ? "تم إرسال طلب الانضمام، بانتظار موافقة القائد" : "انضممت للفريق", "success");
+            sh.close();
+            this.renderHomeTechWeek(body);
+          }catch(e){ CodeUp.toast(e.message || "تعذّر الانضمام — قد يكون الفريق اكتمل", "error"); joinBtn.disabled = false; }
+        };
+      };
+    });
+
     body.querySelectorAll("[data-jointeam]").forEach(btn=>{
       btn.onclick = async ()=>{
         btn.disabled = true;
         const isApproval = btn.dataset.jointeampolicy === "approval";
         try{
-          await db.from("tech_week_registrations").insert({
-            event_id: btn.dataset.jointeamevent, profile_id: this.ctx.user.id,
-            status: isApproval ? "pending" : "registered", team_id: btn.dataset.jointeam
-          }).throwOnError();
+          await doJoinTeam(btn.dataset.jointeam, btn.dataset.jointeamevent, isApproval);
           CodeUp.toast(isApproval ? "تم إرسال طلب الانضمام، بانتظار موافقة القائد" : "انضممت للفريق", "success");
           this.renderHomeTechWeek(body);
         }catch(e){ CodeUp.toast(e.message || "تعذّر الانضمام — قد يكون الفريق اكتمل", "error"); btn.disabled = false; }
