@@ -823,6 +823,7 @@ const App = {
 
     let lastY = window.scrollY;
     let hidden = false;
+    let settling = false; // true لفترة وجيزة بعد أي تبديل، لتجاهل الحدث الناتج عن التبديل نفسه
     const DEAD_ZONE = 6;   // نتجاهل حركات أصغر من هذا حتى ما يهتز الهيدر مع أدنى لمسة
     const TOP_ZONE = 24;   // قرب القمة = يظهر الهيدر دائمًا، بغض النظر عن الاتجاه
 
@@ -831,11 +832,18 @@ const App = {
       hidden = v;
       wrap.classList.toggle("headerHidden", v);
       content.classList.toggle("headerCollapsedContent", v);
+      // تبديل الهيدر يغيّر ارتفاع المحتوى (padding-top) فورًا، وهذا التغيير بالتخطيط نفسه
+      // كان يطلق حدث سكرول جديد بفرق (diff) ناتج عن التبديل لا عن حركة المستخدم — فيدخل
+      // بحلقة تذبذب (يختفي/يظهر بسرعة). نتجاهل أي حدث سكرول لأول لحظتين (rAF) بعد أي تبديل،
+      // ونعيد ضبط lastY على الوضع المستقر الجديد بعدها.
+      settling = true;
+      requestAnimationFrame(()=> requestAnimationFrame(()=>{ lastY = window.scrollY; settling = false; }));
     };
     this._setHeaderHidden = setHidden; // يسمح لـgo() يرجّع الهيدر ظاهرًا عند أي تنقل بين الصفحات/التابات
 
     const onScroll = ()=>{
       if(window.innerWidth > 720){ setHidden(false); lastY = window.scrollY; return; } // الديسكتوب غير معني بهذا السلوك إطلاقًا
+      if(settling) return; // نتجاهل أي حدث أثناء استقرار التخطيط بعد آخر تبديل
       // محتوى الصفحة قصير (بالكاد أطول من الشاشة، مثل تبويب الأسبوع التقني أحيانًا) —
       // نطاق التمرير الفعلي صغير جدًا، فأي ارتداد (bounce) بسيط بحواف الصفحة كان يخلي
       // الفرق (diff) يتذبذب حوالين DEAD_ZONE ذهابًا وإيابًا، ويسبب اهتزاز الهيدر إخفاء/إظهار
@@ -1782,14 +1790,11 @@ const App = {
           const submitBtn = sh.el.querySelector("#ntSubmit");
           submitBtn.disabled = true;
           try{
-            const { data: team, error: teamErr } = await db.from("tech_week_teams").insert({
-              event_id: eventId, name, description: sh.el.querySelector("#ntDesc").value.trim() || null,
-              created_by: this.ctx.user.id, leader_id: this.ctx.user.id, join_policy: policy
-            }).select().single();
-            if(teamErr) throw teamErr;
-            await db.from("tech_week_registrations").insert({
-              event_id: eventId, profile_id: this.ctx.user.id, status: "registered", team_id: team.id
-            }).throwOnError();
+            const { error: rpcErr } = await db.rpc("tech_week_create_team", {
+              p_event_id: eventId, p_name: name,
+              p_description: sh.el.querySelector("#ntDesc").value.trim() || null, p_join_policy: policy
+            });
+            if(rpcErr) throw rpcErr;
             CodeUp.toast("تم إنشاء الفريق والانضمام له", "success");
             sh.close();
             this.renderHomeTechWeek(body);

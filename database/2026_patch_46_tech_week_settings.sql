@@ -188,3 +188,32 @@ create policy "tech_week_teams: حذف" on tech_week_teams
   for delete using (
     leader_id = auth.uid() or created_by = auth.uid() or is_tech_week_admin(auth.uid())
   );
+
+-- ============================================================
+-- إصلاح جذري: إنشاء الفريق كان خطوتين منفصلتين من المتصفح (إنشاء صف الفريق، ثم تسجيل
+-- المنشئ كعضو) — لو فشلت الخطوة الثانية لأي سبب (شبكة، إلخ) بعد نجاح الأولى، يبقى فريق
+-- "يتيم" بلا أعضاء بقاعدة البيانات، وأي محاولة لاحقة بنفس الاسم تفشل بخطأ "مكرر" رغم إن
+-- المستخدم ما يشوف هذا الفريق اليتيم بواجهته. الحل: دالة وحدة تنفّذ الخطوتين معًا —
+-- إما تنجحان كلتاهما أو ترتد كلتاهما تلقائيًا.
+-- ============================================================
+create or replace function tech_week_create_team(
+  p_event_id uuid, p_name text, p_description text default null, p_join_policy text default 'open'
+) returns tech_week_teams
+language plpgsql
+security invoker
+as $$
+declare
+  v_team tech_week_teams;
+begin
+  insert into tech_week_teams (event_id, name, description, created_by, leader_id, join_policy)
+  values (p_event_id, p_name, p_description, auth.uid(), auth.uid(), coalesce(p_join_policy,'open'))
+  returning * into v_team;
+
+  insert into tech_week_registrations (event_id, profile_id, status, team_id)
+  values (p_event_id, auth.uid(), 'registered', v_team.id);
+
+  return v_team;
+end;
+$$;
+
+grant execute on function tech_week_create_team(uuid, text, text, text) to authenticated;
