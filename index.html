@@ -417,6 +417,34 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
 .twMemberActions{display:flex;gap:6px;flex-shrink:0}
 .twActionsRow{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
 .twActionsRow .btn{flex:1;min-width:120px}
+.pill{display:inline-block;font-size:11px;font-weight:700;padding:2px 9px;border-radius:20px;background:rgba(255,255,255,.08);color:var(--ink60)}
+
+/* Marketplace */
+.mpGrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+@media(max-width:520px){.mpGrid{grid-template-columns:1fr}}
+.mpCard{background:var(--surface);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);border-radius:16px;padding:10px;cursor:pointer;display:flex;flex-direction:column;gap:6px;text-align:start}
+.mpCard:hover{border-color:var(--accent)}
+.mpCardImg,.mpCardImgPlaceholder{width:100%;aspect-ratio:1/1;border-radius:12px;object-fit:cover;background:rgba(255,255,255,.04)}
+.mpCardImgPlaceholder{display:grid;place-items:center;color:var(--ink60)}
+.mpCardTitle{font-size:13.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mpCardMeta{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--ink60);gap:6px}
+.mpTypeTag{font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:20px;flex-shrink:0}
+.mpTypeTag.sale{background:rgba(29,155,240,.15);color:var(--accent)}
+.mpTypeTag.free{background:rgba(74,222,128,.15);color:#4ade80}
+.mpTypeTag.exchange{background:rgba(245,166,35,.15);color:#f5a623}
+.mpTypeTag.borrow{background:rgba(192,132,252,.15);color:#c084fc}
+.mpGallery{display:flex;gap:8px;overflow-x:auto;padding-bottom:2px}
+.mpGalleryImg{width:96px;height:96px;border-radius:12px;object-fit:cover;flex-shrink:0;cursor:pointer;background:rgba(255,255,255,.04)}
+.mpLightboxBg{position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:200;display:flex;align-items:center;justify-content:center;padding:20px}
+.mpLightboxBg img{max-width:100%;max-height:100%;border-radius:8px}
+.mpImgPickRow{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.mpImgPickThumb{position:relative;width:72px;height:72px;border-radius:10px;overflow:hidden;border:1px solid var(--line)}
+.mpImgPickThumb img{width:100%;height:100%;object-fit:cover}
+.mpImgPickThumb button{position:absolute;top:2px;inset-inline-end:2px;width:20px;height:20px;border-radius:50%;background:rgba(0,0,0,.6);color:#fff;border:0;font-size:12px;line-height:1;cursor:pointer}
+.mpAddImgBtn{width:72px;height:72px;border-radius:10px;border:1px dashed var(--line);background:rgba(255,255,255,.02);color:var(--ink60);cursor:pointer;font-size:22px}
+.mpWarnBox{background:rgba(245,166,35,.1);border:1px solid rgba(245,166,35,.3);border-radius:12px;padding:10px 12px;font-size:12px;color:#f5a623;margin:10px 0}
+.mpFormRow{margin-top:12px}
+.mpFormRow label{display:block;font-size:12.5px;color:var(--ink60);margin-bottom:5px;font-weight:600}
 .timelinePost{background:var(--surface);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:12px}
 .timelinePost .meta{display:flex;justify-content:space-between;gap:8px;color:var(--ink60);font-size:12.5px;margin-bottom:8px;flex-wrap:wrap}
 .timelinePost .metaWithAvatar{display:flex;align-items:center;gap:8px;margin-bottom:8px}
@@ -1507,6 +1535,7 @@ const App = {
     if(this.view.name==="messages") return this.renderMessages(this.view.conversationId);
     if(this.view.name==="profile") return this.renderProfile(this.view.profileId);
     if(this.view.name==="search") return this.renderSearch();
+    if(this.view.name==="marketplace_listing") return this.renderMarketplaceListing(this.view.listingId);
   },
 
   async renderHome(tab){
@@ -1523,6 +1552,7 @@ const App = {
         <button data-hometab="courses" class="${tab==='courses'?'active':''}"><span class="tabIcon">${Icon('learning')}</span>الكورسات</button>
         <button data-hometab="university" class="${tab==='university'?'active':''}"><span class="tabIcon">${Icon('university')}</span>الجامعة</button>
         <button data-hometab="tech_week" class="${tab==='tech_week'?'active':''}"><span class="tabIcon">${Icon('zap')}</span>الأسبوع التقني</button>
+        <button data-hometab="marketplace" class="${tab==='marketplace'?'active':''}"><span class="tabIcon">${Icon('shopping_bag')}</span>Marketplace</button>
       </div>`;
     tabSlot.querySelectorAll("[data-hometab]").forEach(b=>{
       b.onclick = ()=>{ this.view = {name:"home", homeTab:b.dataset.hometab}; this.renderHome(b.dataset.hometab); };
@@ -1534,6 +1564,7 @@ const App = {
     if(tab === "courses") return this.renderHomeCourses(body);
     if(tab === "university") return this.renderHomeUniversity(body);
     if(tab === "tech_week") return this.renderHomeTechWeek(body);
+    if(tab === "marketplace") return this.renderHomeMarketplace(body);
     return this.renderHomeFeed(body);
   },
 
@@ -1953,6 +1984,440 @@ const App = {
         }catch(e){ CodeUp.toast(e.message || "تعذّر حذف الفريق", "error"); btn.disabled = false; }
       };
     });
+  },
+
+  // ---------------- CodeUp Marketplace ----------------
+  // نفس منطق الصلاحيات والحالات المُنفَّذ بالكامل بقاعدة البيانات (RPCs ذرية +
+  // Trigger يمنع تعديل status مباشرة) — الواجهة هنا للعرض والاستدعاء فقط،
+  // بدون أي منطق حساس على الفرونت إند.
+  mpTypeLabel(t){ return {sale:"للبيع", exchange:"للاستبدال", borrow:"للإعارة", free:"مجاني"}[t] || t; },
+  mpStatusLabel(s){
+    return {pending_review:"بانتظار مراجعة الأدمن", active:"متاح", reserved:"محجوز", sold:"تم البيع",
+      borrowed:"معار حاليًا", exchanged:"تم الاستبدال", given_away:"تم الإهداء", cancelled:"ملغى", rejected:"مرفوض"}[s] || s;
+  },
+  mpConditionLabel(c){ return {new:"جديد", like_new:"شبه جديد", good:"جيد", acceptable:"مقبول", needs_repair:"يحتاج إصلاح"}[c] || c; },
+
+  async renderHomeMarketplace(body){
+    body.innerHTML = `<div class="emptyState">جارِ التحميل…</div>`;
+    const [{ data: categories }, { data: listings, error }, { data: isAdminRes }] = await Promise.all([
+      db.from("marketplace_categories").select("*").order("order_index"),
+      db.from("marketplace_listings").select("*, marketplace_categories(name), file_uploads(id,storage_path)")
+        .order("created_at",{ascending:false}).limit(60),
+      db.rpc("is_super_admin", {uid: this.ctx.user.id})
+    ]);
+    if(error){
+      body.innerHTML = `<div class="emptyState">تعذّر تحميل Marketplace. <button class="btn" id="mpRetryBtn">إعادة المحاولة</button></div>`;
+      body.querySelector("#mpRetryBtn").onclick = ()=> this.renderHomeMarketplace(body);
+      return;
+    }
+    const isAdmin = !!isAdminRes;
+    const mine = listings.filter(l=>l.owner_id===this.ctx.user.id);
+    const visible = listings.filter(l=>l.status==='active');
+    const pendingReview = isAdmin ? listings.filter(l=>l.status==='pending_review') : [];
+
+    const cardHtml = (l)=>{
+      const img = (l.file_uploads||[])[0];
+      return `<button class="mpCard" data-mplisting="${l.id}">
+        ${img ? `<img class="mpCardImg" data-mpthumb="${img.id}" alt="">` : `<div class="mpCardImgPlaceholder">${Icon('shopping_bag')}</div>`}
+        <div class="mpCardTitle">${CodeUp.escapeHtml(l.title)}</div>
+        <div class="mpCardMeta">
+          <span class="mpTypeTag ${l.listing_type}">${this.mpTypeLabel(l.listing_type)}</span>
+          <span>${l.listing_type==='sale' ? (l.price==null?'':`${l.price} ج.س`) : this.mpConditionLabel(l.condition)}</span>
+        </div>
+      </button>`;
+    };
+
+    body.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-top:4px">
+        <div><h2 style="margin:0 0 2px">CodeUp Marketplace</h2>
+          <p class="small" style="margin:0;color:var(--ink60)">سوق مجتمعي يتيح لأعضاء CodeUp البيع والشراء والاستبدال والإعارة ومشاركة المنتجات.</p>
+        </div>
+        <button class="btn dark" id="mpNewBtn">+ إضافة منتج</button>
+      </div>
+
+      ${pendingReview.length ? `
+      <div class="mpFormRow">
+        <label>بانتظار مراجعتك (أدمن)</label>
+        <div class="mpGrid">${pendingReview.map(l=>`
+          <div class="mpCard" style="cursor:default">
+            <div class="mpCardTitle">${CodeUp.escapeHtml(l.title)}</div>
+            <div class="mpCardMeta"><span>${l.price??''} ج.س</span></div>
+            <div class="twActionsRow">
+              <button class="btn dark" data-mpadminapprove="${l.id}">اعتماد</button>
+              <button class="btn" data-mpadminreject="${l.id}">رفض</button>
+            </div>
+          </div>`).join("")}</div>
+      </div>` : ""}
+
+      ${mine.length ? `
+      <div class="mpFormRow">
+        <label>إعلاناتي</label>
+        <div class="mpGrid">${mine.map(cardHtml).join("")}</div>
+      </div>` : ""}
+
+      <div class="mpFormRow">
+        <label>المتاح حاليًا</label>
+        ${visible.length ? `<div class="mpGrid">${visible.filter(l=>!mine.includes(l)).map(cardHtml).join("")}</div>` : `<p class="emptyState">ما فيه إعلانات متاحة بعد — كن أول من يضيف!</p>`}
+      </div>
+    `;
+
+    // تحميل الصور المصغّرة (Signed URL) بعد الرسم، بدون ما توقف عرض الصفحة
+    body.querySelectorAll("[data-mpthumb]").forEach(async (img)=>{
+      const fileId = img.dataset.mpthumb;
+      const all = [...listings];
+      const owner = all.flatMap(l=>l.file_uploads||[]).find(f=>f.id===fileId);
+      if(!owner?.storage_path) return;
+      try{ img.src = await CodeUp.getSignedUrl("submissions", owner.storage_path); }catch(e){}
+    });
+
+    body.querySelectorAll("[data-mplisting]").forEach(btn=>{
+      btn.onclick = ()=> this.go({name:"marketplace_listing", listingId: btn.dataset.mplisting});
+    });
+
+    body.querySelector("#mpNewBtn").onclick = ()=> this.openMarketplaceCreateForm(categories, ()=> this.renderHomeMarketplace(body));
+
+    body.querySelectorAll("[data-mpadminapprove]").forEach(btn=>{
+      btn.onclick = async ()=>{
+        btn.disabled = true;
+        try{
+          await db.rpc("marketplace_admin_review_listing", {p_listing_id: btn.dataset.mpadminapprove, p_decision: "active"}).throwOnError();
+          CodeUp.toast("تم اعتماد الإعلان", "success");
+          this.renderHomeMarketplace(body);
+        }catch(e){ CodeUp.toast(e.message || "تعذّر الاعتماد", "error"); btn.disabled = false; }
+      };
+    });
+    body.querySelectorAll("[data-mpadminreject]").forEach(btn=>{
+      btn.onclick = async ()=>{
+        const ok = await this.confirmDialog({title:"رفض الإعلان", message:"هل أنت متأكد من رفض هذا الإعلان؟", confirmLabel:"رفض", danger:true});
+        if(!ok) return;
+        btn.disabled = true;
+        try{
+          await db.rpc("marketplace_admin_review_listing", {p_listing_id: btn.dataset.mpadminreject, p_decision: "rejected"}).throwOnError();
+          CodeUp.toast("تم رفض الإعلان", "success");
+          this.renderHomeMarketplace(body);
+        }catch(e){ CodeUp.toast(e.message || "تعذّر الرفض", "error"); btn.disabled = false; }
+      };
+    });
+  },
+
+  // نموذج إضافة إعلان — نافذة بترويسة ثابتة (المحتوى قد يطول مع اختيار النوع والصور)
+  openMarketplaceCreateForm(categories, onDone){
+    const catOptions = (categories||[]).map(c=>`<option value="${c.id}">${CodeUp.escapeHtml(c.name)}</option>`).join("");
+    const pendingFiles = []; // {file, previewUrl}
+    const modal = this.modalScrollable("إضافة منتج جديد", `
+      <div class="mpFormRow"><label>عنوان المنتج</label><input id="mpfTitle" maxlength="100" placeholder="مثال: كتاب Algorithms"></div>
+      <div class="mpFormRow"><label>الوصف</label><textarea id="mpfDesc" rows="3" placeholder="تفاصيل إضافية عن المنتج"></textarea></div>
+      <div class="mpFormRow"><label>التصنيف</label><select id="mpfCategory"><option value="">بدون تصنيف</option>${catOptions}</select></div>
+      <div class="mpFormRow"><label>الحالة</label>
+        <select id="mpfCondition">
+          <option value="new">جديد</option><option value="like_new">شبه جديد</option>
+          <option value="good" selected>جيد</option><option value="acceptable">مقبول</option>
+          <option value="needs_repair">يحتاج إصلاح</option>
+        </select>
+      </div>
+      <div class="mpFormRow"><label>نوع العرض</label>
+        <select id="mpfType">
+          <option value="sale">للبيع</option><option value="exchange">للاستبدال</option>
+          <option value="borrow">للإعارة</option><option value="free">مجاني</option>
+        </select>
+      </div>
+      <div class="mpFormRow" id="mpfPriceRow"><label>السعر (ج.س)</label><input id="mpfPrice" type="number" min="0" step="1"></div>
+      <div class="mpFormRow" id="mpfExchangeRow" style="display:none"><label>أرغب في استبداله بـ</label><input id="mpfExchange" placeholder="مثال: كتاب Calculus أو آلة حاسبة"></div>
+      <div class="mpFormRow" id="mpfBorrowRow" style="display:none"><label>مدة الإعارة (أيام)</label><input id="mpfBorrowDays" type="number" min="1" step="1" value="7"></div>
+      <div class="mpWarnBox" id="mpfSaleWarn">إعلانات البيع تحتاج موافقة أدمن قبل الظهور للعموم. الدفع والتسليم يتمان مباشرة بينك وبين الطرف الآخر — CodeUp لا يستلم أو يضمن أي مبلغ.</div>
+      <div class="mpFormRow"><label>الصور (حتى 3 صور)</label>
+        <div class="mpImgPickRow" id="mpfImgRow"><button type="button" class="mpAddImgBtn" id="mpfAddImgBtn">+</button></div>
+        <input type="file" id="mpfImgInput" accept="image/*" multiple style="display:none">
+      </div>
+      <div class="twActionsRow">
+        <button class="btn" id="mpfCancelBtn">إلغاء</button>
+        <button class="btn dark" id="mpfSubmitBtn">نشر الإعلان</button>
+      </div>
+    `);
+
+    const typeSelect = modal.el.querySelector("#mpfType");
+    const syncTypeFields = ()=>{
+      const t = typeSelect.value;
+      modal.el.querySelector("#mpfPriceRow").style.display = t==='sale' ? "" : "none";
+      modal.el.querySelector("#mpfExchangeRow").style.display = t==='exchange' ? "" : "none";
+      modal.el.querySelector("#mpfBorrowRow").style.display = t==='borrow' ? "" : "none";
+      modal.el.querySelector("#mpfSaleWarn").style.display = t==='sale' ? "" : "none";
+    };
+    typeSelect.onchange = syncTypeFields;
+    syncTypeFields();
+
+    const imgRow = modal.el.querySelector("#mpfImgRow");
+    const addImgBtn = modal.el.querySelector("#mpfAddImgBtn");
+    const imgInput = modal.el.querySelector("#mpfImgInput");
+    const renderImgPicks = ()=>{
+      imgRow.querySelectorAll(".mpImgPickThumb").forEach(n=>n.remove());
+      pendingFiles.forEach((pf,i)=>{
+        const div = document.createElement("div");
+        div.className = "mpImgPickThumb";
+        div.innerHTML = `<img src="${pf.previewUrl}"><button type="button" data-removeimg="${i}">×</button>`;
+        imgRow.insertBefore(div, addImgBtn);
+      });
+      addImgBtn.style.display = pendingFiles.length >= 3 ? "none" : "";
+      imgRow.querySelectorAll("[data-removeimg]").forEach(b=>{
+        b.onclick = ()=>{ pendingFiles.splice(+b.dataset.removeimg,1); renderImgPicks(); };
+      });
+    };
+    addImgBtn.onclick = ()=> imgInput.click();
+    imgInput.onchange = ()=>{
+      for(const f of imgInput.files){
+        if(pendingFiles.length >= 3) break;
+        if(!f.type.startsWith("image/")) continue;
+        pendingFiles.push({file: f, previewUrl: URL.createObjectURL(f)});
+      }
+      imgInput.value = "";
+      renderImgPicks();
+    };
+
+    modal.el.querySelector("#mpfCancelBtn").onclick = modal.close;
+    modal.el.querySelector("#mpfSubmitBtn").onclick = async ()=>{
+      const submitBtn = modal.el.querySelector("#mpfSubmitBtn");
+      const title = modal.el.querySelector("#mpfTitle").value.trim();
+      const description = modal.el.querySelector("#mpfDesc").value.trim();
+      const category_id = modal.el.querySelector("#mpfCategory").value || null;
+      const condition = modal.el.querySelector("#mpfCondition").value;
+      const listing_type = typeSelect.value;
+      const price = listing_type==='sale' ? Number(modal.el.querySelector("#mpfPrice").value||0) : null;
+      const exchange_wanted_for = listing_type==='exchange' ? modal.el.querySelector("#mpfExchange").value.trim() : null;
+      const borrow_duration_days = listing_type==='borrow' ? Number(modal.el.querySelector("#mpfBorrowDays").value||0) : null;
+
+      if(!title){ CodeUp.toast("اكتب عنوان المنتج", "error"); return; }
+      if(listing_type==='sale' && !(price>=0)){ CodeUp.toast("أدخل سعرًا صحيحًا", "error"); return; }
+      if(listing_type==='exchange' && !exchange_wanted_for){ CodeUp.toast("اكتب وش ترغب تستبدله", "error"); return; }
+      if(listing_type==='borrow' && !(borrow_duration_days>0)){ CodeUp.toast("أدخل مدة إعارة صحيحة", "error"); return; }
+
+      await CodeUp.withBtnLoading(submitBtn, async ()=>{
+        try{
+          const { data: listing, error } = await db.from("marketplace_listings").insert({
+            owner_id: this.ctx.user.id, title, description: description||null, category_id, condition,
+            listing_type, price, exchange_wanted_for, borrow_duration_days
+          }).select().single();
+          if(error) throw error;
+
+          for(const pf of pendingFiles){
+            try{
+              const up = await CodeUp.uploadMarketplaceImage(pf.file, this.ctx.user.id, listing.id);
+              const { data: fileRow, error: fErr } = await db.from("file_uploads").insert({
+                uploader_id: this.ctx.user.id, related_type: "marketplace_listing", related_id: listing.id,
+                storage_path: up.path, file_name: up.name, mime_type: up.type, file_size: up.size
+              }).select().single();
+              if(fErr) throw fErr;
+              CodeUp.triggerTelegramSend(fileRow.id);
+            }catch(imgErr){ CodeUp.toast("تعذّر رفع إحدى الصور — يمكنك إضافتها لاحقًا", "error"); }
+          }
+
+          CodeUp.toast(listing_type==='sale' ? "تم إرسال إعلانك لمراجعة الأدمن" : "تم نشر إعلانك", "success");
+          modal.close();
+          if(onDone) onDone();
+        }catch(e){ CodeUp.toast(e.message || "تعذّر نشر الإعلان", "error"); }
+      });
+    };
+  },
+
+  async renderMarketplaceListing(listingId){
+    this.crumbs.classList.remove("hidden");
+    this.crumbs.innerHTML = `<button id="mpBackBtn">${Icon('arrow_right')} رجوع لـ Marketplace</button>`;
+    this.crumbs.querySelector("#mpBackBtn").onclick = ()=> this.go({name:"home", homeTab:"marketplace"});
+    this.root.innerHTML = `<div class="emptyState">جارِ التحميل…</div>`;
+
+    const [{ data: l, error }, { data: files }, { data: myReq }] = await Promise.all([
+      db.from("marketplace_listings").select("*, marketplace_categories(name), owner:profiles!marketplace_listings_owner_id_fkey(id,full_name,avatar_url)").eq("id", listingId).single(),
+      db.from("file_uploads").select("id,storage_path").eq("related_type","marketplace_listing").eq("related_id", listingId),
+      db.from("marketplace_requests").select("*").eq("listing_id", listingId).eq("requester_id", this.ctx.user.id).order("created_at",{ascending:false}).limit(1)
+    ]);
+    if(error || !l){ this.root.innerHTML = `<div class="emptyState">تعذّر تحميل الإعلان.</div>`; return; }
+
+    const isOwner = l.owner_id === this.ctx.user.id;
+    const myActiveReq = (myReq||[]).find(r=>r.status==='pending'||r.status==='accepted');
+
+    let ownerRequests = [];
+    if(isOwner){
+      const { data } = await db.from("marketplace_requests")
+        .select("*, requester:profiles!marketplace_requests_requester_id_fkey(id,full_name,avatar_url)")
+        .eq("listing_id", listingId).order("created_at",{ascending:false});
+      ownerRequests = data || [];
+    }
+
+    const ctaHtml = ()=>{
+      if(isOwner){
+        const canCancel = !['sold','given_away','exchanged','cancelled','rejected'].includes(l.status);
+        let extra = "";
+        if(l.status==='borrowed') extra = `<button class="btn dark" id="mpMarkReturnedBtn">تعليم كـ تم الإرجاع</button>`;
+        if(l.status==='reserved' && l.listing_type==='exchange') extra = `<button class="btn dark" id="mpCompleteExchangeBtn">تعليم كـ تم الاستبدال</button>`;
+        if(l.status==='reserved' && l.listing_type==='free') extra = `<button class="btn dark" id="mpMarkGivenBtn">تعليم كـ تم الإهداء</button>`;
+        return `<div class="twActionsRow">${extra}${canCancel?`<button class="btn" id="mpCancelBtn">إلغاء الإعلان</button>`:""}</div>`;
+      }
+      if(l.status !== 'active'){
+        return `<div class="mpWarnBox">هذا الإعلان غير متاح حاليًا (${this.mpStatusLabel(l.status)}).</div>`;
+      }
+      if(myActiveReq){
+        return `<div class="mpWarnBox">${myActiveReq.status==='pending' ? "طلبك بانتظار رد صاحب الإعلان." : "تم قبول طلبك — تواصل مع صاحب الإعلان لإتمام التفاصيل."}</div>`;
+      }
+      const label = {sale:"شراء / تواصل مع البائع", exchange:"عرض استبدال", borrow:"طلب الإعارة", free:"طلب المنتج"}[l.listing_type];
+      return `<div class="twActionsRow"><button class="btn dark" id="mpRequestBtn">${label}</button></div>`;
+    };
+
+    this.root.innerHTML = `<div id="mpDetailBody">
+      ${files.length ? `<div class="mpGallery">${files.map(f=>`<img class="mpGalleryImg" data-mpfull="${f.id}" alt="">`).join("")}</div>` : ""}
+      <h2 style="margin:14px 0 4px">${CodeUp.escapeHtml(l.title)}</h2>
+      <div class="mpCardMeta" style="margin-bottom:8px">
+        <span class="mpTypeTag ${l.listing_type}">${this.mpTypeLabel(l.listing_type)}</span>
+        <span class="pill">${this.mpStatusLabel(l.status)}</span>
+      </div>
+      ${l.description ? `<p style="line-height:1.6">${CodeUp.escapeHtml(l.description)}</p>` : ""}
+      <div class="small" style="color:var(--ink60);line-height:2">
+        الحالة: ${this.mpConditionLabel(l.condition)}<br>
+        ${l.marketplace_categories?.name ? `التصنيف: ${CodeUp.escapeHtml(l.marketplace_categories.name)}<br>` : ""}
+        ${l.listing_type==='sale' ? `السعر: ${l.price} ج.س<br>` : ""}
+        ${l.listing_type==='exchange' ? `مرغوب استبداله بـ: ${CodeUp.escapeHtml(l.exchange_wanted_for||'')}<br>` : ""}
+        ${l.listing_type==='borrow' ? `مدة الإعارة: ${l.borrow_duration_days} يوم<br>` : ""}
+      </div>
+      ${l.listing_type==='sale' ? `<div class="mpWarnBox">الدفع والتسليم يتمان مباشرة بينك وبين البائع — CodeUp لا تستلم أو تضمن أي مبلغ أو تسليم.</div>` : ""}
+
+      <div class="twSection">
+        <p class="twSectionTitle">صاحب الإعلان</p>
+        <div class="twMemberRow" style="cursor:pointer" id="mpOwnerRow">
+          ${CodeUp.avatarHtml(l.owner?.full_name, l.owner?.avatar_url, 32)}
+          <span class="twMemberName">${CodeUp.escapeHtml(l.owner?.full_name||"")}</span>
+          ${!isOwner ? `<button class="btn" id="mpMsgOwnerBtn">مراسلة</button>` : ""}
+        </div>
+      </div>
+
+      <div class="mpFormRow">${ctaHtml()}</div>
+
+      ${isOwner && ownerRequests.length ? `
+      <div class="twSection">
+        <p class="twSectionTitle">الطلبات الواردة</p>
+        ${ownerRequests.map(r=>`
+          <div class="twTeamCard">
+            <div class="twMemberRow">
+              ${CodeUp.avatarHtml(r.requester?.full_name, r.requester?.avatar_url, 30)}
+              <span class="twMemberName">${CodeUp.escapeHtml(r.requester?.full_name||"")}</span>
+              <span class="pill">${{pending:"بانتظار الرد",accepted:"مقبول",rejected:"مرفوض",cancelled:"ملغى",completed:"مكتمل"}[r.status]}</span>
+            </div>
+            ${r.message ? `<p class="small" style="margin:6px 0 0">${CodeUp.escapeHtml(r.message)}</p>` : ""}
+            ${r.exchange_offer_description ? `<p class="small" style="margin:6px 0 0">عرض الاستبدال: ${CodeUp.escapeHtml(r.exchange_offer_description)}</p>` : ""}
+            ${r.borrow_agreed_return_date ? `<p class="small" style="margin:6px 0 0">تاريخ الإرجاع المتفق عليه: ${CodeUp.formatDate(r.borrow_agreed_return_date)}</p>` : ""}
+            ${r.status==='pending' ? `
+            <div class="twActionsRow">
+              <button class="btn dark" data-mpreqaccept="${r.id}">قبول</button>
+              <button class="btn" data-mpreqreject="${r.id}">رفض</button>
+            </div>` : ""}
+          </div>`).join("")}
+      </div>` : ""}
+    </div>`;
+
+    const dbody = document.getElementById("mpDetailBody");
+
+    dbody.querySelectorAll("[data-mpfull]").forEach(async (img)=>{
+      const f = files.find(x=>x.id===img.dataset.mpfull);
+      if(!f) return;
+      try{ img.src = await CodeUp.getSignedUrl("submissions", f.storage_path); }catch(e){}
+      img.onclick = async ()=>{
+        const bg = document.createElement("div");
+        bg.className = "mpLightboxBg";
+        bg.innerHTML = `<img src="${img.src}">`;
+        bg.onclick = ()=> bg.remove();
+        document.body.appendChild(bg);
+      };
+    });
+
+    const ownerRow = dbody.querySelector("#mpOwnerRow");
+    if(ownerRow) ownerRow.onclick = (e)=>{ if(e.target.id!=="mpMsgOwnerBtn") this.go({name:"profile", profileId:l.owner.id}); };
+    const msgBtn = dbody.querySelector("#mpMsgOwnerBtn");
+    if(msgBtn) msgBtn.onclick = async (e)=>{
+      e.stopPropagation();
+      try{ const {data: conv} = await db.rpc("get_or_create_conversation", {p_other_user: l.owner.id}).single(); this.go({name:"messages", conversationId: conv.id}); }
+      catch(err){ CodeUp.toast("تعذّر فتح المحادثة", "error"); }
+    };
+
+    const requestBtn = dbody.querySelector("#mpRequestBtn");
+    if(requestBtn) requestBtn.onclick = ()=> this.openMarketplaceRequestForm(l, ()=> this.renderMarketplaceListing(listingId));
+
+    const cancelBtn = dbody.querySelector("#mpCancelBtn");
+    if(cancelBtn) cancelBtn.onclick = async ()=>{
+      const ok = await this.confirmDialog({title:"إلغاء الإعلان", message:"هل أنت متأكد من إلغاء هذا الإعلان؟", confirmLabel:"إلغاء الإعلان", danger:true});
+      if(!ok) return;
+      cancelBtn.disabled = true;
+      try{ await db.rpc("marketplace_cancel_listing", {p_listing_id: l.id}).throwOnError(); CodeUp.toast("تم إلغاء الإعلان","success"); this.renderMarketplaceListing(listingId); }
+      catch(e){ CodeUp.toast(e.message || "تعذّر الإلغاء","error"); cancelBtn.disabled=false; }
+    };
+
+    const returnedBtn = dbody.querySelector("#mpMarkReturnedBtn");
+    if(returnedBtn) returnedBtn.onclick = async ()=>{
+      returnedBtn.disabled = true;
+      try{ await db.rpc("marketplace_mark_returned", {p_listing_id: l.id}).throwOnError(); CodeUp.toast("تم تعليم المنتج كمُرجَع","success"); this.renderMarketplaceListing(listingId); }
+      catch(e){ CodeUp.toast(e.message,"error"); returnedBtn.disabled=false; }
+    };
+    const exchBtn = dbody.querySelector("#mpCompleteExchangeBtn");
+    if(exchBtn) exchBtn.onclick = async ()=>{
+      exchBtn.disabled = true;
+      try{ await db.rpc("marketplace_complete_exchange", {p_listing_id: l.id}).throwOnError(); CodeUp.toast("تم إتمام الاستبدال","success"); this.renderMarketplaceListing(listingId); }
+      catch(e){ CodeUp.toast(e.message,"error"); exchBtn.disabled=false; }
+    };
+    const givenBtn = dbody.querySelector("#mpMarkGivenBtn");
+    if(givenBtn) givenBtn.onclick = async ()=>{
+      givenBtn.disabled = true;
+      try{ await db.rpc("marketplace_mark_given_away", {p_listing_id: l.id}).throwOnError(); CodeUp.toast("تم تعليم المنتج كمُهدى","success"); this.renderMarketplaceListing(listingId); }
+      catch(e){ CodeUp.toast(e.message,"error"); givenBtn.disabled=false; }
+    };
+
+    dbody.querySelectorAll("[data-mpreqaccept]").forEach(btn=>{
+      btn.onclick = async ()=>{
+        btn.disabled = true;
+        try{ await db.rpc("marketplace_decide_request", {p_request_id: btn.dataset.mpreqaccept, p_decision:"accepted"}).throwOnError(); CodeUp.toast("تم قبول الطلب","success"); this.renderMarketplaceListing(listingId); }
+        catch(e){ CodeUp.toast(e.message || "تعذّر القبول","error"); btn.disabled=false; }
+      };
+    });
+    dbody.querySelectorAll("[data-mpreqreject]").forEach(btn=>{
+      btn.onclick = async ()=>{
+        btn.disabled = true;
+        try{ await db.rpc("marketplace_decide_request", {p_request_id: btn.dataset.mpreqreject, p_decision:"rejected"}).throwOnError(); CodeUp.toast("تم رفض الطلب","success"); this.renderMarketplaceListing(listingId); }
+        catch(e){ CodeUp.toast(e.message || "تعذّر الرفض","error"); btn.disabled=false; }
+      };
+    });
+  },
+
+  openMarketplaceRequestForm(listing, onDone){
+    const t = listing.listing_type;
+    const extraHtml = t==='exchange'
+      ? `<div class="mpFormRow"><label>وش تعرضه للاستبدال</label><textarea id="mpreqExchange" rows="2" placeholder="مثال: كتاب Calculus بحالة ممتازة"></textarea></div>`
+      : t==='borrow'
+      ? `<div class="mpFormRow"><label>تاريخ الإرجاع المتفق عليه</label><input id="mpreqReturnDate" type="date"></div>`
+      : "";
+    const sh = this.sheet(`
+      <h3 style="margin:0 0 10px">${{sale:"طلب شراء",exchange:"عرض استبدال",borrow:"طلب إعارة",free:"طلب المنتج"}[t]}</h3>
+      <div class="mpFormRow"><label>رسالة لصاحب الإعلان (اختياري)</label><textarea id="mpreqMsg" rows="2" placeholder="أي تفاصيل تحب تضيفها"></textarea></div>
+      ${extraHtml}
+      <div class="twActionsRow">
+        <button class="btn" id="mpreqCancelBtn">إلغاء</button>
+        <button class="btn dark" id="mpreqSubmitBtn">إرسال الطلب</button>
+      </div>
+    `);
+    sh.el.querySelector("#mpreqCancelBtn").onclick = sh.close;
+    sh.el.querySelector("#mpreqSubmitBtn").onclick = async ()=>{
+      const submitBtn = sh.el.querySelector("#mpreqSubmitBtn");
+      const message = sh.el.querySelector("#mpreqMsg").value.trim() || null;
+      const exchangeOffer = t==='exchange' ? sh.el.querySelector("#mpreqExchange").value.trim() : null;
+      const returnDate = t==='borrow' ? sh.el.querySelector("#mpreqReturnDate").value : null;
+      if(t==='exchange' && !exchangeOffer){ CodeUp.toast("اكتب وش تعرضه للاستبدال","error"); return; }
+      if(t==='borrow' && !returnDate){ CodeUp.toast("اختر تاريخ الإرجاع","error"); return; }
+      await CodeUp.withBtnLoading(submitBtn, async ()=>{
+        try{
+          await db.rpc("marketplace_submit_request", {
+            p_listing_id: listing.id, p_type: t, p_message: message,
+            p_exchange_offer: exchangeOffer, p_borrow_return_date: returnDate
+          }).throwOnError();
+          CodeUp.toast("تم إرسال طلبك", "success");
+          sh.close();
+          if(onDone) onDone();
+        }catch(e){ CodeUp.toast(e.message || "تعذّر إرسال الطلب", "error"); }
+      });
+    };
   },
 
   async renderHomeCourses(body){

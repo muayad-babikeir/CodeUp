@@ -41,7 +41,8 @@ function Icon(name){
     link: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
     x: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
     settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
-    zap: '<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>'
+    zap: '<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>',
+    shopping_bag: '<path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/>'
   };
   return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${paths[name]||''}</svg>`;
 }
@@ -425,6 +426,19 @@ const CodeUp = (() => {
     return { path, size: processed.size, type: processed.type, name: processed.name };
   }
 
+  // صورة إعلان Marketplace — نفس bucket ونفس آلية ضغط الصور تمامًا (submissions)، مسار منفصل تحت marketplace/
+  async function uploadMarketplaceImage(file, userId, listingId) {
+    const processed = await compressImageIfNeeded(file);
+    if (processed.size > MAX_FILE_BYTES) {
+      throw new Error(`حجم الصورة كبير جدًا (${(processed.size/1024/1024).toFixed(1)} ميجا). الحد الأقصى 8 ميجابايت.`);
+    }
+    const cleanName = processed.name.replace(/[^\w.\-]+/g, "_");
+    const path = `${userId}/marketplace/${listingId}/${Date.now()}_${cleanName}`;
+    const { error } = await db.storage.from("submissions").upload(path, processed, { upsert: false });
+    if (error) throw error;
+    return { path, size: processed.size, type: processed.type, name: processed.name };
+  }
+
   // يبني بطاقة تعليقات قابلة للطي، مع اسم الكاتب + شارة الدور (اختياري) + إشارة "من مجموعتك" + مرفق (معاينة عند الطلب)
   // يرجع {toggleHtml, listHtml} منفصلين (بدل نص واحد) حتى يقدر المستدعي يحط زر
   // التبديل داخل صف أزرار التفاعل بينما تبقى قائمة التعليقات نفسها بمكانها تحت —
@@ -460,5 +474,5 @@ const CodeUp = (() => {
     });
   }
 
-  return { toast, escapeHtml, avatarHtml, timeAgo, formatDate, debounce, requireSession, loadMyContext, rpc, call, uploadSubmissionFile, uploadCommentAttachment, getSignedUrl, subscribeToMyNotifications, triggerTelegramSend, buildCommentsBlock, wireCommentsToggle, setBtnLoading, withBtnLoading, compressImageIfNeeded };
+  return { toast, escapeHtml, avatarHtml, timeAgo, formatDate, debounce, requireSession, loadMyContext, rpc, call, uploadSubmissionFile, uploadCommentAttachment, uploadMarketplaceImage, getSignedUrl, subscribeToMyNotifications, triggerTelegramSend, buildCommentsBlock, wireCommentsToggle, setBtnLoading, withBtnLoading, compressImageIfNeeded };
 })();
