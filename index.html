@@ -2001,7 +2001,7 @@ const App = {
     body.innerHTML = `<div class="emptyState">جارِ التحميل…</div>`;
     const [{ data: categories }, { data: listings, error }, { data: isAdminRes }] = await Promise.all([
       db.from("marketplace_categories").select("*").order("order_index"),
-      db.from("marketplace_listings").select("*, marketplace_categories(name), file_uploads(id,storage_path)")
+      db.from("marketplace_listings").select("*, marketplace_categories(name)")
         .order("created_at",{ascending:false}).limit(60),
       db.rpc("is_super_admin", {uid: this.ctx.user.id})
     ]);
@@ -2010,13 +2010,22 @@ const App = {
       body.querySelector("#mpRetryBtn").onclick = ()=> this.renderHomeMarketplace(body);
       return;
     }
+    // file_uploads.related_id عمود عام بدون FK حقيقي (يُستخدم لأنواع محتوى متعددة)،
+    // فما يقدر Supabase يدمجه تلقائيًا داخل استعلام marketplace_listings — نجيبه بطلب منفصل ونربطه يدويًا.
+    const listingIds = listings.map(l=>l.id);
+    const { data: allFiles } = listingIds.length
+      ? await db.from("file_uploads").select("id,storage_path,related_id").eq("related_type","marketplace_listing").in("related_id", listingIds)
+      : { data: [] };
+    const filesByListing = {};
+    (allFiles||[]).forEach(f=>{ (filesByListing[f.related_id] ||= []).push(f); });
+
     const isAdmin = !!isAdminRes;
     const mine = listings.filter(l=>l.owner_id===this.ctx.user.id);
     const visible = listings.filter(l=>l.status==='active');
     const pendingReview = isAdmin ? listings.filter(l=>l.status==='pending_review') : [];
 
     const cardHtml = (l)=>{
-      const img = (l.file_uploads||[])[0];
+      const img = (filesByListing[l.id]||[])[0];
       return `<button class="mpCard" data-mplisting="${l.id}">
         ${img ? `<img class="mpCardImg" data-mpthumb="${img.id}" alt="">` : `<div class="mpCardImgPlaceholder">${Icon('shopping_bag')}</div>`}
         <div class="mpCardTitle">${CodeUp.escapeHtml(l.title)}</div>
@@ -2064,8 +2073,7 @@ const App = {
     // تحميل الصور المصغّرة (Signed URL) بعد الرسم، بدون ما توقف عرض الصفحة
     body.querySelectorAll("[data-mpthumb]").forEach(async (img)=>{
       const fileId = img.dataset.mpthumb;
-      const all = [...listings];
-      const owner = all.flatMap(l=>l.file_uploads||[]).find(f=>f.id===fileId);
+      const owner = (allFiles||[]).find(f=>f.id===fileId);
       if(!owner?.storage_path) return;
       try{ img.src = await CodeUp.getSignedUrl("submissions", owner.storage_path); }catch(e){}
     });
