@@ -394,6 +394,23 @@ const CodeUp = (() => {
     return data.signedUrl;
   }
 
+  // نسخة محسّنة (مصغّرة/مضغوطة) من رابط الصورة لعرضها بقوائم/بطاقات — تستخدم Supabase Storage
+  // Image Transformation إن كانت مفعّلة بهذا المشروع (supabase-js v2: خيار transform بـcreateSignedUrl).
+  // لو الميزة غير مفعّلة بخطة المشروع، createSignedUrl نفسها ترجع خطأ لخيار transform تحديدًا — نرجع
+  // حينها تلقائيًا لنفس الرابط الأصلي الكامل (getSignedUrl) بدون أي كسر. مكان واحد فقط مسؤول عن هذا
+  // القرار — لا تكرّر منطق Storage داخل كل بطاقة.
+  async function getOptimizedSignedUrl(bucket, path, { width = 400, quality = 65 } = {}, expiresIn = 3600) {
+    try {
+      const { data, error } = await db.storage.from(bucket).createSignedUrl(path, expiresIn, {
+        transform: { width, quality }
+      });
+      if (error) throw error;
+      return data.signedUrl;
+    } catch (e) {
+      return getSignedUrl(bucket, path, expiresIn);
+    }
+  }
+
   // ---------- Realtime ----------
   // يعتمد على أن جدول notifications محمي بـ RLS (select: profile_id = auth.uid()),
   // فالاشتراك آمن بشكل افتراضي — المستخدم لا يستقبل إلا إشعاراته هو.
@@ -477,5 +494,5 @@ const CodeUp = (() => {
     });
   }
 
-  return { toast, escapeHtml, avatarHtml, timeAgo, formatDate, debounce, requireSession, loadMyContext, rpc, call, uploadSubmissionFile, uploadCommentAttachment, uploadMarketplaceImage, getSignedUrl, subscribeToMyNotifications, triggerTelegramSend, buildCommentsBlock, wireCommentsToggle, setBtnLoading, withBtnLoading, compressImageIfNeeded };
+  return { toast, escapeHtml, avatarHtml, timeAgo, formatDate, debounce, requireSession, loadMyContext, rpc, call, uploadSubmissionFile, uploadCommentAttachment, uploadMarketplaceImage, getSignedUrl, getOptimizedSignedUrl, subscribeToMyNotifications, triggerTelegramSend, buildCommentsBlock, wireCommentsToggle, setBtnLoading, withBtnLoading, compressImageIfNeeded };
 })();

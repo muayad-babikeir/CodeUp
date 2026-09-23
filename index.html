@@ -436,12 +436,17 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
 .mpGrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 @media(min-width:700px){.mpGrid{grid-template-columns:repeat(3,1fr)}}
 @media(min-width:980px){.mpGrid{grid-template-columns:repeat(4,1fr)}}
-.mpCard{background:var(--surface);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);border-radius:14px;padding:8px;cursor:pointer;display:flex;flex-direction:row;align-items:center;gap:9px;text-align:start;min-width:0}
+.mpCard{background:var(--surface);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);border-radius:14px;overflow:hidden;cursor:pointer;display:flex;flex-direction:column;text-align:start;min-width:0;-webkit-tap-highlight-color:transparent}
 .mpCard:active{border-color:var(--accent)}
-.mpCardImg,.mpCardImgPlaceholder{width:56px;height:56px;flex-shrink:0;border-radius:10px;object-fit:cover;background:rgba(255,255,255,.04)}
-.mpCardImgPlaceholder{display:grid;place-items:center;color:var(--ink60)}
-.mpCardImgPlaceholder svg{width:22px;height:22px}
-.mpCardBody{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
+@media(hover:hover){.mpCard:hover{border-color:var(--accent)}}
+.mpCardImgWrap{position:relative;width:100%;aspect-ratio:4/3;background:rgba(255,255,255,.04);overflow:hidden}
+.mpCardImgWrap .skeleton{position:absolute;inset:0;border-radius:0}
+.mpCardImg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .25s ease}
+.mpCardImg.loaded{opacity:1}
+.mpCardImgPlaceholder{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;color:var(--ink60);background:rgba(255,255,255,.03)}
+.mpCardImgPlaceholder svg{width:26px;height:26px}
+.mpCardImgPlaceholder span{font-size:10.5px}
+.mpCardBody{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;padding:9px 10px 10px}
 .mpCardTitle{font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .mpCardPrice{font-size:13px;font-weight:700;color:var(--accent)}
 .mpCardFooter{display:flex;justify-content:space-between;align-items:center;gap:6px}
@@ -2068,7 +2073,7 @@ const App = {
     body.innerHTML = `<div class="emptyState">جارِ التحميل…</div>`;
     const [{ data: categories }, { data: listings, error }, { data: isAdminRes }] = await Promise.all([
       db.from("marketplace_categories").select("*").order("order_index"),
-      db.from("marketplace_listings").select("*, marketplace_categories(name), owner:profiles!marketplace_listings_owner_id_fkey(full_name,avatar_url)")
+      db.from("marketplace_listings").select("id,title,price,listing_type,status,category_id,owner_id,created_at, marketplace_categories(name), owner:profiles!marketplace_listings_owner_id_fkey(full_name,avatar_url)")
         .order("created_at",{ascending:false}).limit(60),
       db.rpc("is_super_admin", {uid: this.ctx.user.id})
     ]);
@@ -2078,7 +2083,8 @@ const App = {
       return;
     }
     // file_uploads.related_id عمود عام بدون FK حقيقي (يُستخدم لأنواع محتوى متعددة)،
-    // فما يقدر Supabase يدمجه تلقائيًا داخل استعلام marketplace_listings — نجيبه بطلب منفصل ونربطه يدويًا.
+    // فما يقدر Supabase يدمجه تلقائيًا داخل استعلام marketplace_listings — نجيبه بطلب واحد مجمّع (مو طلب
+    // منفصل لكل منتج، عشان ما نطيح بمشكلة N+1) ونربطه يدويًا.
     const listingIds = listings.map(l=>l.id);
     const { data: allFiles } = listingIds.length
       ? await db.from("file_uploads").select("id,storage_path,related_id").eq("related_type","marketplace_listing").in("related_id", listingIds)
@@ -2093,10 +2099,20 @@ const App = {
     let activeCategory = "";
     let searchQuery = "";
 
-    const cardHtml = (l)=>{
+    // أول 4 بطاقات (أول صفّين تقريبًا بشبكة عمودين) تُحمَّل فورًا (loading="eager") عشان الصورة الأولى
+    // تظهر بسرعة بدون تأخير الـlazy loading — الباقي أسفل الشاشة يتحمّل lazy فقط عند الحاجة.
+    const cardHtml = (l, idx)=>{
       const img = (filesByListing[l.id]||[])[0];
+      const eager = idx < 4;
       return `<button class="mpCard" data-mplisting="${l.id}">
-        ${img ? `<img class="mpCardImg" data-mpthumb="${img.id}" alt="">` : `<div class="mpCardImgPlaceholder">${Icon('shopping_bag')}</div>`}
+        <div class="mpCardImgWrap">
+          ${img ? `
+            <div class="skeleton" data-mpskeleton></div>
+            <img class="mpCardImg" data-mpthumb="${img.id}"
+                 alt="صورة منتج: ${CodeUp.escapeHtml(l.title)}"
+                 loading="${eager?'eager':'lazy'}" decoding="async" width="400" height="300">
+          ` : `<div class="mpCardImgPlaceholder">${Icon('shopping_bag')}<span>لا توجد صورة</span></div>`}
+        </div>
         <div class="mpCardBody">
           <div class="mpCardTitle">${CodeUp.escapeHtml(l.title)}</div>
           ${l.listing_type==='sale' && l.price!=null ? `<div class="mpCardPrice">${l.price} ج.س</div>` : ""}
@@ -2119,7 +2135,7 @@ const App = {
         return;
       }
       gridEl.className = "mpGrid";
-      gridEl.innerHTML = results.map(cardHtml).join("");
+      gridEl.innerHTML = results.map((l,i)=>cardHtml(l,i)).join("");
       wireCardClicks();
       loadThumbs();
     };
@@ -2129,12 +2145,32 @@ const App = {
         btn.onclick = ()=> this.go({name:"marketplace_listing", listingId: btn.dataset.mplisting});
       });
     };
+    // كل بطاقة: نجرّب رابط صورة محسّن (مصغّر ومضغوط) أولًا؛ لو الميزة غير مفعّلة أو فشلت،
+    // CodeUp.getOptimizedSignedUrl نفسها ترجع تلقائيًا للرابط الأصلي (بدون كسر). ولو فشل تحميل
+    // الصورة بالمتصفح نفسه (onerror) نجرّب مرة واحدة إضافية بالرابط الأصلي الكامل، وإلا نعرض Placeholder.
     const loadThumbs = ()=>{
       body.querySelectorAll("[data-mpthumb]").forEach(async (img)=>{
         const fileId = img.dataset.mpthumb;
         const owner = (allFiles||[]).find(f=>f.id===fileId);
-        if(!owner?.storage_path) return;
-        try{ img.src = await CodeUp.getSignedUrl("submissions", owner.storage_path); }catch(e){}
+        const wrap = img.closest(".mpCardImgWrap");
+        if(!owner?.storage_path){ return; }
+        const showPlaceholder = ()=>{
+          if(wrap) wrap.innerHTML = `<div class="mpCardImgPlaceholder">${Icon('shopping_bag')}<span>تعذّر تحميل الصورة</span></div>`;
+        };
+        img.onload = ()=>{
+          img.classList.add("loaded");
+          wrap?.querySelector("[data-mpskeleton]")?.remove();
+        };
+        let triedFallback = false;
+        img.onerror = async ()=>{
+          if(triedFallback){ showPlaceholder(); return; }
+          triedFallback = true;
+          try{ img.src = await CodeUp.getSignedUrl("submissions", owner.storage_path); }
+          catch(e){ showPlaceholder(); }
+        };
+        try{
+          img.src = await CodeUp.getOptimizedSignedUrl("submissions", owner.storage_path, {width:400, quality:65});
+        }catch(e){ showPlaceholder(); }
       });
     };
 
