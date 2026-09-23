@@ -420,27 +420,28 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
 .pill{display:inline-block;font-size:11px;font-weight:700;padding:2px 9px;border-radius:20px;background:rgba(255,255,255,.08);color:var(--ink60)}
 
 /* Marketplace */
-.mpHeader{margin:4px 0 10px}
-.mpHeader h2{margin:0 0 3px;font-size:19px}
+.mpHeader{margin:4px 0 14px}
+.mpHeader h2{margin:0 0 4px;font-size:19px}
 .mpHeaderDesc{margin:0;font-size:12.5px;color:var(--ink60);line-height:1.5}
-.mpToolbar{display:flex;gap:8px;align-items:center;margin-bottom:10px}
+.mpToolbar{display:flex;gap:8px;align-items:center;margin-bottom:14px}
 .mpSearchWrap{flex:1;display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.03);border:1px solid var(--line);border-radius:12px;padding:0 12px}
 .mpSearchWrap svg{width:16px;height:16px;stroke:var(--ink60);flex-shrink:0}
 .mpSearchWrap input{border:0;background:transparent;padding:10px 0}
 .mpAddBtn{flex-shrink:0;white-space:nowrap;padding:10px 14px}
-.mpChipsRow{display:flex;gap:7px;overflow-x:auto;padding-bottom:8px;margin-bottom:4px;scrollbar-width:none}
+.mpChipsRow{display:flex;gap:7px;overflow-x:auto;padding-bottom:8px;margin-bottom:14px;scrollbar-width:none}
 .mpChipsRow::-webkit-scrollbar{display:none}
 .mpChip{flex-shrink:0;white-space:nowrap;border:1px solid var(--line);background:rgba(255,255,255,.03);color:var(--ink60);border-radius:999px;padding:6px 13px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit}
 .mpChip.active{background:var(--ink);color:var(--bg0);border-color:var(--ink)}
-.mpSectionLabel{font-size:12.5px;color:var(--ink60);font-weight:700;margin:16px 0 8px}
+.mpSectionLabel{font-size:12.5px;color:var(--ink60);font-weight:700;margin:18px 0 10px}
 .mpGrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 @media(min-width:700px){.mpGrid{grid-template-columns:repeat(3,1fr)}}
 @media(min-width:980px){.mpGrid{grid-template-columns:repeat(4,1fr)}}
-.mpCard{background:var(--surface);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);border-radius:14px;padding:8px;cursor:pointer;display:flex;flex-direction:column;gap:5px;text-align:start;min-width:0}
+.mpCard{background:var(--surface);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);border-radius:14px;padding:8px;cursor:pointer;display:flex;flex-direction:row;align-items:center;gap:9px;text-align:start;min-width:0}
 .mpCard:active{border-color:var(--accent)}
-.mpCardImg,.mpCardImgPlaceholder{width:100%;aspect-ratio:1/1;border-radius:10px;object-fit:cover;background:rgba(255,255,255,.04)}
+.mpCardImg,.mpCardImgPlaceholder{width:56px;height:56px;flex-shrink:0;border-radius:10px;object-fit:cover;background:rgba(255,255,255,.04)}
 .mpCardImgPlaceholder{display:grid;place-items:center;color:var(--ink60)}
-.mpCardImgPlaceholder svg{width:26px;height:26px}
+.mpCardImgPlaceholder svg{width:22px;height:22px}
+.mpCardBody{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
 .mpCardTitle{font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .mpCardPrice{font-size:13px;font-weight:700;color:var(--accent)}
 .mpCardFooter{display:flex;justify-content:space-between;align-items:center;gap:6px}
@@ -2096,11 +2097,13 @@ const App = {
       const img = (filesByListing[l.id]||[])[0];
       return `<button class="mpCard" data-mplisting="${l.id}">
         ${img ? `<img class="mpCardImg" data-mpthumb="${img.id}" alt="">` : `<div class="mpCardImgPlaceholder">${Icon('shopping_bag')}</div>`}
-        <div class="mpCardTitle">${CodeUp.escapeHtml(l.title)}</div>
-        ${l.listing_type==='sale' && l.price!=null ? `<div class="mpCardPrice">${l.price} ج.س</div>` : ""}
-        <div class="mpCardFooter">
-          <span class="mpBadge ${l.listing_type}">${this.mpTypeLabel(l.listing_type)}</span>
-          <span class="mpCardSeller">${CodeUp.avatarHtml(l.owner?.full_name, l.owner?.avatar_url, 16)}</span>
+        <div class="mpCardBody">
+          <div class="mpCardTitle">${CodeUp.escapeHtml(l.title)}</div>
+          ${l.listing_type==='sale' && l.price!=null ? `<div class="mpCardPrice">${l.price} ج.س</div>` : ""}
+          <div class="mpCardFooter">
+            <span class="mpBadge ${l.listing_type}">${this.mpTypeLabel(l.listing_type)}</span>
+            <span class="mpCardSeller">${CodeUp.avatarHtml(l.owner?.full_name, l.owner?.avatar_url, 16)}</span>
+          </div>
         </div>
       </button>`;
     };
@@ -2152,7 +2155,7 @@ const App = {
       ${pendingReview.length ? `
       <p class="mpSectionLabel">بانتظار مراجعتك (أدمن)</p>
       <div class="mpGrid">${pendingReview.map(l=>`
-        <div class="mpCard" style="cursor:default">
+        <div class="mpCard" style="cursor:default;flex-direction:column;align-items:stretch">
           <div class="mpCardTitle">${CodeUp.escapeHtml(l.title)}</div>
           <div class="mpCardPrice">${l.price??''} ج.س</div>
           <div class="twActionsRow" style="margin-top:2px">
