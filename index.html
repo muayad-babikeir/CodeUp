@@ -2063,7 +2063,8 @@ const App = {
   // Trigger يمنع تعديل status مباشرة) — الواجهة هنا للعرض والاستدعاء فقط،
   // بدون أي منطق حساس على الفرونت إند.
   mpTypeLabel(t){ return {sale:"للبيع", exchange:"للاستبدال", borrow:"للإعارة", free:"مجاني"}[t] || t; },
-  mpStatusLabel(s){
+  mpStatusLabel(s, listingType){
+    if(listingType==='sale' && s==='reserved') return "تم الاتفاق";
     return {pending_review:"بانتظار مراجعة الأدمن", active:"متاح", reserved:"محجوز", sold:"تم البيع",
       borrowed:"معار حاليًا", exchanged:"تم الاستبدال", given_away:"تم الإهداء", cancelled:"ملغى", rejected:"مرفوض"}[s] || s;
   },
@@ -2118,6 +2119,7 @@ const App = {
           ${l.listing_type==='sale' && l.price!=null ? `<div class="mpCardPrice">${l.price} ج.س</div>` : ""}
           <div class="mpCardFooter">
             <span class="mpBadge ${l.listing_type}">${this.mpTypeLabel(l.listing_type)}</span>
+            ${l.status!=='active' ? `<span class="mpBadge ${l.status==='sold'?'status-active':l.status==='reserved'?'status-warn':'status-neutral'}">${this.mpStatusLabel(l.status, l.listing_type)}</span>` : ""}
             <span class="mpCardSeller">${CodeUp.avatarHtml(l.owner?.full_name, l.owner?.avatar_url, 16)}</span>
           </div>
         </div>
@@ -2424,8 +2426,13 @@ const App = {
         if(l.status==='borrowed') extra = `<button class="btn dark" id="mpMarkReturnedBtn">تعليم كـ تم الإرجاع</button>`;
         if(l.status==='reserved' && l.listing_type==='exchange') extra = `<button class="btn dark" id="mpCompleteExchangeBtn">تعليم كـ تم الاستبدال</button>`;
         if(l.status==='reserved' && l.listing_type==='free') extra = `<button class="btn dark" id="mpMarkGivenBtn">تعليم كـ تم الإهداء</button>`;
-        return (extra || canCancel) ? `<div class="twActionsRow" style="margin-top:14px">${extra}${canCancel?`<button class="btn" id="mpCancelBtn">إلغاء الإعلان</button>`:""}</div>` : "";
+        if(l.listing_type==='sale' && l.status==='active') extra = `<button class="btn dark" id="mpAgreeBtn">تم الاتفاق</button>`;
+        if(l.listing_type==='sale' && l.status==='reserved') extra = `<button class="btn dark" id="mpSoldBtn">تم البيع</button><button class="btn" id="mpUnagreeBtn">إلغاء الاتفاق</button>`;
+        return `<div class="twActionsRow" style="margin-top:14px">${extra}${canCancel?`<button class="btn" id="mpCancelBtn">إلغاء الإعلان</button>`:""}</div>
+                <div class="twActionsRow" style="margin-top:8px"><button class="btn" id="mpDeleteBtn" style="color:#F2555F">حذف الإعلان نهائيًا</button></div>`;
       }
+      if(l.status === 'sold') return `<div class="mpStateBanner rejected">هذا الإعلان تم بيعه بالفعل.</div>`;
+      if(l.status === 'reserved' && l.listing_type==='sale') return `<div class="mpStateBanner pending">تم الاتفاق على هذا الإعلان — غير متاح للطلب حاليًا.</div>`;
       if(l.status !== 'active') return "";
       if(myActiveReq){
         const map = {pending:{cls:"pending",text:"طلبك بانتظار رد صاحب الإعلان."}, accepted:{cls:"accepted",text:"تم قبول طلبك."}, rejected:{cls:"rejected",text:"تم رفض الطلب."}};
@@ -2448,7 +2455,7 @@ const App = {
       </div>
       <div class="mpBadgeRow">
         <span class="mpBadge ${l.listing_type}">${this.mpTypeLabel(l.listing_type)}</span>
-        <span class="mpBadge ${statusClass}">${this.mpStatusLabel(l.status)}</span>
+        <span class="mpBadge ${statusClass}">${this.mpStatusLabel(l.status, l.listing_type)}</span>
       </div>
 
       <div class="mpInfoList">
@@ -2565,6 +2572,52 @@ const App = {
       cancelBtn.disabled = true;
       try{ await db.rpc("marketplace_cancel_listing", {p_listing_id: l.id}).throwOnError(); CodeUp.toast("تم إلغاء الإعلان","success"); this.renderMarketplaceListing(listingId); }
       catch(e){ CodeUp.toast(e.message || "تعذّر الإلغاء","error"); cancelBtn.disabled=false; }
+    };
+
+    const agreeBtn = dbody.querySelector("#mpAgreeBtn");
+    if(agreeBtn) agreeBtn.onclick = async ()=>{
+      const ok = await this.confirmDialog({title:"تم الاتفاق؟", message:"هل تم الاتفاق فعلًا مع المشتري؟ سيتم تغيير حالة الإعلان إلى \"تم الاتفاق\". يمكنك لاحقًا تأكيد إتمام البيع أو إلغاء الاتفاق.", confirmLabel:"نعم، تم الاتفاق"});
+      if(!ok) return;
+      agreeBtn.disabled = true; agreeBtn.textContent = "جارٍ التحديث…";
+      try{ await db.rpc("marketplace_update_listing_status", {p_listing_id: l.id, p_new_status:"reserved"}).throwOnError(); CodeUp.toast("تم تعليم الإعلان كـ تم الاتفاق","success"); this.renderMarketplaceListing(listingId); }
+      catch(e){ CodeUp.toast(e.message || "تعذّر تحديث حالة الإعلان","error"); agreeBtn.disabled=false; agreeBtn.textContent="تم الاتفاق"; }
+    };
+
+    const soldBtn = dbody.querySelector("#mpSoldBtn");
+    if(soldBtn) soldBtn.onclick = async ()=>{
+      const ok = await this.confirmDialog({title:"تأكيد إتمام البيع", message:"هل تمت عملية البيع بالفعل؟ سيتم تغيير حالة الإعلان إلى \"تم البيع\"، ولن يُعتبر الإعلان متاحًا للبيع بعد ذلك.", confirmLabel:"نعم، تم البيع"});
+      if(!ok) return;
+      soldBtn.disabled = true; soldBtn.textContent = "جارٍ التحديث…";
+      try{ await db.rpc("marketplace_update_listing_status", {p_listing_id: l.id, p_new_status:"sold"}).throwOnError(); CodeUp.toast("تم تعليم الإعلان كـ تم البيع","success"); this.renderMarketplaceListing(listingId); }
+      catch(e){ CodeUp.toast(e.message || "تعذّر تحديث حالة الإعلان","error"); soldBtn.disabled=false; soldBtn.textContent="تم البيع"; }
+    };
+
+    const unagreeBtn = dbody.querySelector("#mpUnagreeBtn");
+    if(unagreeBtn) unagreeBtn.onclick = async ()=>{
+      const ok = await this.confirmDialog({title:"إلغاء الاتفاق؟", message:"سيعود الإعلان إلى حالة \"متاح للبيع\".", confirmLabel:"نعم، إلغاء الاتفاق"});
+      if(!ok) return;
+      unagreeBtn.disabled = true; unagreeBtn.textContent = "جارٍ التحديث…";
+      try{ await db.rpc("marketplace_update_listing_status", {p_listing_id: l.id, p_new_status:"active"}).throwOnError(); CodeUp.toast("تم إلغاء الاتفاق","success"); this.renderMarketplaceListing(listingId); }
+      catch(e){ CodeUp.toast(e.message || "تعذّر تحديث حالة الإعلان","error"); unagreeBtn.disabled=false; unagreeBtn.textContent="إلغاء الاتفاق"; }
+    };
+
+    const deleteBtn = dbody.querySelector("#mpDeleteBtn");
+    if(deleteBtn) deleteBtn.onclick = async ()=>{
+      const statusNote = l.status==='reserved' ? "هذا الإعلان عليه اتفاق حالي. حذف الإعلان سيزيله من Marketplace، لكن لن يُعتبر ذلك إتمامًا للبيع."
+        : l.status==='sold' ? "تم تسجيل هذا الإعلان كـ \"تم البيع\". سيتم إزالة الإعلان من Marketplace مع الاحتفاظ بسجل الصفقة حسب النظام."
+        : "هل أنت متأكد من حذف هذا الإعلان؟";
+      const ok = await this.confirmDialog({title:"حذف الإعلان؟", message:statusNote, confirmLabel:"حذف الإعلان", danger:true});
+      if(!ok) return;
+      deleteBtn.disabled = true; deleteBtn.textContent = "جارٍ الحذف…";
+      try{
+        const { data: paths, error } = await db.rpc("marketplace_delete_listing", {p_listing_id: l.id});
+        if(error) throw error;
+        if(paths && paths.length){
+          try{ await db.storage.from("submissions").remove(paths); }catch(se){ /* الإعلان اتحذف من القاعدة بنجاح؛ فشل تنظيف Storage مو حرج ولا يُوقف العملية */ }
+        }
+        CodeUp.toast("تم حذف الإعلان", "success");
+        this.go({name:"home", homeTab:"marketplace"});
+      }catch(e){ CodeUp.toast(e.message || "تعذّر حذف الإعلان — لم يتم إجراء أي تغيير","error"); deleteBtn.disabled=false; deleteBtn.textContent="حذف الإعلان نهائيًا"; }
     };
 
     const returnedBtn = dbody.querySelector("#mpMarkReturnedBtn");

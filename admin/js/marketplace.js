@@ -3,6 +3,13 @@
 const MP_TYPE_LABEL = {sale:"للبيع", exchange:"للاستبدال", borrow:"للإعارة", free:"مجاني"};
 const MP_STATUS_LABEL = {pending_review:"بانتظار المراجعة", active:"متاح", reserved:"محجوز", sold:"تم البيع",
   borrowed:"معار حاليًا", exchanged:"تم الاستبدال", given_away:"تم الإهداء", cancelled:"ملغى", rejected:"مرفوض"};
+// نفس فئات pill (neutral/pending/approved/rejected/info) المستخدمة أصلًا بقسم الأرشفة (audit.js) — بدون Emoji
+const MP_STATUS_PILL = {pending_review:"pending", active:"approved", reserved:"pending", sold:"info",
+  borrowed:"info", exchanged:"info", given_away:"info", cancelled:"neutral", rejected:"rejected"};
+function mpStatusBadge(l){
+  const label = (l.listing_type==='sale' && l.status==='reserved') ? "تم الاتفاق" : (MP_STATUS_LABEL[l.status]||l.status);
+  return `<span class="pill ${MP_STATUS_PILL[l.status]||'neutral'}">${label}</span>`;
+}
 
 // ---------------- Dashboard ----------------
 Admin.sections.marketplace_dashboard = {
@@ -78,7 +85,7 @@ Admin.sections.marketplace_listings = {
             <tr>
               <td>${CodeUp.escapeHtml(l.title)}</td>
               <td>${MP_TYPE_LABEL[l.listing_type]||l.listing_type}</td>
-              <td>${MP_STATUS_LABEL[l.status]||l.status}</td>
+              <td>${mpStatusBadge(l)}</td>
               <td>${CodeUp.escapeHtml(l.owner?.full_name || l.owner?.email || "")}</td>
               <td>${CodeUp.escapeHtml(l.marketplace_categories?.name || "—")}</td>
               <td style="white-space:nowrap">
@@ -87,6 +94,7 @@ Admin.sections.marketplace_listings = {
                   <button class="btn dark" data-approvelisting="${l.id}">اعتماد</button>
                   <button class="btn" data-rejectlisting="${l.id}">رفض</button>
                 `:""}
+                <button class="btn" data-deletelisting="${l.id}" style="color:#F2555F">حذف</button>
               </td>
             </tr>`).join("") : `<tr><td colspan="6"><div class="emptyStatePro"><h4>لا توجد إعلانات</h4></div></td></tr>`}
         </tbody></table></div></div>
@@ -118,6 +126,23 @@ Admin.sections.marketplace_listings = {
           }catch(e){ CodeUp.toast(e.message || "تعذّر الرفض", "error"); b.disabled=false; }
         };
       });
+      body.querySelectorAll("[data-deletelisting]").forEach(b=>{
+        b.onclick = async ()=>{
+          const l = listings.find(x=>x.id===b.dataset.deletelisting);
+          const ok = confirm(`حذف إعلان Marketplace\n\nأنت على وشك حذف هذا الإعلان من النظام.\n\nالإعلان: ${l.title}\nالمالك: ${l.owner?.full_name || l.owner?.email || ""}\nالحالة: ${MP_STATUS_LABEL[l.status]||l.status}\n\nهل أنت متأكد؟`);
+          if(!ok) return;
+          b.disabled = true;
+          try{
+            const { data: paths, error } = await db.rpc("marketplace_delete_listing", {p_listing_id: l.id});
+            if(error) throw error;
+            if(paths && paths.length){
+              try{ await db.storage.from("submissions").remove(paths); }catch(se){}
+            }
+            CodeUp.toast("تم حذف الإعلان نهائيًا", "success");
+            draw(statusFilter);
+          }catch(e){ CodeUp.toast(e.message || "تعذّر حذف الإعلان", "error"); b.disabled=false; }
+        };
+      });
     };
     draw(null);
   }
@@ -130,7 +155,7 @@ async function openListingDrawer(l){
       <b>${CodeUp.escapeHtml(l.title)}</b>
       <button class="iconBtn" id="mplDrawerClose" aria-label="إغلاق">${Icon("x")}</button>
     </div>
-    <p class="small">${MP_TYPE_LABEL[l.listing_type]||l.listing_type} — ${MP_STATUS_LABEL[l.status]||l.status}</p>
+    <p class="small">${MP_TYPE_LABEL[l.listing_type]||l.listing_type} — ${mpStatusBadge(l)}</p>
     ${l.description ? `<p>${CodeUp.escapeHtml(l.description)}</p>` : ""}
     <p class="small">المالك: ${CodeUp.escapeHtml(l.owner?.full_name || l.owner?.email || "")}</p>
     ${l.listing_type==='sale' && l.price!=null ? `<p class="small">السعر: ${l.price} ج.س</p>` : ""}
