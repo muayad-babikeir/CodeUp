@@ -11,6 +11,51 @@ function mpStatusBadge(l){
   return `<span class="pill ${MP_STATUS_PILL[l.status]||'neutral'}">${label}</span>`;
 }
 
+// ---------------- Settings (مدة احتفاظ صور Marketplace بـSupabase Storage قبل الأرشفة الكاملة) ----------------
+Admin.sections.marketplace_settings = {
+  label: "إعدادات Marketplace",
+  async render(body){
+    body.innerHTML = `<div class="card">${Array(1).fill(`<div class="skeleton skeleton-line w60" style="height:34px;margin-bottom:10px"></div>`).join("")}</div>`;
+
+    const draw = async ()=>{
+      const { data: setting, error } = await db.from("archive_settings").select("*").eq("scope_type","marketplace").is("scope_id",null).maybeSingle();
+      if(error){ body.innerHTML = `<div class="alertBox error"><span>تعذّر تحميل الإعدادات.</span><button class="btn alertRetry" id="mpsRetry">إعادة المحاولة</button></div>`; body.querySelector("#mpsRetry").onclick=()=>Admin.go("marketplace_settings"); return; }
+
+      body.innerHTML = `
+        <div class="card">
+          <b>مدة بقاء صور الإعلانات في Supabase Storage</b>
+          <p class="small" style="margin:6px 0 10px">
+            بعد رفع أي صورة لإعلان، تُرسل نسخة فورية لتيليجرام (موضوع STORE) كأرشيف دائم. النسخة الأصلية تبقى
+            متاحة للمعاينة المباشرة داخل التطبيق (بدون فتح تيليجرام) لهذه المدة فقط، ثم تُحذف تلقائيًا من
+            Storage لتوفير المساحة — بعدها تصير الصورة رابط تيليجرام خارجي بدل معاينة داخل التطبيق. نفس
+            الآلية المستخدمة بالضبط لملفات الواجبات والرسائل.
+          </p>
+          <div class="row" style="gap:8px;align-items:center">
+            <input id="mpsDays" type="number" min="1" value="${setting?.retention_days ?? 1}" style="width:100px">
+            <span class="small">يوم</span>
+          </div>
+          <button class="btn dark" id="mpsSaveBtn" style="margin-top:10px">حفظ</button>
+          <p class="small" style="margin-top:8px;color:var(--ink60)">القيمة الافتراضية الحالية: يوم واحد (24 ساعة).</p>
+        </div>
+      `;
+
+      body.querySelector("#mpsSaveBtn").onclick = async ()=>{
+        const days = Number(body.querySelector("#mpsDays").value);
+        if(!(days >= 1)){ CodeUp.toast("أدخل رقم أيام صحيح (1 على الأقل)", "error"); return; }
+        try{
+          await db.from("archive_settings").upsert(
+            {scope_type:"marketplace", scope_id:null, retention_days:days, created_by:Admin.ctx.user.id},
+            {onConflict:"scope_type,scope_id"}
+          ).throwOnError();
+          CodeUp.toast("تم حفظ المدة", "success");
+          draw();
+        }catch(e){ CodeUp.toast(e.message || "تعذّر الحفظ", "error"); }
+      };
+    };
+    draw();
+  }
+};
+
 // ---------------- Dashboard ----------------
 Admin.sections.marketplace_dashboard = {
   label: "لوحة Marketplace",
