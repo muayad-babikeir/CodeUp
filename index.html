@@ -23,9 +23,10 @@
 <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="manifest" href="manifest.json">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" media="print" onload="this.media='all'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap"></noscript>
 <style>
 /* ===== CodeUp — نظام تصميم داكن مستوحى من لوحات ألوان @graphix_theory =====
    Onyx (خلفية) + Candy Blue (أساسي) + Lime (XP/نجاح) + Violet (ثانوي/قيادة) */
@@ -203,7 +204,7 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
 .topbrand .mark{width:30px;height:30px;border-radius:10px;background:var(--surface-solid);border:1px solid var(--line);color:var(--accent-ink);display:grid;place-items:center;font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:13px;overflow:hidden}
 .topbrand .mark img{width:68%;height:68%;object-fit:contain}
 .topRight{display:flex;align-items:center;gap:8px;flex-shrink:0}
-.iconBtn{position:relative;border:1px solid var(--line);background:rgba(255,255,255,.03);border-radius:10px;width:38px;height:38px;display:grid;place-items:center;cursor:pointer;color:var(--ink)}
+.iconBtn{position:relative;border:1px solid var(--line);background:rgba(255,255,255,.03);border-radius:10px;width:44px;height:44px;display:grid;place-items:center;cursor:pointer;color:var(--ink)}
 .topAvatarBtn{border-radius:50%;overflow:hidden;background:var(--accent);color:#fff;font-weight:700;font-size:14px}
 .topAvatarBtn img{width:100%;height:100%;object-fit:cover;border-radius:50%}
 .iconBtn svg{width:19px;height:19px}
@@ -698,6 +699,7 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
 </nav>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.81.1"></script>
 <script src="js/supabase.js"></script>
 <script src="js/shared.js"></script>
 <script>
