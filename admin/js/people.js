@@ -7,6 +7,13 @@ Admin.sections.users = {
     const { data: profiles, error } = await db.from("profiles").select("*").order("created_at",{ascending:false}).limit(200);
     if(error){ body.innerHTML = `<div class="alertBox error"><span>تعذّر تحميل المستخدمين.</span><button class="btn alertRetry" id="usersRetry">إعادة المحاولة</button></div>`; body.querySelector("#usersRetry").onclick=()=>Admin.go("users"); return; }
 
+    // حالة Google Wallet لكل مستخدم — استعلام واحد مجمّع بدل استعلام لكل صف
+    const { data: walletPasses } = await db.from("membership_wallet_passes").select("user_id, status");
+    const walletByUser = {};
+    (walletPasses||[]).forEach(w=>{ walletByUser[w.user_id] = w.status; });
+    const walletLabel = { not_created:"—", syncing:"قيد الإنشاء", active:"نشطة", sync_failed:"فشلت المزامنة" };
+    const walletPillClass = { syncing:"pending", active:"approved", sync_failed:"rejected", not_created:"neutral" };
+
     const state = { q:"", roleFilter:"", sortKey:"created_at", sortDir:"desc", page:1, pageSize:20 };
     const PAGE_SIZE = state.pageSize;
 
@@ -28,6 +35,7 @@ Admin.sections.users = {
             <th class="sortable" data-sort="full_name">الاسم <span class="sortArrow">▾</span></th>
             <th>البريد</th>
             <th>سوبر أدمن</th>
+            <th>Google Wallet</th>
             <th class="sortable sorted" data-sort="created_at">تاريخ الانضمام <span class="sortArrow">▾</span></th>
             <th></th>
           </tr></thead>
@@ -68,9 +76,13 @@ Admin.sections.users = {
           <td><div class="metaWithAvatar">${CodeUp.avatarHtml(p.full_name, null, 30)}<span>${CodeUp.escapeHtml(p.full_name||"—")}</span></div></td>
           <td>${CodeUp.escapeHtml(p.email||"")}</td>
           <td>${p.is_super_admin?'<span class="pill approved">نعم</span>':'<span class="pill neutral">لا</span>'}</td>
+          <td>
+            <span class="pill ${walletPillClass[walletByUser[p.id]||"not_created"]}">${walletLabel[walletByUser[p.id]||"not_created"]}</span>
+            ${walletByUser[p.id] ? `<button class="btn" style="margin-inline-start:6px;padding:4px 10px;font-size:12px" data-walletsync="${p.id}">مزامنة</button>` : ""}
+          </td>
           <td class="small">${CodeUp.formatDate(p.created_at)}</td>
           <td>${p.id===Admin.ctx.user.id?'':`<button class="btn" data-toggle="${p.id}" data-val="${!p.is_super_admin}">${p.is_super_admin?'إزالة الصلاحية':'ترقية لسوبر أدمن'}</button>`}</td>
-        </tr>`).join("") || `<tr><td colspan="5"><div class="emptyStatePro"><h4>لا يوجد مستخدمون مطابقون</h4><p>جرّب تعديل البحث أو الفلتر.</p></div></td></tr>`;
+        </tr>`).join("") || `<tr><td colspan="6"><div class="emptyStatePro"><h4>لا يوجد مستخدمون مطابقون</h4><p>جرّب تعديل البحث أو الفلتر.</p></div></td></tr>`;
 
       pager.innerHTML = filtered.length ? `
         <button id="pgPrev" ${state.page<=1?"disabled":""}>‹</button>
@@ -87,6 +99,28 @@ Admin.sections.users = {
       });
       tbody.querySelectorAll("[data-row]").forEach(tr=>{
         tr.onclick = ()=> openStudentDrawer(profiles.find(p=>p.id===tr.dataset.row));
+      });
+      tbody.querySelectorAll("[data-walletsync]").forEach(b=>{
+        b.onclick = async (ev)=>{
+          ev.stopPropagation();
+          const targetId = b.dataset.walletsync;
+          b.disabled = true; b.textContent = "جارِ المزامنة...";
+          try{
+            const {data:{session}} = await db.auth.getSession();
+            const res = await fetch(`${SUPABASE_URL}/functions/v1/google-wallet`, {
+              method:"POST",
+              headers:{"Authorization":`Bearer ${session.access_token}`, "Content-Type":"application/json"},
+              body: JSON.stringify({action:"sync", target_user_id: targetId})
+            });
+            const out = await res.json();
+            if(!res.ok || out.error) throw new Error(out.error || "فشلت المزامنة");
+            CodeUp.toast("تمت مزامنة البطاقة", "success");
+            Admin.go("users");
+          }catch(e){
+            CodeUp.toast(e.message||"فشلت المزامنة", "error");
+            b.disabled = false; b.textContent = "مزامنة";
+          }
+        };
       });
       const prevBtn = pager.querySelector("#pgPrev"); if(prevBtn) prevBtn.onclick = ()=>{ state.page--; draw(); };
       const nextBtn = pager.querySelector("#pgNext"); if(nextBtn) nextBtn.onclick = ()=>{ state.page++; draw(); };
