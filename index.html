@@ -57,6 +57,12 @@
 .apStat b{display:block;font-family:'IBM Plex Mono',monospace;font-size:17px;color:var(--ap-vanilla)}
 .apStat span{display:block;font-size:10.5px;color:var(--ink60);margin-top:2px}
 .apTabBar{margin-top:16px}
+.apSection{padding:14px 2px;border-bottom:1px solid var(--line)}
+.apSection:last-child{border-bottom:0}
+.apSecTitle{font-size:12.5px;font-weight:700;letter-spacing:.02em;color:var(--ap-lime);font-family:'IBM Plex Mono',monospace;text-transform:uppercase}
+.apRow{display:flex;align-items:center;justify-content:space-between;margin-top:10px}
+.apLinkRow{display:block;padding:9px 0;color:var(--ink);text-decoration:none;font-size:13.5px;border-bottom:1px solid var(--line)}
+.apLinkRow:last-child{border-bottom:0}
 *{box-sizing:border-box; min-width:0}
 body{
   margin:0;font-family:'IBM Plex Sans Arabic',system-ui,sans-serif;color:var(--ink);line-height:1.55;
@@ -1457,10 +1463,18 @@ const App = {
   },
 
   openAccountSettings(){
+    const enr = this.ctx.enrollments || [];
+    const roleLabel = this.ctx.isPlatformAdmin ? "سوبر أدمن"
+      : (this.ctx.courseAdmins||[]).length ? "مشرف كورس"
+      : (this.ctx.leaderSquads||[]).length ? "قائد مجموعة"
+      : enr.length ? "طالب" : "عضو CodeUp";
+
     const m = this.modal(`
-      <h3>إعدادات الحساب</h3>
-      <div class="card" style="margin-top:10px">
-        <b>الملف الشخصي</b>
+      <div class="accountPro">
+      <h3 style="margin-top:0">إعدادات الحساب</h3>
+
+      <div class="apSection">
+        <div class="apSecTitle">الملف الشخصي</div>
         <div class="row" style="align-items:center;gap:12px;margin-top:10px">
           <div class="topAvatarBtn" id="editAvatarPreview" style="width:56px;height:56px;font-size:20px;flex-shrink:0">
             ${this.ctx.profile.avatar_url?`<img src="${this.ctx.profile.avatar_url}" alt="">`:`<span>${CodeUp.escapeHtml((this.ctx.profile.full_name||"؟")[0])}</span>`}
@@ -1474,23 +1488,55 @@ const App = {
         <input id="editFullName" value="${CodeUp.escapeHtml(this.ctx.profile.full_name||"")}">
         <button class="btn dark" id="saveProfileBtn" style="margin-top:10px">حفظ التعديلات</button>
       </div>
-      <div class="card" style="margin-top:10px">
-        <b>عضوية CodeUp</b>
-        <p class="small" style="margin-top:6px">أضف بطاقة عضويتك إلى Google Wallet للوصول السريع إليها من هاتفك.</p>
-        <button class="btn dark" id="googleWalletBtn" style="width:100%;margin-top:10px;display:flex;align-items:center;justify-content:center;gap:8px">
+
+      <div class="apSection">
+        <div class="apSecTitle">الأمان والحساب</div>
+        <div class="apRow"><span>البريد الإلكتروني</span><span class="mono small">${CodeUp.escapeHtml(this.ctx.user.email||"")}</span></div>
+        <button class="btn" id="changePasswordBtn" style="width:100%;margin-top:10px">تغيير كلمة المرور</button>
+        <button class="btn" id="accountLogoutBtn" style="width:100%;margin-top:8px">تسجيل الخروج</button>
+      </div>
+
+      <div class="apSection">
+        <div class="apSecTitle">عضوية CodeUp</div>
+        <div class="apRow"><span>الحالة</span><span class="apBadge role">${CodeUp.escapeHtml(roleLabel)}</span></div>
+        <p class="small" style="margin-top:8px">أضف بطاقة عضويتك إلى Google Wallet للوصول السريع إليها من هاتفك.</p>
+        <button class="btn dark" id="googleWalletBtn" style="width:100%;margin-top:6px;display:flex;align-items:center;justify-content:center;gap:8px">
           <svg id="googleWalletBtnIcon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="14" rx="3"></rect><path d="M2 10h20"></path><path d="M6 15h4"></path></svg>
           <span id="googleWalletBtnLabel">إضافة إلى Google Wallet</span>
         </button>
       </div>
-      <div class="card" style="margin-top:10px">
-        <button class="btn" id="accountLogoutBtn" style="width:100%">تسجيل الخروج</button>
+
+      <div class="apSection">
+        <div class="apSecTitle">المساعدة</div>
+        <a class="apLinkRow" href="mailto:support@codeupsd.online">التواصل مع CodeUp</a>
+        <a class="apLinkRow" href="mailto:support@codeupsd.online?subject=مشكلة%20في%20CodeUp">الإبلاغ عن مشكلة</a>
       </div>
-      <div class="card" style="margin-top:10px;border-color:rgba(224,49,49,.4)">
-        <b style="color:#E03131">حذف الحساب نهائيًا</b>
-        <p class="small" style="margin-top:6px">هذا الإجراء لا يمكن التراجع عنه — سيُحذف حسابك وكل بياناتك المرتبطة به بشكل نهائي.</p>
+
+      <div class="apSection">
+        <div class="apSecTitle">حول CodeUp</div>
+        <div class="apRow"><span>الإصدار</span><span class="mono small">1.0.0</span></div>
+      </div>
+
+      <div class="apSection" style="border-color:rgba(224,49,49,.35)">
+        <div class="apSecTitle" style="color:#E03131">منطقة خطرة</div>
+        <p class="small" style="margin-top:6px">حذف الحساب إجراء نهائي لا يمكن التراجع عنه — سيُحذف حسابك وكل بياناتك المرتبطة به.</p>
         <button class="btn danger" id="deleteAccountStep1" style="margin-top:10px">حذف حسابي نهائيًا</button>
+      </div>
       </div>`);
     m.el.querySelector("#accountLogoutBtn").onclick = ()=>{ m.close(); App.logout(); };
+
+    m.el.querySelector("#changePasswordBtn").onclick = async ()=>{
+      const p1 = prompt("كلمة المرور الجديدة (6 أحرف على الأقل):");
+      if(!p1) return;
+      if(p1.length < 6){ CodeUp.toast("كلمة المرور قصيرة جدًا", "error"); return; }
+      const p2 = prompt("أكّد كلمة المرور الجديدة:");
+      if(p1 !== p2){ CodeUp.toast("كلمتا المرور غير متطابقتين", "error"); return; }
+      try{
+        const { error } = await db.auth.updateUser({ password: p1 });
+        if(error) throw error;
+        CodeUp.toast("تم تغيير كلمة المرور", "success");
+      }catch(err){ CodeUp.toast(err.message||"تعذّر تغيير كلمة المرور", "error"); }
+    };
 
     m.el.querySelector("#changeAvatarBtn").onclick = ()=> m.el.querySelector("#avatarFileInput").click();
     m.el.querySelector("#avatarFileInput").onchange = async (e)=>{
