@@ -63,6 +63,11 @@
 .apRow{display:flex;align-items:center;justify-content:space-between;margin-top:10px}
 .apLinkRow{display:block;padding:9px 0;color:var(--ink);text-decoration:none;font-size:13.5px;border-bottom:1px solid var(--line)}
 .apLinkRow:last-child{border-bottom:0}
+.bootScreen{position:fixed;inset:0;background:var(--bg0);display:flex;align-items:center;justify-content:center;z-index:9999}
+.bootScreen.hidden{display:none}
+.bootMark{width:52px;height:52px;border-radius:16px;background:var(--surface-solid);border:1px solid var(--line);display:grid;place-items:center;overflow:hidden;animation:bootPulse 1.4s ease-in-out infinite}
+.bootMark img{width:28px;height:28px;object-fit:contain}
+@keyframes bootPulse{0%,100%{opacity:1}50%{opacity:.45}}
 *{box-sizing:border-box; min-width:0}
 body{
   margin:0;font-family:'IBM Plex Sans Arabic',system-ui,sans-serif;color:var(--ink);line-height:1.55;
@@ -574,7 +579,10 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
 </style>
 </head>
 <body>
-<div id="authApp" class="app">
+<div id="bootScreen" class="bootScreen">
+  <div class="bootMark"><img src="codeup-logo.svg" alt="CodeUp"></div>
+</div>
+<div id="authApp" class="app hidden">
 <main class="card">
 <div class="brand">
 <div class="mark"><img src="codeup-logo.svg" alt="CodeUp"></div>
@@ -693,7 +701,8 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
 <script src="js/supabase.js"></script>
 <script src="js/shared.js"></script>
 <script>
-const authApp=document.getElementById("authApp"),dash=document.getElementById("dashboardApp"),form=document.getElementById("authForm"),msg=document.getElementById("message"),btn=document.getElementById("submitBtn");
+const authApp=document.getElementById("authApp"),dash=document.getElementById("dashboardApp"),bootScreen=document.getElementById("bootScreen"),form=document.getElementById("authForm"),msg=document.getElementById("message"),btn=document.getElementById("submitBtn");
+function hideBoot(){ bootScreen.classList.add("hidden"); }
 document.getElementById("authFooterYear").textContent = `© ${new Date().getFullYear()} CodeUp`;
 let mode="login";
 function setMode(m){mode=m;loginTab.classList.toggle("active",m==="login");signupTab.classList.toggle("active",m==="signup");nameGroup.classList.toggle("hidden",m!=="signup");btn.querySelector(".btnText").textContent=m==="signup"?"إنشاء الحساب":"تسجيل الدخول";msg.className="message"}
@@ -787,6 +796,7 @@ const isSignupConfirmFlow =
 db.auth.onAuthStateChange((event, session)=>{
   if(event === "PASSWORD_RECOVERY"){
     isPasswordRecoveryFlow = true;
+    hideBoot();
     authApp.classList.remove("hidden"); dash.classList.add("hidden");
     showAuthScreen("newpassword");
   }
@@ -843,19 +853,33 @@ githubAuthBtn.onclick=async()=>{
 })();
 
 (async()=>{
-  let{data}=await db.auth.getSession();
-  // تسجيل دخول Google (أو أي مزوّد خارجي) يمرّ برابط PKCE فيه ?code= هو نفسه، لكن ما هو
-  // "تأكيد بريد" — نفرّق بينهم عبر app_metadata.provider في الجلسة الراجعة.
-  const provider = data.session?.user?.app_metadata?.provider;
-  const isOAuthLogin = !!provider && provider !== "email";
-  if(data.session && isOAuthLogin && !isPasswordRecoveryFlow){
-    history.replaceState(null,"",window.location.pathname);
-    await bootApp(data.session.user);
-  }else if(data.session && isSignupConfirmFlow && !isPasswordRecoveryFlow){
-    showAuthScreen("confirmed");
-    history.replaceState(null,"",window.location.pathname);
-  }else if(data.session && !isPasswordRecoveryFlow){
-    await bootApp(data.session.user);
+  try{
+    let{data}=await db.auth.getSession();
+    // تسجيل دخول Google (أو أي مزوّد خارجي) يمرّ برابط PKCE فيه ?code= هو نفسه، لكن ما هو
+    // "تأكيد بريد" — نفرّق بينهم عبر app_metadata.provider في الجلسة الراجعة.
+    const provider = data.session?.user?.app_metadata?.provider;
+    const isOAuthLogin = !!provider && provider !== "email";
+    if(data.session && isOAuthLogin && !isPasswordRecoveryFlow){
+      history.replaceState(null,"",window.location.pathname);
+      await bootApp(data.session.user);
+    }else if(data.session && isSignupConfirmFlow && !isPasswordRecoveryFlow){
+      showAuthScreen("confirmed");
+      authApp.classList.remove("hidden");
+      history.replaceState(null,"",window.location.pathname);
+      hideBoot();
+    }else if(data.session && !isPasswordRecoveryFlow){
+      await bootApp(data.session.user);
+    }else if(!data.session && !isPasswordRecoveryFlow){
+      // ما فيش Session خالص — دلوقتي بس، بعد التأكد الكامل، نظهر شاشة الدخول.
+      // (حالة isPasswordRecoveryFlow بيتكفّل بيها حدث PASSWORD_RECOVERY تحت)
+      authApp.classList.remove("hidden");
+      hideBoot();
+    }
+  }catch(e){
+    // فشل التحقق من الجلسة (شبكة بطيئة/خطأ) — ما نسيب المستخدم عالق على شاشة
+    // البووت للأبد، نوديه لتسجيل الدخول العادي بدل ما يفضل شايف اللوجو بس.
+    authApp.classList.remove("hidden");
+    hideBoot();
   }
 })();
 
@@ -872,6 +896,7 @@ db.auth.onAuthStateChange((event, session)=>{
 });
 
 async function bootApp(user){
+  hideBoot();
   authApp.classList.add("hidden");dash.classList.remove("hidden");
   await App.init(user);
 }
