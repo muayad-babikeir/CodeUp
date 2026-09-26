@@ -40,6 +40,23 @@
   --blur:blur(22px);
   --shadow:0 24px 60px -24px rgba(0,0,0,.8);
 }
+/* نطاق خاص بصفحة الحساب/الإعدادات فقط — باليت إضافية بطلب مؤيد، بدون
+   المساس بألوان بقية CodeUp (:root الأصلي فوق ما اتلمسش). */
+.accountPro{
+  --ap-cosmic:#23212C; --ap-vanilla:#F1FEC8; --ap-lime:#C6FF34; --ap-candy:#B2D5E5;
+}
+.apHead{display:flex;align-items:center;gap:14px;padding:4px 2px 2px}
+.apHead .metaAvatar{width:64px;height:64px;font-size:24px;flex:none}
+.apHead h2{margin:0;font-size:19px}
+.apBadges{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.apBadge{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;padding:3px 9px;border-radius:99px;font-family:'IBM Plex Mono',monospace}
+.apBadge.role{background:rgba(198,255,52,.12);color:var(--ap-lime);border:1px solid rgba(198,255,52,.3)}
+.apBadge.mid{background:rgba(178,213,229,.1);color:var(--ap-candy);border:1px solid rgba(178,213,229,.28)}
+.apStats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:16px}
+.apStat{background:var(--ap-cosmic);border-radius:12px;padding:10px 6px;text-align:center}
+.apStat b{display:block;font-family:'IBM Plex Mono',monospace;font-size:17px;color:var(--ap-vanilla)}
+.apStat span{display:block;font-size:10.5px;color:var(--ink60);margin-top:2px}
+.apTabBar{margin-top:16px}
 *{box-sizing:border-box; min-width:0}
 body{
   margin:0;font-family:'IBM Plex Sans Arabic',system-ui,sans-serif;color:var(--ink);line-height:1.55;
@@ -1331,18 +1348,57 @@ const App = {
       db.from("submissions").select("*, assignments(title)").eq("profile_id", profileId).order("created_at",{ascending:false}).limit(30)
     ]);
 
+    // إحصائيات وdور المستخدم لصفحته الشخصية فقط — كلها من this.ctx المحمّل
+    // مسبقًا (loadMyContext) بدون أي استعلام إضافي حساس، ومن memberships
+    // (RLS بتسمح لصاحبها بس يشوفه).
+    let statsHtml = "", badgesHtml = "";
+    if(isMe){
+      const enr = this.ctx.enrollments || [];
+      const totalXp = enr.reduce((s,e)=> s + (e.xp||0), 0);
+      const bestStreak = enr.reduce((m,e)=> Math.max(m, e.streak||0), 0);
+      const roleLabel = this.ctx.isPlatformAdmin ? "سوبر أدمن"
+        : (this.ctx.courseAdmins||[]).length ? "مشرف كورس"
+        : (this.ctx.leaderSquads||[]).length ? "قائد مجموعة"
+        : enr.length ? "طالب" : "عضو CodeUp";
+
+      let memberId = "";
+      try{
+        const {data: m} = await db.from("memberships").select("member_id").eq("user_id", this.ctx.user.id).maybeSingle();
+        memberId = m?.member_id || "";
+      }catch(_e){}
+
+      badgesHtml = `<div class="apBadges">
+        <span class="apBadge role">${CodeUp.escapeHtml(roleLabel)}</span>
+        ${memberId?`<span class="apBadge mid">${CodeUp.escapeHtml(memberId)}</span>`:""}
+      </div>`;
+
+      statsHtml = `<div class="apStats">
+        <div class="apStat"><b>${totalXp}</b><span>XP</span></div>
+        <div class="apStat"><b>${bestStreak}</b><span>Streak</span></div>
+        <div class="apStat"><b>${enr.length}</b><span>الكورسات</span></div>
+        <div class="apStat"><b>${(subs||[]).length}</b><span>التسليمات</span></div>
+      </div>`;
+    }
+
     this.root.innerHTML = `
-      <div class="profileHead">
-        <div class="convAvatar" style="width:64px;height:64px;font-size:24px">${CodeUp.escapeHtml((profile.full_name||"?")[0])}</div>
-        <div><h2>${CodeUp.escapeHtml(profile.full_name||"")}</h2>${isMe?`<p class="small mono">${CodeUp.escapeHtml(this.ctx.user.email||"")}</p>`:""}</div>
-        ${isMe?`<button class="btn" id="profileSettingsBtn" style="margin-inline-start:auto">الإعدادات</button>`
-              :`<button class="btn dark" id="profileMsgBtn" style="margin-inline-start:auto">مراسلة</button>`}
-      </div>
-      <div class="fbTabBar" style="margin-top:14px">
-        <button data-ptab="posts" class="active">المنشورات</button>
-        <button data-ptab="submissions">التسليمات</button>
-      </div>
-      <div id="profileBody"></div>`;
+      <div class="accountPro">
+        <div class="apHead">
+          ${CodeUp.avatarHtml(profile.full_name, profile.avatar_url, 64)}
+          <div>
+            <h2>${CodeUp.escapeHtml(profile.full_name||"")}</h2>
+            ${isMe?`<p class="small mono" style="margin:2px 0 0">${CodeUp.escapeHtml(this.ctx.user.email||"")}</p>`:""}
+            ${badgesHtml}
+          </div>
+          ${isMe?`<button class="btn" id="profileSettingsBtn" style="margin-inline-start:auto">الإعدادات</button>`
+                :`<button class="btn dark" id="profileMsgBtn" style="margin-inline-start:auto">مراسلة</button>`}
+        </div>
+        ${statsHtml}
+        <div class="fbTabBar apTabBar">
+          <button data-ptab="posts" class="active">المنشورات</button>
+          <button data-ptab="submissions">التسليمات</button>
+        </div>
+        <div id="profileBody"></div>
+      </div>`;
 
     if(isMe) document.getElementById("profileSettingsBtn").onclick = ()=> this.openAccountSettings();
     else document.getElementById("profileMsgBtn").onclick = async ()=>{
