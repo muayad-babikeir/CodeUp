@@ -38,13 +38,13 @@ Deno.serve(async (req: Request) => {
 
     const { data: f, error: fErr } = await supabase
       .from("file_uploads")
-      .select("id, storage_path, file_name, mime_type, created_at, course_id, submission_id, related_type, uploader_id, archive_status, telegram_message_id")
+      .select("id, storage_path, file_name, mime_type, created_at, course_id, submission_id, related_type, related_id, uploader_id, archive_status, telegram_message_id")
       .eq("id", file_id).single();
     if (fErr || !f) return new Response(JSON.stringify({ error: "file not found" }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
     // فقط صاحب الملف نفسه يقدر يطلب إرساله (منع استغلال الدالة لملفات غيره)
     if (f.uploader_id !== userData.user.id) return new Response(JSON.stringify({ error: "forbidden" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    if (!["submission","post","comment"].includes(f.related_type)) return new Response(JSON.stringify({ error: "not an archivable file" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    if (!["submission","post","comment","marketplace_listing"].includes(f.related_type)) return new Response(JSON.stringify({ error: "not an archivable file" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
     // Idempotent: لو اترسل قبل كده (أو قيد الإرسال)، ما نكرر
     if (f.telegram_message_id || f.archive_status === "sending" || f.archive_status === "sent" || f.archive_status === "archived") {
@@ -74,8 +74,18 @@ Deno.serve(async (req: Request) => {
         if (subAny?.content) submissionContent = subAny.content;
       }
 
-      const header = `📚 CodeUp Archive\n\nالطالب: ${studentName}\nالكورس: ${courseName}\nالواجب: ${assignmentTitle}`;
-      const footer = `\nتاريخ الرفع: ${new Date(f.created_at).toLocaleDateString("ar-EG")}${githubUrl ? `\nGitHub: ${githubUrl}` : ""}`;
+      let header: string, footer: string;
+      if (f.related_type === "marketplace_listing" && f.related_id) {
+        // Marketplace listings have no course/assignment context — build a dedicated caption instead.
+        const { data: listing } = await supabase.from("marketplace_listings").select("title, price, listing_type").eq("id", f.related_id).single();
+        const title = listing?.title || "منتج بدون عنوان";
+        const priceText = listing?.price != null ? `${listing.price} ج.س` : (listing?.listing_type || "");
+        header = `🛒 CodeUp Marketplace\n\nالبائع: ${studentName}\nالمنتج: ${title}${priceText ? `\nالسعر: ${priceText}` : ""}`;
+        footer = `\nتاريخ النشر: ${new Date(f.created_at).toLocaleDateString("ar-EG")}`;
+      } else {
+        header = `📚 CodeUp Archive\n\nالطالب: ${studentName}\nالكورس: ${courseName}\nالواجب: ${assignmentTitle}`;
+        footer = `\nتاريخ الرفع: ${new Date(f.created_at).toLocaleDateString("ar-EG")}${githubUrl ? `\nGitHub: ${githubUrl}` : ""}`;
+      }
 
       let tgJson: any;
       if (!f.storage_path) {
