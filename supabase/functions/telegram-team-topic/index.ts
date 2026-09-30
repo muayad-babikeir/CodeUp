@@ -1,13 +1,11 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
-// إنشاء/جلب Topic تيليجرام لفريق من فرق الأسبوع التقني.
+// إنشاء/جلب Topic تيليجرام لـ: فريق أسبوع تقني (team_id) أو مجموعة كورس (squad_id).
+// التمييز داخل تيليجرام: 🏆 فريق: ... (أخضر) مقابل 👥 مجموعة: ... (أزرق).
 // Actions:
-//   create (افتراضي)  : عضو بالفريق أو أدمن — Idempotent، يرجّع الرابط.
-//   get_link          : نفس create (للزر) — يرجّع url + invite_url.
-//   close_event       : أدمن فقط — يقفل Topics كل فرق فعالية (event_id).
-// Secrets المطلوبة: TELEGRAM_BOT_TOKEN (موجود) + TELEGRAM_TEAMS_CHAT_ID (جديد)
-//                   + TELEGRAM_TEAMS_INVITE_LINK (اختياري، رابط دعوة المجتمع).
-// شرط تيليجرام: المجموعة Supergroup مفعّل فيها Topics، والبوت أدمن بصلاحية Manage Topics.
+//   create / get_link : عضو أو قائد أو أدمن — Idempotent، يرجّع url + invite_url.
+//   close_event       : أدمن الأسبوع التقني — يقفل Topics كل فرق فعالية (event_id).
+// Secrets: TELEGRAM_BOT_TOKEN, TELEGRAM_TEAMS_CHAT_ID, TELEGRAM_TEAMS_INVITE_LINK (اختياري).
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -16,7 +14,6 @@ const cors = {
 };
 const json = (b: unknown, status = 200) =>
   new Response(JSON.stringify(b), { status, headers: { ...cors, "Content-Type": "application/json" } });
-
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
 async function tg(token: string, method: string, body: Record<string, unknown>) {
@@ -27,7 +24,6 @@ async function tg(token: string, method: string, body: Record<string, unknown>) 
   if (!j.ok) throw new Error(`${method}: ${j.description || r.status}`);
   return j.result;
 }
-
 const topicUrl = (chatId: number, threadId: number) =>
   `https://t.me/c/${String(chatId).replace(/^-100/, "")}/${threadId}`;
 
@@ -52,11 +48,11 @@ Deno.serve(async (req: Request) => {
     if (!BOT || !CHAT) return json({ error: "telegram not configured" });
     const chatId = Number(CHAT);
 
-    const { data: adminOk } = await db.rpc("is_tech_week_admin", { uid });
-    const { team_id, event_id, action = "create" } = await req.json();
+    const { team_id, squad_id, event_id, action = "create" } = await req.json();
 
-    // ---------- إغلاق Topics فعالية كاملة (أدمن فقط) ----------
+    // ---------- إغلاق Topics فعالية كاملة (أدمن الأسبوع التقني) ----------
     if (action === "close_event") {
+      const { data: adminOk } = await db.rpc("is_tech_week_admin", { uid });
       if (!adminOk) return json({ error: "forbidden" }, 403);
       if (!event_id) return json({ error: "missing event_id" }, 400);
       const { data: teams } = await db.from("tech_week_teams")
@@ -71,59 +67,87 @@ Deno.serve(async (req: Request) => {
           }).eq("id", t.id);
           closed++;
         } catch (_) { failed++; }
-        await new Promise((r) => setTimeout(r, 400)); // تجنّب حد الطلبات
+        await new Promise((r) => setTimeout(r, 400));
       }
       return json({ ok: true, closed, failed });
     }
 
-    // ---------- create / get_link ----------
-    if (!team_id) return json({ error: "missing team_id" }, 400);
-    const { data: team } = await db.from("tech_week_teams")
-      .select("id, name, event_id, telegram_chat_id, telegram_thread_id, telegram_topic_status, tech_week_events(title)")
-      .eq("id", team_id).single();
-    if (!team) return json({ error: "team not found" }, 404);
+    // ---------- تحديد النوع: فريق أو مجموعة ----------
+    if (!team_id && !squad_id) return json({ error: "missing team_id or squad_id" }, 400);
+    const isSquad = !!squad_id;
+    const table = isSquad ? "squads" : "tech_week_teams";
+    const rowId = isSquad ? squad_id : team_id;
 
-    if (!adminOk) {
-      const { data: reg } = await db.from("tech_week_registrations").select("id")
-        .eq("team_id", team_id).eq("profile_id", uid).in("status", ["registered", "attended"]).maybeSingle();
-      if (!reg) return json({ error: "forbidden" }, 403);
+    let row: any, ctxTitle = "", authorized = false;
+
+    if (isSquad) {
+      const { data } = await db.from("squads")
+        .select("id, name, course_id, status, telegram_thread_id, telegram_topic_status, courses(name)")
+        .eq("id", rowId).single();
+      row = data;
+      if (!row) return json({ error: "squad not found" }, 404);
+      ctxTitle = row.courses?.name || "";
+      const [{ data: enr }, { data: lead }, { data: courseAdmin }, { data: superAdmin }] = await Promise.all([
+        db.from("enrollments").select("id").eq("squad_id", rowId).eq("profile_id", uid).limit(1),
+        db.from("squad_leaders").select("id").eq("squad_id", rowId).eq("profile_id", uid).limit(1),
+        db.rpc("is_course_admin", { uid, cid: row.course_id }),
+        db.rpc("is_super_admin", { uid }),
+      ]);
+      authorized = !!(enr?.length || lead?.length || courseAdmin || superAdmin);
+    } else {
+      const { data } = await db.from("tech_week_teams")
+        .select("id, name, event_id, telegram_thread_id, telegram_topic_status, tech_week_events(title)")
+        .eq("id", rowId).single();
+      row = data;
+      if (!row) return json({ error: "team not found" }, 404);
+      ctxTitle = row.tech_week_events?.title || "";
+      const [{ data: reg }, { data: adminOk }] = await Promise.all([
+        db.from("tech_week_registrations").select("id").eq("team_id", rowId).eq("profile_id", uid)
+          .in("status", ["registered", "attended"]).limit(1),
+        db.rpc("is_tech_week_admin", { uid }),
+      ]);
+      authorized = !!(reg?.length || adminOk);
     }
+    if (!authorized) return json({ error: "forbidden" }, 403);
 
+    const kind = isSquad ? "squad" : "team";
     const ready = (threadId: number) => json({
-      ok: true, thread_id: threadId, url: topicUrl(chatId, threadId), invite_url: INVITE,
-      closed: team.telegram_topic_status === "closed",
+      ok: true, kind, thread_id: threadId, url: topicUrl(chatId, threadId), invite_url: INVITE,
+      closed: row.telegram_topic_status === "closed",
     });
-    if (team.telegram_thread_id) return ready(team.telegram_thread_id);
+    if (row.telegram_thread_id) return ready(row.telegram_thread_id);
 
-    // قفل ذرّي: أول طلب فقط ينشئ الـ Topic (يمنع Topics مكررة عند ضغطتين/طلبين متزامنين)
-    const { data: claimed } = await db.from("tech_week_teams")
+    // قفل ذرّي: أول طلب فقط ينشئ الـ Topic
+    const { data: claimed } = await db.from(table)
       .update({ telegram_topic_status: "creating", telegram_chat_id: chatId })
-      .eq("id", team_id).is("telegram_thread_id", null)
+      .eq("id", rowId).is("telegram_thread_id", null)
       .or("telegram_topic_status.is.null,telegram_topic_status.eq.failed")
       .select("id");
-    if (!claimed?.length) return json({ ok: false, pending: true }); // طلب آخر قيد التنفيذ
+    if (!claimed?.length) return json({ ok: false, pending: true });
 
     try {
-      const evTitle = (team as any).tech_week_events?.title || "";
-      const topicName = `${team.name}${evTitle ? " — " + evTitle : ""}`.slice(0, 128);
-      const topic = await tg(BOT, "createForumTopic", { chat_id: chatId, name: topicName });
+      const prefix = isSquad ? "👥 مجموعة" : "🏆 فريق";
+      const topicName = `${prefix}: ${row.name}${ctxTitle ? " — " + ctxTitle : ""}`.slice(0, 128);
+      const topic = await tg(BOT, "createForumTopic", {
+        chat_id: chatId, name: topicName,
+        icon_color: isSquad ? 7322096 : 9367192, // أزرق للمجموعات، أخضر للفرق
+      });
       const threadId: number = topic.message_thread_id;
 
-      await db.from("tech_week_teams").update({
-        telegram_thread_id: threadId, telegram_topic_status: "ready",
-      }).eq("id", team_id);
+      await db.from(table).update({ telegram_thread_id: threadId, telegram_topic_status: "ready" }).eq("id", rowId);
 
-      // رسالة الترحيب فشلها لا يُبطل الـ Topic
       try {
         await tg(BOT, "sendMessage", {
           chat_id: chatId, message_thread_id: threadId, parse_mode: "HTML",
-          text: `👋 هذي مساحة تواصل فريق <b>${esc(team.name)}</b>${evTitle ? `\nالفعالية: ${esc(evTitle)}` : ""}\nالعضوية تُدار من منصة CodeUp.`,
+          text: isSquad
+            ? `👥 هذي مساحة تواصل مجموعة <b>${esc(row.name)}</b>${ctxTitle ? `\nالكورس: ${esc(ctxTitle)}` : ""}\nالعضوية تُدار من منصة CodeUp.`
+            : `🏆 هذي مساحة تواصل فريق <b>${esc(row.name)}</b>${ctxTitle ? `\nالفعالية: ${esc(ctxTitle)}` : ""}\nالعضوية تُدار من منصة CodeUp.`,
         });
-      } catch (_) { /* ignore */ }
+      } catch (_) { /* فشل الترحيب لا يُبطل الـ Topic */ }
 
       return ready(threadId);
     } catch (e) {
-      await db.from("tech_week_teams").update({ telegram_topic_status: "failed" }).eq("id", team_id);
+      await db.from(table).update({ telegram_topic_status: "failed" }).eq("id", rowId);
       return json({ ok: false, error: String((e as Error).message || e) }, 502);
     }
   } catch (e) {

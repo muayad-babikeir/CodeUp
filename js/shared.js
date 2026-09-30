@@ -446,8 +446,8 @@ const CodeUp = (() => {
     } catch (e) { /* فشل صامت — الملف بأمان بـ Supabase، والمحاولة تُعاد تلقائيًا بالمهمة اليومية */ }
   }
 
-  // Topic تيليجرام لفريق الأسبوع التقني — يرجّع {url, invite_url} أو null عند الفشل
-  async function callTeamTopic(teamId) {
+  // Topic تيليجرام لفريق أسبوع تقني (team_id) أو مجموعة كورس (squad_id) — يرجّع {url, invite_url} أو null عند الفشل
+  async function callTopic(payload) {
     try {
       const { data: sessionData } = await db.auth.getSession();
       const token = sessionData?.session?.access_token;
@@ -455,12 +455,14 @@ const CodeUp = (() => {
       const r = await fetch(`${SUPABASE_URL}/functions/v1/telegram-team-topic`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
-        body: JSON.stringify({ team_id: teamId })
+        body: JSON.stringify(payload)
       });
       const j = await r.json();
       return j?.ok ? j : null;
     } catch (e) { return null; }
   }
+  const callTeamTopic = (teamId) => callTopic({ team_id: teamId });
+  const callSquadTopic = (squadId) => callTopic({ squad_id: squadId });
 
   // إرفاق صورة/صوت بتعليق — نفس bucket التسليمات، مسار منفصل تحت comments/
   async function uploadCommentAttachment(file, userId, commentId) {
@@ -520,5 +522,5 @@ const CodeUp = (() => {
     });
   }
 
-  return { toast, escapeHtml, avatarHtml, timeAgo, formatDate, debounce, requireSession, loadMyContext, rpc, call, uploadSubmissionFile, uploadCommentAttachment, uploadMarketplaceImage, getSignedUrl, getOptimizedSignedUrl, subscribeToMyNotifications, triggerTelegramSend, callTeamTopic, buildCommentsBlock, wireCommentsToggle, setBtnLoading, withBtnLoading, compressImageIfNeeded };
+  return { toast, escapeHtml, avatarHtml, timeAgo, formatDate, debounce, requireSession, loadMyContext, rpc, call, uploadSubmissionFile, uploadCommentAttachment, uploadMarketplaceImage, getSignedUrl, getOptimizedSignedUrl, subscribeToMyNotifications, triggerTelegramSend, callTeamTopic, callSquadTopic, buildCommentsBlock, wireCommentsToggle, setBtnLoading, withBtnLoading, compressImageIfNeeded };
 })();

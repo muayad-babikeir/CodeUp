@@ -1203,7 +1203,7 @@ const App = {
               <span>${members.length}${e.team_max_size?`/${e.team_max_size}`:""} أعضاء</span>
               ${isLeader?`<span>•</span><span>${myTeam.join_policy==='approval'?'انضمام بموافقتك':'انضمام مفتوح'}</span>`:""}
             </div>
-            <div class="twActionsRow"><button class="btn dark" data-teamchat="${myTeam?.id}">💬 محادثة الفريق</button></div>
+            <div class="twActionsRow"><button class="btn dark" data-teamchat="${myTeam?.id}">💬 محادثة الفريق (تيليجرام)</button></div>
 
             <div class="twSection">
               <p class="twSectionTitle">الأعضاء</p>
@@ -3803,8 +3803,25 @@ const App = {
         <thead><tr><th style="text-align:start">العضو</th><th></th></tr></thead>
         <tbody>${rows || `<tr><td colspan="2" class="emptyState">لا يوجد أعضاء بعد.</td></tr>`}</tbody>
       </table>
-      <button class="btn danger" id="leaveSquadBtn" style="margin-top:14px">مغادرة المجموعة</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">
+        <button class="btn dark" id="squadChatBtn">💬 محادثة المجموعة (تيليجرام)</button>
+        <button class="btn danger" id="leaveSquadBtn">مغادرة المجموعة</button>
+      </div>
     `);
+
+    m.el.querySelector("#squadChatBtn").onclick = async (ev)=>{
+      const btn = ev.currentTarget;
+      btn.disabled = true;
+      const res = await CodeUp.callSquadTopic(squad.id);
+      btn.disabled = false;
+      if(!res){ CodeUp.toast("تعذّر فتح محادثة المجموعة حاليًا، حاول بعد قليل", "error"); return; }
+      this.sheet(`
+        <h3 style="margin:0 0 12px">محادثة المجموعة</h3>
+        <a class="btn dark" href="${res.url}" target="_blank" rel="noopener" style="display:block;text-align:center">فتح محادثة المجموعة في تيليجرام</a>
+        ${res.invite_url?`<p class="small" style="margin:12px 0 6px">أول مرة؟ انضم لمجتمع CodeUp أولًا ثم افتح المحادثة:</p>
+        <a class="btn" href="${res.invite_url}" target="_blank" rel="noopener" style="display:block;text-align:center">الانضمام للمجتمع</a>`:""}
+      `);
+    };
 
     m.el.querySelectorAll("[data-msg]").forEach(b=>{
       b.onclick = async ()=>{
