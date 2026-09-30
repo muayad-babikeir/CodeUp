@@ -1420,9 +1420,12 @@ const App = {
     });
 
     const doJoinTeam = async (teamId, eventId, isApproval)=>{
+      // قائد الفريق ينضم لفريقه مباشرة (registered) — سياسة القاعدة ترفض "pending" من القائد نفسه
+      const { data: tm } = await db.from("tech_week_teams").select("leader_id").eq("id", teamId).maybeSingle();
+      const isOwnTeam = tm?.leader_id === this.ctx.user.id;
       await db.from("tech_week_registrations").upsert({
         event_id: eventId, profile_id: this.ctx.user.id,
-        status: isApproval ? "pending" : "registered", team_id: teamId
+        status: (isApproval && !isOwnTeam) ? "pending" : "registered", team_id: teamId
       }, {onConflict: "event_id,profile_id"}).throwOnError();
     };
 
