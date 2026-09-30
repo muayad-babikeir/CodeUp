@@ -18,11 +18,22 @@ Admin.sections.marketplace_settings = {
     body.innerHTML = `<div class="card">${Array(1).fill(`<div class="skeleton skeleton-line w60" style="height:34px;margin-bottom:10px"></div>`).join("")}</div>`;
 
     const draw = async ()=>{
-      const { data: setting, error } = await db.from("archive_settings").select("*").eq("scope_type","marketplace").is("scope_id",null).maybeSingle();
+      const [{ data: setting, error }, { data: enabledRow }] = await Promise.all([
+        db.from("archive_settings").select("*").eq("scope_type","marketplace").is("scope_id",null).maybeSingle(),
+        db.from("app_settings").select("value").eq("key","marketplace_enabled").maybeSingle()
+      ]);
       if(error){ body.innerHTML = `<div class="alertBox error"><span>تعذّر تحميل الإعدادات.</span><button class="btn alertRetry" id="mpsRetry">إعادة المحاولة</button></div>`; body.querySelector("#mpsRetry").onclick=()=>Admin.go("marketplace_settings"); return; }
+      const isEnabled = enabledRow ? enabledRow.value !== "false" : true;
 
       body.innerHTML = `
         <div class="card">
+          <label style="display:flex;align-items:center;gap:8px">
+            <input type="checkbox" id="mpsEnabled" ${isEnabled?"checked":""}> تفعيل Marketplace على المنصة
+          </label>
+          <p class="small" style="margin-top:6px">عند الإيقاف يختفي تبويب Marketplace بالكامل عن الطلاب بتطبيق الطالب. صفحات إدارته هنا تبقى متاحة لكم دائمًا بغض النظر عن هذا المفتاح.</p>
+          <button class="btn dark" id="mpsEnabledSaveBtn" style="margin-top:10px">حفظ</button>
+        </div>
+        <div class="card" style="margin-top:12px">
           <b>مدة بقاء صور الإعلانات في Supabase Storage</b>
           <p class="small" style="margin:6px 0 10px">
             بعد رفع أي صورة لإعلان، تُرسل نسخة فورية لتيليجرام (موضوع STORE) كأرشيف دائم. النسخة الأصلية تبقى
@@ -38,6 +49,14 @@ Admin.sections.marketplace_settings = {
           <p class="small" style="margin-top:8px;color:var(--ink60)">القيمة الافتراضية الحالية: يوم واحد (24 ساعة).</p>
         </div>
       `;
+
+      body.querySelector("#mpsEnabledSaveBtn").onclick = async ()=>{
+        const val = body.querySelector("#mpsEnabled").checked ? "true" : "false";
+        try{
+          await db.from("app_settings").upsert({key:"marketplace_enabled", value:val, updated_by:Admin.ctx.user.id, updated_at:new Date().toISOString()}, {onConflict:"key"}).throwOnError();
+          CodeUp.toast("تم الحفظ", "success");
+        }catch(e){ CodeUp.toast(e.message||"تعذّر الحفظ", "error"); }
+      };
 
       body.querySelector("#mpsSaveBtn").onclick = async ()=>{
         const days = Number(body.querySelector("#mpsDays").value);
@@ -162,7 +181,7 @@ Admin.sections.marketplace_listings = {
       });
       body.querySelectorAll("[data-rejectlisting]").forEach(b=>{
         b.onclick = async ()=>{
-          if(!confirm("رفض هذا الإعلان؟")) return;
+          if(!await Admin.confirmDialog({title:"رفض الإعلان", message:"سيتم رفض هذا الإعلان.", confirmLabel:"رفض", danger:true})) return;
           b.disabled = true;
           try{
             await db.rpc("marketplace_admin_review_listing", {p_listing_id: b.dataset.rejectlisting, p_decision:"rejected"}).throwOnError();
@@ -174,7 +193,7 @@ Admin.sections.marketplace_listings = {
       body.querySelectorAll("[data-deletelisting]").forEach(b=>{
         b.onclick = async ()=>{
           const l = listings.find(x=>x.id===b.dataset.deletelisting);
-          const ok = confirm(`حذف إعلان Marketplace\n\nأنت على وشك حذف هذا الإعلان من النظام.\n\nالإعلان: ${l.title}\nالمالك: ${l.owner?.full_name || l.owner?.email || ""}\nالحالة: ${MP_STATUS_LABEL[l.status]||l.status}\n\nهل أنت متأكد؟`);
+          const ok = await Admin.confirmDialog({title:"حذف إعلان Marketplace", message:`الإعلان: ${l.title}\nالمالك: ${l.owner?.full_name || ""}\nالحالة: ${MP_STATUS_LABEL[l.status]||l.status}`, confirmLabel:"حذف نهائيًا", danger:true});
           if(!ok) return;
           b.disabled = true;
           try{
@@ -202,7 +221,7 @@ async function openListingDrawer(l){
     </div>
     <p class="small">${MP_TYPE_LABEL[l.listing_type]||l.listing_type} — ${mpStatusBadge(l)}</p>
     ${l.description ? `<p>${CodeUp.escapeHtml(l.description)}</p>` : ""}
-    <p class="small">المالك: ${CodeUp.escapeHtml(l.owner?.full_name || l.owner?.email || "")}</p>
+    <p class="small">المالك: ${CodeUp.escapeHtml(l.owner?.full_name || "")}</p>
     ${l.listing_type==='sale' && l.price!=null ? `<p class="small">السعر: ${l.price} ج.س</p>` : ""}
     ${l.listing_type==='exchange' ? `<p class="small">مرغوب استبداله بـ: ${CodeUp.escapeHtml(l.exchange_wanted_for||"")}</p>` : ""}
     ${l.listing_type==='borrow' ? `<p class="small">مدة الإعارة: ${l.borrow_duration_days} يوم</p>` : ""}
@@ -267,7 +286,7 @@ Admin.sections.marketplace_categories = {
       });
       body.querySelectorAll("[data-delcat]").forEach(b=>{
         b.onclick = async ()=>{
-          if(!confirm("حذف هذا التصنيف؟ الإعلانات المرتبطة به تبقى موجودة بدون تصنيف.")) return;
+          if(!await Admin.confirmDialog({title:"حذف التصنيف", message:"الإعلانات المرتبطة به تبقى موجودة بدون تصنيف.", confirmLabel:"حذف", danger:true})) return;
           const { error } = await db.from("marketplace_categories").delete().eq("id", b.dataset.delcat);
           if(error){ CodeUp.toast(error.message, "error"); return; }
           draw();

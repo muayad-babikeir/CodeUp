@@ -45,7 +45,7 @@ Admin.sections.content = {
     });
     body.querySelectorAll("[data-delunit]").forEach(b=>{
       b.onclick = async ()=>{
-        if(!confirm("حذف الوحدة؟\n\nسيتم حذف كل دروسها معها، ولا يمكن التراجع عن هذا الإجراء.")) return;
+        if(!await Admin.confirmDialog({title:"حذف الوحدة", message:"سيتم حذف كل دروسها معها، ولا يمكن التراجع عن هذا الإجراء.", confirmLabel:"حذف", danger:true})) return;
         const { error } = await db.from("units").delete().eq("id", b.dataset.delunit);
         if(error){ CodeUp.toast(error.message, "error"); return; }
         Admin.go("content");
@@ -61,7 +61,7 @@ Admin.sections.content = {
     });
     body.querySelectorAll("[data-dellesson]").forEach(b=>{
       b.onclick = async ()=>{
-        if(!confirm("حذف هذا الدرس؟\n\nلا يمكن التراجع عن هذا الإجراء.")) return;
+        if(!await Admin.confirmDialog({title:"حذف الدرس", message:"لا يمكن التراجع عن هذا الإجراء.", confirmLabel:"حذف", danger:true})) return;
         const { error } = await db.from("lessons").delete().eq("id", b.dataset.dellesson);
         if(error){ CodeUp.toast(error.message, "error"); return; }
         Admin.go("content");

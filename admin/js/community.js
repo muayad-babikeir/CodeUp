@@ -24,7 +24,7 @@ Admin.sections.timeline = {
 
     body.querySelectorAll("[data-hide]").forEach(b=>{
       b.onclick = async ()=>{
-        if(!confirm("سيتم إخفاء هذا المنشور من المستجدات (لن يُحذف التسليم نفسه). متابعة؟")) return;
+        if(!await Admin.confirmDialog({title:"إخفاء المنشور", message:"سيتم إخفاء هذا المنشور من المستجدات (لن يُحذف التسليم نفسه).", confirmLabel:"إخفاء"})) return;
         const { error } = await db.from("submissions").update({ visibility: "private" }).eq("id", b.dataset.hide);
         if(error){ CodeUp.toast(error.message, "error"); return; }
         Admin.go("timeline");
@@ -51,7 +51,7 @@ Admin.sections.moderation = {
       </tbody></table></div></div>`;
     body.querySelectorAll("[data-del]").forEach(b=>{
       b.onclick = async ()=>{
-        if(!confirm("تأكيد حذف هذا التعليق؟")) return;
+        if(!await Admin.confirmDialog({title:"حذف التعليق", message:"سيُحذف هذا التعليق نهائيًا.", confirmLabel:"حذف", danger:true})) return;
         const { error } = await db.from("comments").delete().eq("id", b.dataset.del);
         if(error){ CodeUp.toast(error.message, "error"); return; }
         Admin.go("moderation");
@@ -85,7 +85,7 @@ Admin.sections.home_announcements = {
     });
     body.querySelectorAll("[data-delann]").forEach(b=>{
       b.onclick = async ()=>{
-        if(!confirm("حذف هذا الإعلان نهائيًا من الصفحة الرئيسية لكل المستخدمين؟")) return;
+        if(!await Admin.confirmDialog({title:"حذف الإعلان", message:"سيُحذف هذا الإعلان نهائيًا من الصفحة الرئيسية لكل المستخدمين.", confirmLabel:"حذف", danger:true})) return;
         try{ await db.from("announcements").delete().eq("id", b.dataset.delann).throwOnError(); CodeUp.toast("تم الحذف","success"); Admin.go("home_announcements"); }
         catch(e){ CodeUp.toast(e.message,"error"); }
       };
@@ -144,7 +144,7 @@ Admin.sections.home_posts = {
       `).join("") || `<tr><td colspan="4"><div class="emptyStatePro"><h4>لا توجد منشورات مطابقة</h4><p>جرّب تعديل كلمة البحث.</p></div></td></tr>`;
       tbody.querySelectorAll("[data-delpost]").forEach(b=>{
         b.onclick = async ()=>{
-          if(!confirm("حذف هذا المنشور نهائيًا؟\n\nلا يمكن التراجع عن هذا الإجراء.")) return;
+          if(!await Admin.confirmDialog({title:"حذف المنشور", message:"لا يمكن التراجع عن هذا الإجراء.", confirmLabel:"حذف نهائيًا", danger:true})) return;
           try{ await db.from("posts").delete().eq("id", b.dataset.delpost).throwOnError(); CodeUp.toast("تم الحذف","success"); Admin.go("home_posts"); }
           catch(e){ CodeUp.toast(e.message,"error"); }
         };

@@ -272,13 +272,15 @@ const CodeUp = (() => {
     const user = sessionData?.session?.user;
     if (!user) return null;
 
-    const [{ data: profile }, { data: courseAdmins }, { data: squadLeaders }, { data: enrollments }, { data: universityAdmins }, { data: techWeekAdminRow }] = await Promise.all([
+    const [{ data: profile }, { data: courseAdmins }, { data: squadLeaders }, { data: enrollments }, { data: universityAdmins }, { data: techWeekAdminRow }, { data: marketplaceSetting }, { data: techWeekSettings }] = await Promise.all([
       db.from("profiles").select("id,full_name,avatar_url,is_super_admin,created_at").eq("id", user.id).single(),
       db.from("course_admins").select("course_id, role").eq("profile_id", user.id),
       db.from("squad_leaders").select("squad_id, permissions, squads(course_id, name)").eq("profile_id", user.id),
       db.from("enrollments").select("*, courses(name, slug), squads(name, emoji)").eq("profile_id", user.id),
       db.from("university_admins").select("university_id, role").eq("profile_id", user.id),
-      db.from("tech_week_admins").select("id, role").eq("profile_id", user.id).maybeSingle()
+      db.from("tech_week_admins").select("id, role").eq("profile_id", user.id).maybeSingle(),
+      db.from("app_settings").select("value").eq("key","marketplace_enabled").maybeSingle(),
+      db.from("tech_week_settings").select("is_enabled").eq("id", true).maybeSingle()
     ]);
 
     return {
@@ -292,7 +294,15 @@ const CodeUp = (() => {
       enrollments: enrollments || [],
       universityAdmins: universityAdmins || [],
       universityAdminIds: (universityAdmins || []).map(u => u.university_id),
-      isTechWeekAdmin: !!techWeekAdminRow || !!profile?.is_super_admin
+      isTechWeekAdmin: !!techWeekAdminRow || !!profile?.is_super_admin,
+      // ميزات قابلة للتفعيل/الإيقاف من الأدمن — القيمة الافتراضية true لو الصف
+      // مش موجود أصلًا (مثلاً قبل ترحيل قاعدة البيانات)، حتى ما تختفيش الميزة
+      // بالغلط لمجرد غياب صف الإعداد.
+      marketplaceEnabled: marketplaceSetting ? marketplaceSetting.value !== "false" : true,
+      // ملحوظة: RLS على tech_week_settings بتخفي الصف عن غير الأدمن أصلًا لو
+      // is_enabled=false (مش بس تخفي القيمة) — يعني "الصف مش موجود" للطالب
+      // العادي هي نفسها إشارة "الميزة متوقفة"، فالافتراضي هنا false لا true.
+      techWeekEnabled: !!techWeekSettings?.is_enabled
     };
   }
 

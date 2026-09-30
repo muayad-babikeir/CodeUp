@@ -51,7 +51,7 @@ Admin.sections.universities = {
     });
     body.querySelectorAll("[data-removeadmin]").forEach(b=>{
       b.onclick = async ()=>{
-        if(!confirm("إزالة صلاحية إدارة هذه الجامعة من هذا المستخدم؟")) return;
+        if(!await Admin.confirmDialog({title:"إزالة صلاحية الإدارة", message:"سيفقد هذا المستخدم صلاحية إدارة هذه الجامعة.", confirmLabel:"إزالة", danger:true})) return;
         const { error } = await db.from("university_admins").delete().eq("id", b.dataset.removeadmin);
         if(error){ CodeUp.toast(error.message, "error"); return; }
         Admin.go("universities");
@@ -173,7 +173,7 @@ async function renderSemesters(body){
   });
   body.querySelectorAll("[data-del]").forEach(b=>{
     b.onclick = async ()=>{
-      if(!confirm("حذف الفصل الدراسي بالكامل مع كل مواده وروابطه؟ لا يمكن التراجع.")) return;
+      if(!await Admin.confirmDialog({title:"حذف الفصل الدراسي", message:"سيُحذف بكل مواده وروابطه. لا يمكن التراجع.", confirmLabel:"حذف نهائيًا", danger:true})) return;
       const { error } = await db.from("university_semesters").delete().eq("id", b.dataset.del);
       if(error){ CodeUp.toast(error.message, "error"); return; }
       renderSemesters(body);
@@ -236,7 +236,7 @@ async function renderSubjects(body, semester){
   });
   body.querySelectorAll("[data-del]").forEach(b=>{
     b.onclick = async ()=>{
-      if(!confirm("حذف المادة بالكامل مع كل روابطها؟ لا يمكن التراجع.")) return;
+      if(!await Admin.confirmDialog({title:"حذف المادة", message:"سيُحذف بكل روابطه. لا يمكن التراجع.", confirmLabel:"حذف نهائيًا", danger:true})) return;
       const { error } = await db.from("university_subjects").delete().eq("id", b.dataset.del);
       if(error){ CodeUp.toast(error.message, "error"); return; }
       renderSubjects(body, semester);
@@ -296,7 +296,7 @@ async function renderMaterials(body, subject, semester){
   });
   body.querySelectorAll("[data-del]").forEach(b=>{
     b.onclick = async ()=>{
-      if(!confirm("حذف هذا الرابط؟")) return;
+      if(!await Admin.confirmDialog({title:"حذف الرابط", confirmLabel:"حذف", danger:true})) return;
       const { error } = await db.from("university_materials").delete().eq("id", b.dataset.del);
       if(error){ CodeUp.toast(error.message, "error"); return; }
       renderMaterials(body, subject, semester);

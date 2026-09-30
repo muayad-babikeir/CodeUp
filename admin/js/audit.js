@@ -103,7 +103,7 @@ Admin.sections.files = {
     });
     body.querySelectorAll("[data-postpone]").forEach(b=>{
       b.onclick = async ()=>{
-        const days = prompt("أجّل الحذف كم يوم من الآن؟", "7");
+        const days = await Admin.promptDialog({title:"تأجيل الحذف", message:"أجّل الحذف كم يوم من الآن؟", defaultValue:"7", confirmLabel:"تأجيل"});
         if(!days) return;
         const newDate = new Date(Date.now() + parseInt(days)*24*60*60*1000).toISOString();
         await CodeUp.withBtnLoading(b, async ()=>{

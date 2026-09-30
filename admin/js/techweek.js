@@ -170,7 +170,7 @@ function openEventModal(event){
   };
   const delBtn = m.el.querySelector("#evDelete");
   if(delBtn) delBtn.onclick = async ()=>{
-    if(!confirm(`حذف "${event.title}" نهائيًا؟\n\nسيُحذف كل تسجيلات الطلاب فيها معها، ولا يمكن التراجع.`)) return;
+    if(!await Admin.confirmDialog({title:`حذف "${event.title}"`, message:"سيُحذف كل تسجيلات الطلاب فيها معها، ولا يمكن التراجع.", confirmLabel:"حذف نهائيًا", danger:true})) return;
     const { error } = await db.from("tech_week_events").delete().eq("id", event.id);
     if(error){ CodeUp.toast(error.message, "error"); return; }
     m.close(); Admin.go("tech_week_events");
@@ -310,7 +310,7 @@ Admin.sections.tech_week_announcements = {
     };
     body.querySelectorAll("[data-del]").forEach(b=>{
       b.onclick = async ()=>{
-        if(!confirm("حذف هذا الإعلان نهائيًا؟")) return;
+        if(!await Admin.confirmDialog({title:"حذف الإعلان", message:"لا يمكن التراجع عن هذا الإجراء.", confirmLabel:"حذف", danger:true})) return;
         const { error } = await db.from("tech_week_announcements").delete().eq("id", b.dataset.del);
         if(error){ CodeUp.toast(error.message, "error"); return; }
         Admin.go("tech_week_announcements");
@@ -368,7 +368,7 @@ Admin.sections.tech_week_team = {
     };
     body.querySelectorAll("[data-remove]").forEach(b=>{
       b.onclick = async ()=>{
-        if(!confirm("إزالة هذا العضو من فريق الأسبوع التقني؟")) return;
+        if(!await Admin.confirmDialog({title:"إزالة عضو الفريق", message:"سيفقد هذا العضو صلاحية إدارة الأسبوع التقني.", confirmLabel:"إزالة", danger:true})) return;
         const { error } = await db.from("tech_week_admins").delete().eq("id", b.dataset.remove);
         if(error){ CodeUp.toast(error.message, "error"); return; }
         Admin.go("tech_week_team");

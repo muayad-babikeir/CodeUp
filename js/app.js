@@ -755,14 +755,14 @@ const App = {
             </div>`);
           m.el.querySelector("#menuEditPost").onclick = async ()=>{
             m.close();
-            const newVal = prompt("عدّل نص المنشور:", p.content);
+            const newVal = await this.promptDialog({title:"تعديل المنشور", defaultValue:p.content, confirmLabel:"حفظ"});
             if(newVal===null || !newVal.trim()) return;
             try{ await db.from("posts").update({content:newVal.trim()}).eq("id", p.id).eq("profile_id", this.ctx.user.id).throwOnError(); this.renderProfile(profileId); }
             catch(e){ CodeUp.toast(e.message,"error"); }
           };
           m.el.querySelector("#menuDelPost").onclick = async ()=>{
             m.close();
-            if(!confirm("حذف هذا المنشور؟ لن يظهر لأي شخص بعد الحذف.")) return;
+            if(!await this.confirmDialog({title:"حذف المنشور", message:"لن يظهر لأي شخص بعد الحذف.", confirmLabel:"حذف", danger:true})) return;
             try{ await db.from("posts").update({status:"deleted", deleted_at:new Date().toISOString()}).eq("id", p.id).eq("profile_id", this.ctx.user.id).throwOnError(); this.renderProfile(profileId); }
             catch(e){ CodeUp.toast(e.message,"error"); }
           };
@@ -816,7 +816,7 @@ const App = {
       <div class="apSection">
         <div class="apSecTitle">الأمان والحساب</div>
         <div class="apRow"><span>البريد الإلكتروني</span><span class="mono small">${CodeUp.escapeHtml(this.ctx.user.email||"")}</span></div>
-        <button class="btn" id="changePasswordBtn" style="width:100%;margin-top:10px">تغيير كلمة المرور</button>
+        <button class="btn" id="resetPasswordBtn" style="width:100%;margin-top:10px">إعادة تعيين كلمة المرور عبر البريد</button>
         <button class="btn" id="accountLogoutBtn" style="width:100%;margin-top:8px">تسجيل الخروج</button>
       </div>
 
@@ -849,17 +849,18 @@ const App = {
       </div>`);
     m.el.querySelector("#accountLogoutBtn").onclick = ()=>{ m.close(); App.logout(); };
 
-    m.el.querySelector("#changePasswordBtn").onclick = async ()=>{
-      const p1 = prompt("كلمة المرور الجديدة (6 أحرف على الأقل):");
-      if(!p1) return;
-      if(p1.length < 6){ CodeUp.toast("كلمة المرور قصيرة جدًا", "error"); return; }
-      const p2 = prompt("أكّد كلمة المرور الجديدة:");
-      if(p1 !== p2){ CodeUp.toast("كلمتا المرور غير متطابقتين", "error"); return; }
+    m.el.querySelector("#resetPasswordBtn").onclick = async (ev)=>{
+      const btn = ev.currentTarget;
+      // نفس دالة إعادة التعيين المستخدمة في شاشة اللوجين بالضبط — بريد
+      // المستخدم معروف بالفعل (هو مسجّل دخول)، فلا داعي لأي حقل إدخال.
+      btn.disabled = true; const original = btn.textContent; btn.textContent = "جارِ الإرسال...";
       try{
-        const { error } = await db.auth.updateUser({ password: p1 });
-        if(error) throw error;
-        CodeUp.toast("تم تغيير كلمة المرور", "success");
-      }catch(err){ CodeUp.toast(err.message||"تعذّر تغيير كلمة المرور", "error"); }
+        await db.auth.resetPasswordForEmail(this.ctx.user.email, { redirectTo: window.location.origin + window.location.pathname });
+        btn.textContent = "تم إرسال الرابط إلى بريدك"; btn.classList.add("dark");
+      }catch(err){
+        btn.disabled = false; btn.textContent = original;
+        CodeUp.toast("تعذّر إرسال رابط إعادة التعيين، حاول مرة أخرى", "error");
+      }
     };
 
     m.el.querySelector("#changeAvatarBtn").onclick = ()=> m.el.querySelector("#avatarFileInput").click();
@@ -940,22 +941,21 @@ const App = {
       };
     })();
 
-    m.el.querySelector("#deleteAccountStep1").onclick = ()=>{
-      if(!confirm("هذا الإجراء نهائي ولا يمكن التراجع عنه — هل أنت متأكد؟")) return;
-      const typed = prompt('للتأكيد النهائي، اكتب كلمة "حذف" بالضبط:');
-      if(typed !== "حذف"){ CodeUp.toast("لم يتطابق النص — تم الإلغاء", "info"); return; }
-      (async ()=>{
-        try{
-          const {data:{session}} = await db.auth.getSession();
-          const res = await fetch(`${SUPABASE_URL}/functions/v1/delete-account`, {
-            method:"POST", headers:{"Authorization":`Bearer ${session.access_token}`}
-          });
-          const json = await res.json();
-          if(!res.ok || json.error) throw new Error(json.error||"تعذّر حذف الحساب");
-          await db.auth.signOut();
-          window.location.reload();
-        }catch(e){ CodeUp.toast(e.message,"error"); }
-      })();
+    m.el.querySelector("#deleteAccountStep1").onclick = async ()=>{
+      const step1 = await this.confirmDialog({title:"حذف الحساب نهائيًا", message:"هذا الإجراء نهائي ولا يمكن التراجع عنه.", confirmLabel:"متابعة", danger:true});
+      if(!step1) return;
+      const typed = await this.promptDialog({title:"تأكيد نهائي", message:'اكتب كلمة "حذف" بالضبط للمتابعة:', confirmLabel:"حذف حسابي", danger:true});
+      if(typed !== "حذف"){ if(typed!==null) CodeUp.toast("لم يتطابق النص — تم الإلغاء", "info"); return; }
+      try{
+        const {data:{session}} = await db.auth.getSession();
+        const res = await fetch(`${SUPABASE_URL}/functions/v1/delete-account`, {
+          method:"POST", headers:{"Authorization":`Bearer ${session.access_token}`}
+        });
+        const json = await res.json();
+        if(!res.ok || json.error) throw new Error(json.error||"تعذّر حذف الحساب");
+        await db.auth.signOut();
+        window.location.reload();
+      }catch(e){ CodeUp.toast(e.message,"error"); }
     };
   },
 
@@ -1042,6 +1042,30 @@ const App = {
     });
   },
 
+  // نافذة إدخال قيمة واحدة بديل prompt() الافتراضي — ترجع Promise<string|null>.
+  promptDialog({title, message, defaultValue="", placeholder="", confirmLabel="تأكيد", danger=false}){
+    return new Promise(resolve=>{
+      const bg=document.createElement("div");bg.className="modalBg";
+      bg.innerHTML=`<div class="modal confirmDialog">
+        <h3>${CodeUp.escapeHtml(title)}</h3>
+        ${message?`<p>${CodeUp.escapeHtml(message)}</p>`:""}
+        <input id="pdInput" style="margin-top:10px" value="${CodeUp.escapeHtml(defaultValue)}" placeholder="${CodeUp.escapeHtml(placeholder)}">
+        <div class="confirmActions">
+          <button class="btn" id="pdCancel">إلغاء</button>
+          <button class="btn ${danger?"danger":"dark"}" id="pdConfirm">${CodeUp.escapeHtml(confirmLabel)}</button>
+        </div>
+      </div>`;
+      document.body.appendChild(bg);
+      const input = bg.querySelector("#pdInput");
+      input.focus();
+      const finish = (result)=>{ bg.remove(); resolve(result); };
+      bg.addEventListener("click", e=>{ if(e.target===bg) finish(null); });
+      bg.querySelector("#pdCancel").onclick = ()=>finish(null);
+      bg.querySelector("#pdConfirm").onclick = ()=>finish(input.value);
+      input.onkeydown = (e)=>{ if(e.key==="Enter") finish(input.value); };
+    });
+  },
+
   // نافذة سفلية (Bottom Sheet) على الموبايل، ومنتصف الشاشة على الشاشات الأكبر — لأي نموذج
   // (مثل إنشاء فريق) بدل prompt() الافتراضي بالمتصفح. innerHtml يحدد محتواه بالكامل (تسمية،
   // حقول، زر حفظ)؛ العنصر نفسه يُغلق تلقائيًا بالنقر خارج الورقة.
@@ -1099,8 +1123,8 @@ const App = {
         <button data-hometab="feed" class="${tab==='feed'?'active':''}"><span class="tabIcon">${Icon('home')}</span>الرئيسية</button>
         <button data-hometab="courses" class="${tab==='courses'?'active':''}"><span class="tabIcon">${Icon('learning')}</span>الكورسات</button>
         <button data-hometab="university" class="${tab==='university'?'active':''}"><span class="tabIcon">${Icon('university')}</span>الجامعة</button>
-        <button data-hometab="tech_week" class="${tab==='tech_week'?'active':''}"><span class="tabIcon">${Icon('zap')}</span>الأسبوع التقني</button>
-        <button data-hometab="marketplace" class="${tab==='marketplace'?'active':''}"><span class="tabIcon">${Icon('shopping_bag')}</span>Marketplace</button>
+        ${this.ctx.techWeekEnabled?`<button data-hometab="tech_week" class="${tab==='tech_week'?'active':''}"><span class="tabIcon">${Icon('zap')}</span>الأسبوع التقني</button>`:""}
+        ${this.ctx.marketplaceEnabled?`<button data-hometab="marketplace" class="${tab==='marketplace'?'active':''}"><span class="tabIcon">${Icon('shopping_bag')}</span>Marketplace</button>`:""}
       </div>`;
     tabSlot.querySelectorAll("[data-hometab]").forEach(b=>{
       b.onclick = ()=>{ this.view = {name:"home", homeTab:b.dataset.hometab}; this.renderHome(b.dataset.hometab); };
@@ -1112,6 +1136,10 @@ const App = {
     this.syncHeaderHeight();
 
     const body = document.getElementById("homeBody");
+    // لو المستخدم وصل لتاب متوقف حاليًا (رابط قديم محفوظ، أو الأدمن أوقفه
+    // أثناء تصفّحه) — رجوع آمن للرئيسية بدل صفحة فاضية أو خطأ.
+    if(tab === "tech_week" && !this.ctx.techWeekEnabled){ this.view = {name:"home", homeTab:"feed"}; return this.renderHome("feed"); }
+    if(tab === "marketplace" && !this.ctx.marketplaceEnabled){ this.view = {name:"home", homeTab:"feed"}; return this.renderHome("feed"); }
     if(tab === "courses") return this.renderHomeCourses(body);
     if(tab === "university") return this.renderHomeUniversity(body);
     if(tab === "tech_week") return this.renderHomeTechWeek(body);
@@ -2579,7 +2607,7 @@ const App = {
               await db.rpc("unpin_post", {p_post_id: b.dataset.pinpost}).throwOnError();
               CodeUp.toast("تم إلغاء التثبيت", "success");
             }else{
-              const days = prompt("عدد أيام التثبيت (اتركه فارغًا للتثبيت الدائم):", "3");
+              const days = await this.promptDialog({title:"تثبيت المنشور", message:"عدد أيام التثبيت (اتركه فارغًا للتثبيت الدائم):", defaultValue:"3", confirmLabel:"تثبيت"});
               if(days===null) return;
               const until = days.trim() ? new Date(Date.now() + Number(days)*86400000).toISOString() : null;
               await db.rpc("pin_post", {p_post_id: b.dataset.pinpost, p_pinned_until: until}).throwOnError();
@@ -3239,7 +3267,7 @@ const App = {
     body.querySelectorAll("[data-submit]").forEach(b=>{
       b.onclick = async ()=>{
         if(!myEnrollment){
-          if(!confirm("للتسليم يجب الانضمام للكورس أولًا. تريد الانضمام الآن؟")) return;
+          if(!await this.confirmDialog({title:"الانضمام للكورس", message:"للتسليم يجب الانضمام للكورس أولًا. تريد الانضمام الآن؟", confirmLabel:"انضمام"})) return;
           try{
             await CodeUp.rpc.enrollInCourse(course.id);
             this.ctx = await CodeUp.loadMyContext();
@@ -3586,7 +3614,7 @@ const App = {
 
       const requireJoin = async ()=>{
         if(myEnrollment) return true;
-        if(!confirm("للتفاعل يجب الانضمام للكورس أولًا. تريد الانضمام الآن؟")) return false;
+        if(!await this.confirmDialog({title:"الانضمام للكورس", message:"للتفاعل يجب الانضمام للكورس أولًا. تريد الانضمام الآن؟", confirmLabel:"انضمام"})) return false;
         try{ await CodeUp.rpc.enrollInCourse(course.id); this.ctx = await CodeUp.loadMyContext(); myEnrollment = this.ctx.enrollments.find(e=>e.course_id===course.id); return true; }
         catch(e){ CodeUp.toast(e.message||"تعذّر الانضمام", "error"); return false; }
       };
@@ -3716,14 +3744,14 @@ const App = {
     body.querySelectorAll("[data-join]").forEach(b=>{
       b.onclick = async ()=>{
         if(!myEnrollment){
-          if(!confirm("للانضمام لمجموعة يجب الانضمام للكورس أولًا. تريد الانضمام الآن؟")) return;
+          if(!await this.confirmDialog({title:"الانضمام للكورس", message:"للانضمام لمجموعة يجب الانضمام للكورس أولًا. تريد الانضمام الآن؟", confirmLabel:"انضمام"})) return;
           try{ await CodeUp.rpc.enrollInCourse(course.id); this.ctx = await CodeUp.loadMyContext(); }
           catch(e){ CodeUp.toast(e.message||"تعذّر الانضمام", "error"); return; }
         }
         // تحذير قبل الطلب لو الطالب أصلًا بمجموعة ثانية بنفس الكورس — القبول ينقله تلقائيًا
         if(myEnrollment?.squad_id && myEnrollment.squad_id !== b.dataset.join){
           const currentSquad = squads.find(s=>s.id===myEnrollment.squad_id);
-          const ok = confirm(`أنت حاليًا عضو بمجموعة "${currentSquad?.name||""}". لو تمت الموافقة على هذا الطلب، سيتم نقلك تلقائيًا لهذه المجموعة الجديدة وإخراجك من مجموعتك الحالية. هل تريد المتابعة؟`);
+          const ok = await this.confirmDialog({title:"تغيير المجموعة", message:`أنت حاليًا عضو بمجموعة "${currentSquad?.name||""}". لو تمت الموافقة على هذا الطلب، سيتم نقلك تلقائيًا لهذه المجموعة الجديدة وإخراجك من مجموعتك الحالية.`, confirmLabel:"متابعة"});
           if(!ok) return;
         }
         b.disabled = true;
@@ -3771,7 +3799,7 @@ const App = {
     // بمستوى RLS/RPC (assign_squad_leader) وليس بمجرد إخفاء الزر هنا.
 
     m.el.querySelector("#leaveSquadBtn").onclick = async ()=>{
-      if(!confirm("هل تريد مغادرة هذه المجموعة فعلًا؟")) return;
+      if(!await this.confirmDialog({title:"مغادرة المجموعة", confirmLabel:"مغادرة", danger:true})) return;
       try{
         await db.rpc("leave_squad", {p_course_id: course.id}).throwOnError();
         CodeUp.toast("تم مغادرة المجموعة", "success");

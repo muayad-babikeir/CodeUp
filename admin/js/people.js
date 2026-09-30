@@ -92,7 +92,7 @@ Admin.sections.users = {
       tbody.querySelectorAll("[data-toggle]").forEach(b=>{
         b.onclick = async (ev)=>{
           ev.stopPropagation();
-          if(!confirm("تأكيد تغيير صلاحية هذا المستخدم؟")) return;
+          if(!await Admin.confirmDialog({title:"تغيير صلاحية المستخدم", message:"سيتغيّر مستوى صلاحية هذا المستخدم في CodeUp.", confirmLabel:"تأكيد"})) return;
           const { error } = await db.from("profiles").update({ is_super_admin: b.dataset.val==="true" }).eq("id", b.dataset.toggle);
           if(error) CodeUp.toast(error.message, "error"); else Admin.go("users");
         };
@@ -325,7 +325,7 @@ Admin.sections.leaders = {
     });
     body.querySelectorAll("[data-remove]").forEach(b=>{
       b.onclick = async ()=>{
-        if(!confirm("تأكيد إزالة صلاحية القيادة؟")) return;
+        if(!await Admin.confirmDialog({title:"إزالة صلاحية القيادة", message:"سيفقد هذا العضو صلاحية قيادة المجموعة.", confirmLabel:"إزالة", danger:true})) return;
         const { error } = await db.from("squad_leaders").delete().eq("id", b.dataset.remove);
         if(error){ CodeUp.toast(error.message, "error"); return; }
         Admin.go("leaders");
