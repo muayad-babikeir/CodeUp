@@ -1,6 +1,579 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CodeUp</title>
+<meta name="description" content="CodeUp — منصة تعليمية عربية لإدارة كورسات البرمجة: متابعة الواجبات والتسليمات، مجموعات الطلاب، الإنجاز والنقاط، وتواصل مباشر بين الطلاب والقادة.">
+<link rel="canonical" href="https://codeupsd.online/">
+<meta name="robots" content="index, follow">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="CodeUp">
+<meta property="og:title" content="CodeUp — منصة التعلم والتدريب البرمجي">
+<meta property="og:description" content="منصة تعليمية عربية لإدارة كورسات البرمجة: متابعة الواجبات والتسليمات، مجموعات الطلاب، الإنجاز والنقاط، وتواصل مباشر بين الطلاب والقادة.">
+<meta property="og:url" content="https://codeupsd.online/">
+<meta property="og:image" content="https://codeupsd.online/codeup-logo.png">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="CodeUp — منصة التعلم والتدريب البرمجي">
+<meta name="twitter:description" content="منصة تعليمية عربية لإدارة كورسات البرمجة: متابعة الواجبات والتسليمات، مجموعات الطلاب، الإنجاز والنقاط، وتواصل مباشر بين الطلاب والقادة.">
+<meta name="twitter:image" content="https://codeupsd.online/codeup-logo.png">
+<link rel="icon" type="image/svg+xml" href="codeup-logo.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/icon-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="manifest" href="manifest.json">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ===== CodeUp — نظام تصميم داكن مستوحى من لوحات ألوان @graphix_theory =====
+   Onyx (خلفية) + Candy Blue (أساسي) + Lime (XP/نجاح) + Violet (ثانوي/قيادة) */
+:root{
+  --bg0:#000000; --bg1:#000000; --bg2:#16181C;
+  --ink:#E7E9EA; --ink60:#71767B; --ink40:#536471;
+  --line:rgba(239,243,244,.13); --line-strong:rgba(239,243,244,.24);
+  --surface:rgba(239,243,244,.04); --surface-solid:#16181C;
+  --accent:#1D9BF0; --accent-ink:#FFFFFF; --accent-deep:#1A8CD8;
+  --green:#3DD16F; --green-ink:#06210F; --green-soft:rgba(61,209,111,.14);
+  --red:#F2555F; --red-soft:rgba(242,85,95,.14);
+  --blur:blur(22px);
+  --shadow:0 24px 60px -24px rgba(0,0,0,.8);
+}
+*{box-sizing:border-box; min-width:0}
+body{
+  margin:0;font-family:'IBM Plex Sans Arabic',system-ui,sans-serif;color:var(--ink);line-height:1.55;
+  background:
+    radial-gradient(900px 500px at 15% -10%, rgba(255,255,255,.06), transparent 60%),
+    radial-gradient(700px 500px at 110% 10%, rgba(255,255,255,.04), transparent 55%),
+    var(--bg0);
+  background-attachment:fixed;
+}
+.mono{font-family:'IBM Plex Mono',monospace}
+.tag{display:inline-flex;align-items:center;gap:4px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-weight:500;letter-spacing:.02em;padding:3px 9px;border-radius:7px;border:1px solid var(--line);color:var(--ink60);background:rgba(255,255,255,.03);white-space:nowrap}
+.tag.on_track,.tag.active,.tag.approved,.tag.reviewed{background:var(--green-soft);color:var(--green);border-color:rgba(61,209,111,.35)}
+.tag.at_risk,.tag.pending{background:rgba(255,255,255,.06);color:var(--ink);border-color:var(--line-strong)}
+.tag.behind,.tag.rejected,.tag.late{background:var(--red-soft);color:var(--red);border-color:rgba(242,85,95,.35)}
+.tag.inactive,.tag.missing{background:rgba(255,255,255,.04);color:var(--ink60);border-color:var(--line)}
+.eyebrow{font-family:'IBM Plex Mono',monospace;font-size:11.5px;letter-spacing:.06em;color:var(--ink);text-transform:uppercase}
+.eyebrow::before{content:"> ";color:var(--ink40)}
+.app{min-height:100vh;display:grid;place-items:center;padding:18px}
+.authFooter{width:100%;max-width:420px;margin:18px auto 0;padding-top:16px;border-top:1px solid var(--line);text-align:center;display:flex;flex-direction:column;gap:8px;align-items:center}
+.authFooterBrand{display:flex;flex-direction:column;gap:2px}
+.authFooterLogo{font-weight:700;color:var(--ink)}
+.authFooterLinks{display:flex;gap:14px;flex-wrap:wrap;justify-content:center}
+.authFooterLinks a{color:var(--ink60);font-size:12.5px;text-decoration:none}
+.authFooterLinks a:hover{color:var(--accent)}
+.authFooterCopy{color:var(--ink40)}
+.card{width:min(440px,100%);background:var(--surface);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);border-radius:24px;padding:32px;box-shadow:var(--shadow)}
+.brand{text-align:center;margin-bottom:26px}
+.brand .mark{width:52px;height:52px;border-radius:16px;background:var(--surface-solid);border:1px solid var(--line);color:var(--accent-ink);display:grid;place-items:center;margin:0 auto 14px;font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:19px;overflow:hidden}
+.brand .mark img{width:68%;height:68%;object-fit:contain}
+.brand h1{margin:0 0 4px;font-size:26px;font-weight:700;letter-spacing:-.02em}
+.brand p{margin:0;color:var(--ink60);font-size:14px}
+.tabs{display:grid;grid-template-columns:1fr 1fr;background:rgba(255,255,255,.04);padding:4px;border-radius:12px;margin-bottom:22px;border:1px solid var(--line)}
+.linklike{background:none;border:0;color:var(--accent);font-size:13px;cursor:pointer;font-family:inherit;padding:2px 0}
+.linklike:hover{text-decoration:underline}
+.successIcon{width:64px;height:64px;border-radius:50%;background:rgba(0,186,124,.15);color:#00BA7C;display:flex;align-items:center;justify-content:center;margin:0 auto}
+.successIcon svg{width:34px;height:34px}
+.bottomNav{position:fixed;bottom:0;inset-inline:0;z-index:120;display:none;background:var(--surface-solid);border-top:1px solid var(--line);padding:6px 4px calc(6px + env(safe-area-inset-bottom))}
+.bottomNav button{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;background:none;border:0;color:var(--ink60);font-size:10.5px;font-family:inherit;padding:6px 0;position:relative;cursor:pointer}
+.bottomNav button svg{width:22px;height:22px}
+.bottomNav button.active{color:var(--accent)}
+.bottomBadge{position:absolute;top:2px;inset-inline-end:22%;background:var(--accent);color:#fff;border-radius:20px;min-width:15px;height:15px;font-size:9px;display:flex;align-items:center;justify-content:center;padding:0 3px}
+@media (max-width:720px){
+  .bottomNav{display:flex}
+  .wrap{padding-bottom:96px}
+}
 
-const authApp=document.getElementById("authApp"),dash=document.getElementById("dashboardApp"),bootScreen=document.getElementById("bootScreen"),form=document.getElementById("authForm"),msg=document.getElementById("message"),btn=document.getElementById("submitBtn");
-function hideBoot(){ bootScreen.classList.add("hidden"); }
+/* ===== منطقة الهيدر الموحّدة (topbar + crumbs/tabs) — سلوك سحب بأسلوب X، هاتف فقط ===== */
+/* على الديسكتوب: الغلاف "يختفي" من صندوق الـlayout تمامًا (display:contents) فتبقى
+   العناصر الداخلية (topbar الخاصة بها بالتصميم القديم) بمكانها الطبيعي بدون أي تغيير. */
+#mobileHeaderWrap{display:contents}
+@media (max-width:720px){
+  #mobileHeaderWrap{
+    display:block; position:fixed; top:0; inset-inline:0; z-index:95;
+    background:var(--surface-solid); border-bottom:1px solid var(--line);
+    transition:transform .28s cubic-bezier(.4,0,.2,1);
+    transform:translateY(0);
+  }
+  #mobileHeaderWrap.headerHidden{ transform:translateY(-100%); }
+  /* الهيدر صار مُدارًا كوحدة واحدة عبر الغلاف الثابت — نلغي sticky/margin
+     الفردية لعناصره الداخلية حتى ما تتحرك بسرعة مختلفة عن بعض */
+  #mobileHeaderWrap .topbar{position:static; border-radius:0; margin:0}
+  #mobileHeaderWrap #crumbs{margin:0; padding:10px 16px 0}
+  #mobileHeaderWrap .fbTabBar{margin:8px 16px 10px}
+  /* المحتوى يحجز نفس ارتفاع الهيدر فعليًا (يُحسب ديناميكيًا بجافاسكريبت)، وينكمش
+     بالتزامن مع اختفاء الهيدر (نفس مدة/منحنى الحركة) حتى يملأ المنشور المساحة
+     المُفرَّغة بدل ما تفضل فجوة فاضية معلّقة مكان الهيدر. */
+  .dashboard > .wrap{ padding-top:var(--mobileHeaderH,0px); transition:padding-top .28s cubic-bezier(.4,0,.2,1); }
+  .dashboard > .wrap.headerCollapsedContent{ padding-top:0 !important; }
+}
+/* ===== الدردشة (نمط X) ===== */
+.chatShell{display:grid;grid-template-columns:320px 1fr;gap:0;height:calc(100vh - 160px);min-height:480px;border:1px solid var(--line);border-radius:16px;overflow:hidden;margin-top:14px;position:relative}
+.chatList{border-inline-end:1px solid var(--line);display:flex;flex-direction:column;position:relative;overflow-y:auto}
+.chatListHead{padding:16px;border-bottom:1px solid var(--line)}
+.chatListHead h2{margin:0 0 4px}
+.chatSearchInput{width:100%;margin-top:10px;padding:9px 12px;border-radius:20px;border:1px solid var(--line);background:var(--surface);color:var(--ink)}
+.convList{flex:1;overflow-y:auto}
+.convRow{display:flex;align-items:center;gap:10px;padding:12px 16px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,.04)}
+.convRow:hover,.convRow.active{background:var(--surface)}
+.convAvatar{width:40px;height:40px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0}
+.convInfo{flex:1;display:flex;flex-direction:column;min-width:0}
+.convInfo b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chatFab{position:absolute;bottom:16px;inset-inline-end:16px;width:48px;height:48px;border-radius:50%;background:var(--accent);color:#fff;border:0;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 4px 14px rgba(29,155,240,.4)}
+.chatFab svg{width:22px;height:22px}
+.chatThread{display:flex;flex-direction:column;height:100%;overflow:hidden}
+.chatThreadHead{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line)}
+.chatMessages{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:8px}
+.chatBubble{max-width:75%;padding:9px 13px;border-radius:16px;background:var(--surface-solid);border:1px solid var(--line);align-self:flex-start;display:flex;flex-direction:column;gap:2px}
+.chatBubble.mine{align-self:flex-end;background:var(--accent);color:#fff;border-color:transparent}
+.chatBubble .small{opacity:.65;font-size:10px}
+.chatComposer{display:flex;gap:8px;padding:12px 16px;border-top:1px solid var(--line)}
+.chatComposer input{flex:1;padding:10px 14px;border-radius:20px;border:1px solid var(--line);background:var(--surface);color:var(--ink)}
+@media (max-width:720px){
+  .chatShell{grid-template-columns:1fr;height:calc(100vh - 130px)}
+  .chatShell .chatList,.chatShell .chatThread{display:none}
+  .chatShell.showList .chatList{display:flex}
+  .chatShell.showThread .chatThread{display:flex}
+}
+.profileHead{display:flex;align-items:center;gap:14px;margin-top:10px}
+.profileHead h2{margin:0}
+.tabs button{border:0;background:transparent;padding:11px;border-radius:9px;cursor:pointer;color:var(--ink60);font-family:inherit;font-size:14px}
+.tabs button.active{background:var(--ink);color:var(--bg0);box-shadow:0 1px 3px rgba(0,0,0,.3);font-weight:600}
+label{display:block;font-size:13px;font-weight:600;margin:14px 0 6px;color:var(--ink)}
+input,textarea,select{width:100%;padding:12px 14px;border:1px solid var(--line);border-radius:11px;outline:0;font-family:inherit;font-size:14px;background:rgba(255,255,255,.03);color:var(--ink)}
+input::placeholder,textarea::placeholder{color:var(--ink40)}
+input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(255,255,255,.12)}
+.primary{width:100%;border:0;border-radius:12px;padding:13px;margin-top:20px;background:linear-gradient(135deg,var(--accent),var(--accent-deep));color:var(--accent-ink);font-weight:700;font-family:inherit;font-size:14.5px;cursor:pointer}
+.primary:hover{filter:brightness(1.08)}
+.primary:disabled{opacity:.6;cursor:not-allowed}
+.message{display:none;margin-top:14px;padding:11px 13px;border-radius:10px;font-size:13.5px;line-height:1.6}
+.message.show{display:block}.message.error{background:var(--red-soft);color:var(--red)}.message.success{background:var(--green-soft);color:var(--green)}
+.hidden{display:none!important}
+.pwdWrap{position:relative}.pwdWrap input{padding-left:44px}
+.pwdToggle{position:absolute;left:6px;top:50%;transform:translateY(-50%);width:34px;height:34px;border:0;background:transparent;cursor:pointer;display:grid;place-items:center;border-radius:8px;color:var(--ink60)}
+.pwdToggle:hover{background:rgba(255,255,255,.06)}.pwdToggle svg{width:19px;height:19px}.pwdToggle .eyeOff{display:none}.pwdToggle.show .eyeOn{display:none}.pwdToggle.show .eyeOff{display:block}
+.spinner{display:none;width:18px;height:18px;border-radius:50%;border:2.5px solid rgba(11,12,16,.3);border-top-color:var(--accent-ink);animation:spin .7s linear infinite;margin:0 auto}
+.primary.loading .btnText{display:none}.primary.loading .spinner{display:block}@keyframes spin{to{transform:rotate(360deg)}}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+.dashboard{min-height:100vh;padding:16px}
+.wrap{max-width:1080px;margin:0 auto}
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--surface);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);border-radius:18px;padding:12px 16px;position:sticky;top:10px;z-index:20}
+@media (max-width:720px){
+  /* السبب الحقيقي لتراكب الـTop Bar فوق المنشورات بالهاتف: هذي القاعدة كانت
+     موجودة *قبل* تعريف .topbar الأساسي بالملف (سطر أعلى)، وبما إن ترتيب CSS
+     بنفس درجة التحديد يحسم الأولوية بترتيب الظهور بالملف مو بمكان الميديا كويري،
+     كانت قاعدة display:flex الأساسية (الأحدث بالترتيب) تلغي display:none تلقائيًا
+     — فتظل الشريط ظاهرة وعائمة فوق المحتوى بالهاتف رغم النية إخفاءها. نقلها هنا
+     (بعد التعريف الأساسي مباشرة) يضمن فوزها فعليًا، ونظام الحساب/الإشعارات/الرسائل
+     يبقى متاحًا كاملًا عبر الشريط السفلي وصفحة "حسابي" بدون أي فقدان وظيفة. */
+  .topbar{display:none}
+}
+.topbrand{display:flex;align-items:center;gap:9px;font-weight:700;flex-shrink:0}
+.topbrand .mark{width:30px;height:30px;border-radius:10px;background:var(--surface-solid);border:1px solid var(--line);color:var(--accent-ink);display:grid;place-items:center;font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:13px;overflow:hidden}
+.topbrand .mark img{width:68%;height:68%;object-fit:contain}
+.topRight{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.iconBtn{position:relative;border:1px solid var(--line);background:rgba(255,255,255,.03);border-radius:10px;width:38px;height:38px;display:grid;place-items:center;cursor:pointer;color:var(--ink)}
+.topAvatarBtn{border-radius:50%;overflow:hidden;background:var(--accent);color:#fff;font-weight:700;font-size:14px}
+.topAvatarBtn img{width:100%;height:100%;object-fit:cover;border-radius:50%}
+.iconBtn svg{width:19px;height:19px}
+.badge{position:absolute;top:-5px;left:-5px;background:var(--red);color:#fff;font-size:10.5px;border-radius:999px;padding:1px 5px;font-weight:700;font-family:'IBM Plex Mono',monospace}
+.logout{border:1px solid var(--line);background:rgba(255,255,255,.03);border-radius:10px;padding:9px 14px;cursor:pointer;font-family:inherit;font-size:13.5px;color:var(--ink)}
+.logout:hover{border-color:var(--line-strong)}
+.welcome{max-width:1080px;margin:24px auto 4px}
+.welcome h2{font-size:25px;margin:0 0 6px;font-weight:700;letter-spacing:-.02em}
+.welcome p{color:var(--ink60);font-size:14px;margin:0}
+.sectionHead{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin:28px 0 12px;flex-wrap:wrap}
+.sectionHead h3{font-size:15px;margin:0;font-weight:700}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
+.box{background:var(--surface);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);border-radius:18px;padding:18px}
+@media(max-width:500px){.card{padding:26px 20px}}
+.crumbs{display:flex;gap:8px;align-items:center;color:var(--ink60);font-size:13.5px;margin:14px 0;flex-wrap:wrap}
+.crumbs button{border:0;background:var(--surface-solid);color:var(--accent);cursor:pointer;font-weight:600;padding:6px 12px;border-radius:20px;font-family:inherit;font-size:13.5px}
+.courseCard{background:var(--surface);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);border-radius:18px;padding:18px;cursor:pointer;transition:border-color .15s,transform .15s;overflow:hidden}
+.courseCard:hover{border-color:var(--accent);transform:translateY(-2px)}
+.courseCard h3{margin:0 0 6px;font-size:15.5px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.courseCard p{margin:0;color:var(--ink60);font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* Course Card v2 — إضافات فقط لبطاقة الكورس (تقدّم الدروس الحقيقي + CTA)، بدون لمس القواعد الأساسية أعلاه */
+.courseCardV2{display:flex;flex-direction:column;gap:12px}
+.ccHead{display:flex;align-items:flex-start;gap:10px}
+.ccHead h3{white-space:normal;overflow:visible}
+.ccHead p{white-space:normal;overflow:visible;-webkit-line-clamp:2;display:-webkit-box;-webkit-box-orient:vertical}
+.ccIcon{width:36px;height:36px;border-radius:10px;background:rgba(29,155,240,.12);color:var(--accent);display:grid;place-items:center;flex-shrink:0}
+.ccIcon svg{width:18px;height:18px}
+.progressTrack{height:7px;border-radius:999px;background:rgba(255,255,255,.07);overflow:hidden}
+.progressFill{height:100%;border-radius:999px;background:linear-gradient(90deg,var(--accent),var(--green))}
+.ccProgressRow{display:flex;justify-content:space-between;margin-top:6px;color:var(--ink60);font-size:12px}
+.ccMeta{display:flex;gap:12px;flex-wrap:wrap;color:var(--ink60)}
+.ccCta{width:100%;text-align:center;cursor:pointer}
+.courseCardV2:hover{border-color:var(--accent);transform:none}
+.materialTypeIcon{display:inline-flex;color:var(--ink60)}
+.materialTypeIcon svg{width:19px;height:19px}
+.courseHeader{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:18px;margin-bottom:16px;display:flex;flex-direction:column;gap:12px}
+.courseHeaderTop{display:flex;align-items:flex-start;gap:12px}
+.courseHeaderIcon{width:44px;height:44px}
+.courseHeaderIcon svg{width:22px;height:22px}
+.courseHeaderTitle{margin:0 0 4px;font-size:18px;font-weight:700}
+.courseHeaderDesc{margin:0;color:var(--ink60);font-size:13.5px;line-height:1.6}
+.courseHeaderCta{align-self:flex-start;min-width:160px}
+@media(max-width:640px){.courseHeaderCta{align-self:stretch}}
+
+.unitAccordion{background:var(--surface);border:1px solid var(--line);border-radius:16px;margin-bottom:10px;overflow:hidden}
+.unitAccordionHead{display:flex;align-items:center;gap:10px;width:100%;padding:14px;background:none;border:none;color:var(--ink);text-align:start;cursor:pointer;font-family:inherit}
+.unitTitle{font-size:14.5px}
+.unitChevron{color:var(--ink60);flex-shrink:0;transition:transform .2s ease}
+.unitChevron svg{width:18px;height:18px}
+.unitAccordion.open .unitChevron{transform:rotate(180deg)}
+.unitAccordionBody{max-height:0;overflow:hidden;transition:max-height .25s ease}
+.unitAccordion.open .unitAccordionBody{max-height:none}
+.unitAccordion:not(.open) .unitAccordionBody{display:none}
+
+.lessonRow{display:flex;align-items:center;gap:10px;width:100%;padding:12px 14px;border-top:1px solid var(--line);background:none;border-inline:none;border-bottom:none;color:var(--ink);text-align:start;cursor:pointer;font-family:inherit}
+.lessonRow:hover{background:rgba(255,255,255,.03)}
+.lessonNum{color:var(--ink40);font-size:12px;flex-shrink:0}
+.lessonTitle{font-size:13.5px}
+.lessonMeta{display:flex;align-items:center;gap:10px;margin-top:4px;flex-wrap:wrap}
+.lessonTypeTag{display:inline-flex;align-items:center;gap:4px;color:var(--ink60)}
+.lessonTypeTag svg{width:13px;height:13px}
+.lessonStatusTag{padding:1px 8px;border-radius:999px;font-size:11px}
+.lessonStatusTag-completed{background:var(--green-soft);color:var(--green)}
+.lessonStatusTag-current{background:rgba(29,155,240,.14);color:var(--accent)}
+.lessonStatusTag-available{background:rgba(255,255,255,.05);color:var(--ink60)}
+.lessonRowArrow{color:var(--ink40);flex-shrink:0}
+.lessonRowArrow svg{width:16px;height:16px}
+.lessonRow.status-current{background:rgba(29,155,240,.05)}
+
+/* ============ صفحة الدرس المستقلة (Phase 3) ============ */
+.backToContentBtn{margin-bottom:14px;display:inline-flex;align-items:center}
+.lessonPageBody{display:flex;flex-direction:column;gap:16px}
+.lessonMain{min-width:0}
+.lessonPageTitle{margin:2px 0 8px;font-size:19px}
+.lessonSectionTitle{font-size:13.5px}
+.lessonCompleteBtn{width:100%;margin-top:14px;display:inline-flex;align-items:center;justify-content:center;gap:6px}
+.lessonNavRow{display:flex;justify-content:space-between;align-items:center;margin-top:14px;gap:10px}
+.lessonNavBtn{display:inline-flex;align-items:center;gap:2px}
+
+.lessonSidebar{display:none}
+.lessonSidebarHead{padding:12px 14px;border-bottom:1px solid var(--line)}
+.lsUnit{padding:8px 0}
+.lsUnitTitle{padding:6px 14px;color:var(--ink60)}
+.lsLesson{display:flex;align-items:center;gap:10px;width:100%;padding:8px 14px;background:none;border:none;color:var(--ink);text-align:start;cursor:pointer;font-family:inherit;font-size:12.5px}
+.lsLesson:hover{background:rgba(255,255,255,.03)}
+.lsLesson.active{background:rgba(29,155,240,.1);color:var(--accent)}
+.lsLessonIcon{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;flex-shrink:0;font-size:10px;background:rgba(255,255,255,.06);color:var(--ink60)}
+.lsLessonIcon svg{width:11px;height:11px}
+.lsLessonIcon-completed{background:var(--green-soft);color:var(--green)}
+.lsLessonIcon-current{background:rgba(29,155,240,.16);color:var(--accent)}
+.lsLessonTitle{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+.mobileContentToggle{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:12px;border-radius:14px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer;font-family:inherit;font-size:13.5px;margin-top:16px}
+.mobileContentToggle svg{width:16px;height:16px}
+.lessonDrawerBg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:120}
+.lessonDrawerBg.show{display:block}
+.lessonDrawer{position:fixed;top:0;bottom:0;left:0;width:min(320px,85vw);background:var(--surface-solid);border-inline-start:1px solid var(--line-strong);z-index:121;overflow-y:auto;transform:translateX(-105%);transition:transform .2s ease}
+.lessonDrawer.open{transform:none}
+
+@media(min-width:900px){
+  .lessonPageBody{display:grid;grid-template-columns:1fr 300px;align-items:start}
+  .lessonSidebar{display:block;position:sticky;top:16px;background:var(--surface);border:1px solid var(--line);border-radius:16px;overflow:hidden;max-height:calc(100vh - 32px);overflow-y:auto}
+  .mobileContentToggle,.lessonDrawerBg,.lessonDrawer{display:none!important}
+}
+.inlineBtnIcon{display:inline-flex;vertical-align:-3px;margin-inline-end:2px}
+.inlineBtnIcon svg{width:14px;height:14px}
+.subtabs{display:flex;gap:4px;overflow-x:auto;background:var(--surface);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);border-radius:14px;padding:5px;margin:14px 0;scrollbar-width:thin}
+.subtabs button{white-space:nowrap;border:0;background:transparent;padding:9px 13px;border-radius:10px;cursor:pointer;color:var(--ink60);font-weight:600;font-family:inherit;font-size:13.5px;flex-shrink:0}
+.subtabs button.active{background:var(--ink);color:var(--bg0)}
+/* ===== شريط تبويبات علوي (نمط فيسبوك) ===== */
+.fbTabBar{display:flex;gap:2px;overflow-x:auto;background:var(--surface);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);border-radius:14px;padding:5px;margin:14px 0;scrollbar-width:thin}
+.fbTabBar button{white-space:nowrap;border:0;background:transparent;padding:10px 14px;border-radius:10px;cursor:pointer;color:var(--ink60);font-weight:600;font-family:inherit;font-size:13px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:3px}
+.fbTabBar button .tabIcon{font-size:17px;line-height:1;display:inline-flex}
+.fbTabBar button .tabIcon svg{width:19px;height:19px}
+.feedTag svg{width:13px;height:13px;vertical-align:-2px;margin-inline-end:2px}
+.fileCard{display:flex;align-items:center;gap:10px;background:rgba(239,243,244,.03);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-top:8px}
+.fileCard .tabIcon svg{width:20px;height:20px;flex-shrink:0}
+.fileCard.archived .tabIcon svg{color:var(--ink60)}
+.fileCardInfo{flex:1;display:flex;flex-direction:column;gap:2px;min-width:0}
+.fileCardInfo b{font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.videoEmbed{position:relative;border-radius:12px;overflow:hidden;margin:10px 0;background:#000;aspect-ratio:16/9}
+.videoEmbed img{width:100%;height:100%;object-fit:cover;display:block;cursor:pointer}
+.videoEmbed .playBtn{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;cursor:pointer;background:rgba(0,0,0,.25)}
+.videoEmbed .playBtn svg{width:56px;height:56px;color:#fff;filter:drop-shadow(0 2px 8px rgba(0,0,0,.5))}
+.videoEmbed iframe{width:100%;height:100%;border:0;display:block}
+.progressBar{height:8px;border-radius:6px;background:rgba(239,243,244,.1);overflow:hidden;margin-top:8px}
+.progressFill{height:100%;background:var(--accent);border-radius:6px;transition:width .3s}
+.commentsToggle{background:transparent;border:0;color:var(--ink60);font-size:12.5px;cursor:pointer;padding:6px 0;display:flex;align-items:center;gap:5px}
+.commentsToggle .tabIcon svg{width:14px;height:14px}
+.commentsList.hidden{display:none}
+.commentHead{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:2px}
+.roleBadge{font-size:10.5px;font-weight:700;padding:1px 7px;border-radius:20px}
+.roleBadge.admin{background:rgba(0,186,124,.15);color:#00BA7C}
+.roleBadge.leader{background:rgba(29,155,240,.15);color:var(--accent)}
+.roleBadge.squadmate{background:rgba(239,243,244,.1);color:var(--ink60)}
+.commentAttachRow{display:flex;gap:6px;align-items:center;margin-top:6px}
+.commentAttachRow button{flex-shrink:0}
+.iconBtn svg{width:15px;height:15px}
+.fbTabBar button.active{background:var(--ink);color:var(--bg0)}
+.joinBanner{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--surface);border:1px solid var(--accent,#4c8dff);border-radius:14px;padding:12px 16px;margin:14px 0}
+.joinBanner p{margin:0;font-size:13.5px;color:var(--ink60)}
+.feedAnnouncement{border-inline-start:3px solid var(--accent,#4c8dff)}
+.feedTag{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;background:rgba(76,141,255,.15);color:var(--accent,#4c8dff);margin-bottom:6px}
+[dir="rtl"] .drawer{right:auto;left:0;border-inline-start:0;border-inline-end:1px solid var(--line-strong);transform:translateX(-100%)}
+[dir="rtl"] .drawer.open{transform:translateX(0)}
+.drawer h4{margin:0 0 14px;font-size:13px;color:var(--ink60);font-weight:600}
+.drawerItem{display:block;width:100%;text-align:start;border:0;background:transparent;color:var(--ink);padding:12px 10px;border-radius:10px;font-family:inherit;font-size:14.5px;font-weight:600;cursor:pointer;margin-bottom:4px}
+.drawerItem.active{background:var(--ink);color:var(--bg0)}
+.drawerItem:not(.active):hover{background:rgba(255,255,255,.06)}
+.card2{background:var(--surface);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:12px}
+.row{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.row > *{min-width:0}
+.btn{border:1px solid var(--line);background:rgba(255,255,255,.03);border-radius:10px;padding:8px 13px;cursor:pointer;font-weight:600;font-size:13.5px;font-family:inherit;color:var(--ink);white-space:nowrap}
+.btn:hover{border-color:var(--line-strong)}
+.btn.dark{background:linear-gradient(135deg,var(--accent),var(--accent-deep));color:var(--accent-ink);border-color:transparent;font-weight:700}
+.btn.dark:hover{filter:brightness(1.08)}
+.btn.danger{background:rgba(242,85,95,.1);color:var(--red);border-color:rgba(242,85,95,.28)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+/* ===== حالة الضغط (Pressed) وحالة التحميل (Loading) لكل الأزرار ===== */
+.btn,.primary,.iconBtn,.logout,.linklike,.pwdToggle,.chatFab,.tabs button,.subtabs button,
+.fbTabBar button,.filterRow button,.reactBtn,.commentsToggle,.drawerItem,.crumbs button,
+.bottomNav button,.courseCard,.convRow{transition:transform .1s ease,filter .1s ease}
+.btn:active:not(:disabled),.primary:active:not(:disabled),.iconBtn:active:not(:disabled),
+.logout:active,.linklike:active,.pwdToggle:active,.chatFab:active,.tabs button:active,
+.subtabs button:active,.fbTabBar button:active,.filterRow button:active,.reactBtn:active,
+.commentsToggle:active,.drawerItem:active,.crumbs button:active,.bottomNav button:active,
+.courseCard:active,.convRow:active{transform:scale(.96);filter:brightness(.9)}
+.btn.isLoading,.primary.isLoading,.iconBtn.isLoading{position:relative;color:transparent!important;pointer-events:none}
+.btn.isLoading::after,.primary.isLoading::after,.iconBtn.isLoading::after{
+  content:"";position:absolute;inset:0;margin:auto;width:16px;height:16px;border-radius:50%;
+  border:2px solid rgba(231,233,234,.35);border-top-color:var(--ink);animation:spin .7s linear infinite}
+.primary.isLoading::after,.btn.dark.isLoading::after{border-color:rgba(255,255,255,.4);border-top-color:#fff}
+.iconBtn.isLoading svg{visibility:hidden}
+.small{font-size:12.5px;color:var(--ink60)}
+.emptyState{text-align:center;padding:36px 16px;color:var(--ink60);font-size:13.5px}
+/* ===== Skeleton Loading — عناصر أساسية بسيطة تُستخدم كبديل لأي "جارِ التحميل…" نصي.
+   نعتمد على نفس classes الحقيقية (timelinePost/metaAvatar/convRow...) لضمان تطابق الأبعاد
+   وborder-radius وspacing تلقائيًا بدل تكرارها، ونضيف فقط شكل الحركة والألوان الرمادية. ===== */
+.skeleton{background:linear-gradient(90deg, rgba(239,243,244,.06) 25%, rgba(239,243,244,.13) 37%, rgba(239,243,244,.06) 63%);background-size:400% 100%;border-radius:6px;animation:skeletonShimmer 1.4s ease infinite}
+@keyframes skeletonShimmer{0%{background-position:100% 50%}100%{background-position:0 50%}}
+.skeleton-avatar{width:34px;height:34px;border-radius:50%;flex-shrink:0}
+.skeleton-line{height:11px;border-radius:6px}
+.skeleton-line.w60{width:60%}
+.skeleton-line.w80{width:80%}
+.skeleton-line.w40{width:40%}
+.skeleton-media{height:120px;border-radius:12px;margin-top:8px}
+.skeleton-action{height:28px;width:64px;border-radius:999px}
+.skeleton-post .metaWithAvatar{margin-bottom:10px}
+.skeleton-post .skeleton-line + .skeleton-line{margin-top:8px}
+.skeleton-post .reactBar{display:flex;gap:8px;border-top:0;padding-top:2px}
+@media (prefers-reduced-motion: reduce){
+  .skeleton{animation:none;background-position:50% 50%}
+}
+
+.modalBg{position:fixed;inset:0;background:rgba(2,2,4,.68);display:grid;place-items:center;padding:16px;z-index:200;overflow:auto}
+.modal{background:var(--surface-solid);border:1px solid var(--line-strong);border-radius:20px;padding:22px;width:min(460px,100%);max-height:88vh;overflow:auto;box-shadow:var(--shadow);animation:modalPopIn .18s ease-out}
+.modal.modalFixedShell{display:flex;flex-direction:column;max-height:80vh;padding:0;overflow:hidden}
+.modalStickyHead{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:18px 22px;border-bottom:1px solid var(--line);flex-shrink:0}
+.modalStickyHead h3{margin:0;font-size:16px}
+.modalScrollBody{overflow-y:auto;padding:16px 22px 22px;flex:1;min-height:0}
+.modal h3{margin-top:0;font-size:16px}
+@keyframes modalPopIn{from{opacity:0;transform:translateY(6px) scale(.98)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion: reduce){.modal{animation:none}}
+
+/* نافذة تأكيد مخصصة (بديل confirm/alert المتصفح) — بنفس هوية .modalBg/.modal */
+.confirmDialog{max-width:360px;text-align:start}
+.confirmDialog p{color:var(--ink60);font-size:13.5px;line-height:1.6;margin:8px 0 0}
+.confirmDialog .confirmActions{display:flex;gap:8px;margin-top:20px}
+.confirmDialog .confirmActions .btn{flex:1;padding:11px 13px}
+
+/* Bottom sheet على الموبايل: نفس عناصر .modalBg/.modal، بس ملتصقة بأسفل الشاشة ومنزلقة للأعلى */
+@media(max-width:640px){
+  .modalBg.sheetMode{align-items:flex-end;padding:0}
+  .modalBg.sheetMode .modal{width:100%;max-width:none;border-radius:20px 20px 0 0;max-height:86vh;animation:sheetSlideUp .22s ease-out;padding-bottom:max(22px, env(safe-area-inset-bottom, 0px))}
+  @keyframes sheetSlideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+  @media(prefers-reduced-motion: reduce){.modalBg.sheetMode .modal{animation:none}}
+}
+.sheetGrip{width:36px;height:4px;border-radius:99px;background:var(--line-strong);margin:0 auto 14px;display:none}
+@media(max-width:640px){.sheetGrip{display:block}}
+
+/* اختيار نمط الانضمام للفريق: بطاقتان قابلتان للاختيار بدل confirm() */
+.choiceCard{display:flex;flex-direction:column;gap:2px;padding:12px 14px;border:1.5px solid var(--line);border-radius:14px;cursor:pointer;transition:border-color .12s,background .12s}
+.choiceCard:hover{border-color:var(--line-strong)}
+.choiceCard.selected{border-color:var(--accent);background:rgba(66,133,244,.08)}
+.choiceCard b{font-size:13.5px}
+.choiceCard span{font-size:12px;color:var(--ink60)}
+
+/* بطاقة الفريق */
+.twTeamCard{background:var(--surface);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);border-radius:16px;padding:14px;margin-top:10px}
+.twTeamHead{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.twTeamHead b{font-size:14.5px}
+.twTeamDesc{color:var(--ink60);font-size:12.5px;margin:4px 0 0;line-height:1.5}
+.twMetaRow{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:8px;font-size:12px;color:var(--ink60)}
+.twSection{margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
+.twSectionTitle{font-size:12px;color:var(--ink60);margin:0 0 8px;font-weight:600}
+.twMemberRow{display:flex;align-items:center;gap:8px;padding:6px 0}
+.twMemberRow .twMemberName{flex:1;min-width:0;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.twMemberActions{display:flex;gap:6px;flex-shrink:0}
+.twActionsRow{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.twActionsRow .btn{flex:1;min-width:120px}
+.timelinePost{background:var(--surface);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:12px}
+.timelinePost .meta{display:flex;justify-content:space-between;gap:8px;color:var(--ink60);font-size:12.5px;margin-bottom:8px;flex-wrap:wrap}
+.timelinePost .metaWithAvatar{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.timelinePost .metaAvatar{width:34px;height:34px;border-radius:50%;object-fit:cover;flex-shrink:0;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px}
+.timelinePost .metaTextCol{display:flex;flex-direction:column;gap:1px;color:var(--ink60);font-size:12.5px}
+.timelinePost .metaTextCol b{color:var(--ink);font-size:13.5px}
+.fabComposeBtn{position:fixed;inset-inline-end:18px;bottom:calc(84px + env(safe-area-inset-bottom));width:52px;height:52px;border-radius:50%;background:var(--accent);color:#fff;border:0;font-size:26px;line-height:1;box-shadow:0 6px 18px rgba(0,0,0,.35);cursor:pointer;z-index:125;display:flex;align-items:center;justify-content:center}
+.fabComposeBtn:active{transform:scale(.94)}
+.pullRefreshIndicator{display:flex;align-items:center;justify-content:center;height:0;overflow:hidden;color:var(--ink60);font-size:13px;transition:height .15s ease}
+.pullRefreshIndicator.spinning svg{animation:pullSpin .7s linear infinite}
+@keyframes pullSpin{to{transform:rotate(360deg)}}
+.timelinePost .body{white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px}
+.reactBar{display:flex;gap:8px;margin-top:10px;border-top:1px solid var(--line);padding-top:10px;flex-wrap:wrap;align-items:center}
+.pillBtn{display:inline-flex;align-items:center;gap:6px;border:0;background:rgba(180,180,180,.35);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);color:#fff;border-radius:999px;padding:8px 15px;cursor:pointer;font-size:12.5px;font-family:inherit;font-weight:600;transition:transform .12s ease,background .12s ease}
+.pillBtn svg{width:15px;height:15px;stroke:#fff;flex-shrink:0}
+.pillBtn:active{transform:scale(.93)}
+.pillBtn.active{background:rgba(255,255,255,.55);color:#111}
+.pillBtn.active svg{stroke:#111}
+.pillBtn.pillRound{padding:9px;border-radius:50%}
+.communityReview{margin-top:10px;border-top:1px solid var(--line);padding-top:10px}
+.communityReview .crHead{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink60);margin-bottom:8px}
+.communityReview .crCounts{display:flex;gap:14px;font-size:12px;color:var(--ink60);margin-bottom:8px}
+.communityReview textarea{width:100%;resize:vertical;font-size:12.5px;margin-top:8px}
+.reactBtn{border:1px solid var(--line);background:rgba(255,255,255,.03);border-radius:9px;padding:6px 11px;cursor:pointer;font-size:12.5px;font-family:'IBM Plex Mono',monospace;color:var(--ink)}
+.reactBtn.active{background:rgba(255,255,255,.12);border-color:var(--line-strong);color:var(--ink)}
+.commentBox{margin-top:10px;display:flex;gap:8px}
+.commentBox input{flex:1;min-width:0}
+.comment{font-size:12.5px;padding:8px 0;border-top:1px dashed var(--line);overflow-wrap:anywhere}
+.filterRow{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.filterRow button{border:1px solid var(--line);background:rgba(255,255,255,.03);color:var(--ink);border-radius:999px;padding:6px 13px;font-size:12.5px;cursor:pointer;font-family:inherit}
+.filterRow button.active{background:var(--ink);color:var(--bg0);border-color:var(--ink)}
+/* شارات XP/Streak — تستخدم Lime كلون نجاح/طاقة مميز عن باقي الحالات */
+.xpPill{display:inline-flex;align-items:center;gap:4px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-weight:700;color:var(--green-ink);background:var(--green);padding:3px 9px;border-radius:999px}
+.btn.success{background:var(--green-soft);color:var(--green);border-color:rgba(61,209,111,.35)}
+</style>
+</head>
+<body>
+<div id="authApp" class="app">
+<main class="card">
+<div class="brand">
+<div class="mark"><img src="codeup-logo.svg" alt="CodeUp"></div>
+<h1>CodeUp</h1><p>منصة التعلم والتدريب البرمجي</p>
+</div>
+<div class="tabs"><button id="loginTab" class="active">تسجيل الدخول</button><button id="signupTab">إنشاء حساب</button></div>
+<div id="googleAuthRow" style="margin-bottom:10px">
+<button type="button" id="googleAuthBtn" class="btn" style="width:100%;display:flex;align-items:center;justify-content:center;gap:10px;padding:10px 13px">
+<svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg"><path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.9c1.7-1.57 2.7-3.88 2.7-6.62z"/><path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.9-2.26c-.8.54-1.84.86-3.06.86-2.35 0-4.34-1.59-5.05-3.72H.96v2.33A9 9 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.95 10.7A5.4 5.4 0 0 1 3.67 9c0-.59.1-1.17.28-1.7V4.97H.96A9 9 0 0 0 0 9c0 1.45.35 2.83.96 4.03l2.99-2.33z"/><path fill="#EA4335" d="M9 3.58c1.32 0 2.51.45 3.44 1.35l2.58-2.58C13.46.89 11.43 0 9 0A9 9 0 0 0 .96 4.97l2.99 2.33C4.66 5.17 6.65 3.58 9 3.58z"/></svg>
+<span id="googleAuthBtnText">المتابعة عبر Google</span>
+</button>
+</div>
+<div id="githubAuthRow" style="margin-bottom:14px">
+<button type="button" id="githubAuthBtn" class="btn" style="width:100%;display:flex;align-items:center;justify-content:center;gap:10px;padding:10px 13px">
+<svg width="18" height="18" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+<span>المتابعة عبر GitHub</span>
+</button>
+</div>
+<div id="googleAuthDivider" class="small" style="text-align:center;margin:-6px 0 14px;color:var(--ink60)">— أو —</div>
+<form id="authForm">
+<div id="nameGroup" class="hidden"><label>الاسم الكامل</label><input id="fullName" type="text" autocomplete="name" placeholder="اكتب اسمك"></div>
+<label>البريد الإلكتروني</label><input id="email" type="email" autocomplete="email" placeholder="example@email.com" required style="direction:ltr;text-align:left">
+<label>كلمة المرور</label>
+<div class="pwdWrap">
+<input id="password" type="password" autocomplete="current-password" minlength="6" placeholder="••••••••" required style="direction:ltr;text-align:left">
+<button type="button" id="pwdToggle" class="pwdToggle" aria-label="إظهار كلمة المرور">
+<svg class="eyeOn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg>
+<svg class="eyeOff" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a21.6 21.6 0 0 1 5.06-6.06M9.9 4.24A10.94 10.94 0 0 1 12 4c7 0 11 8 11 8a21.5 21.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><path d="M1 1l22 22"/></svg>
+</button>
+</div>
+<div id="forgotPwdRow" style="text-align:end;margin:-6px 0 4px"><button type="button" id="forgotPwdLink" class="linklike">نسيت كلمة المرور؟</button></div>
+<button id="submitBtn" class="primary" type="submit"><span class="btnText">تسجيل الدخول</span><span class="spinner"></span></button>
+</form>
+<div id="message" class="message"></div>
+
+<form id="resetRequestForm" class="hidden">
+<p class="small" style="margin-bottom:10px">اكتب بريدك الإلكتروني وسنرسل لك رابط استعادة كلمة المرور.</p>
+<label>البريد الإلكتروني</label><input id="resetEmail" type="email" required style="direction:ltr;text-align:left" placeholder="example@email.com">
+<button id="resetSendBtn" class="primary" type="submit"><span class="btnText">إرسال رابط الاستعادة</span><span class="spinner"></span></button>
+<button type="button" id="backToLoginLink" class="linklike" style="margin-top:10px">رجوع لتسجيل الدخول</button>
+</form>
+<div id="resetRequestMsg" class="message"></div>
+
+<form id="newPasswordForm" class="hidden">
+<p class="small" style="margin-bottom:10px">اكتب كلمة مرور جديدة لحسابك.</p>
+<label>كلمة المرور الجديدة</label><input id="newPassword" type="password" minlength="6" required style="direction:ltr;text-align:left" placeholder="••••••••">
+<label>تأكيد كلمة المرور</label><input id="newPassword2" type="password" minlength="6" required style="direction:ltr;text-align:left" placeholder="••••••••">
+<button id="newPasswordBtn" class="primary" type="submit"><span class="btnText">حفظ كلمة المرور الجديدة</span><span class="spinner"></span></button>
+</form>
+<div id="newPasswordMsg" class="message"></div>
+
+<div id="confirmedScreen" class="hidden" style="text-align:center;padding:10px 0">
+<div class="successIcon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg></div>
+<h2 style="margin:14px 0 6px">تم تأكيد حسابك بنجاح!</h2>
+<p class="small" style="margin-bottom:20px">حسابك جاهز الآن — سجّل الدخول بكلمة المرور للمتابعة.</p>
+<button id="goToAppBtn" class="primary" type="button">تسجيل الدخول</button>
+</div>
+
+<div id="pwdChangedScreen" class="hidden" style="text-align:center;padding:10px 0">
+<div class="successIcon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg></div>
+<h2 style="margin:14px 0 6px">تم تغيير كلمة المرور</h2>
+<p class="small" style="margin-bottom:20px">سجّل الدخول الآن بكلمة المرور الجديدة.</p>
+<button id="goToLoginAfterResetBtn" class="primary" type="button">تسجيل الدخول</button>
+</div>
+</main>
+<footer class="authFooter">
+  <div class="authFooterBrand">
+    <span class="authFooterLogo">CodeUp</span>
+    <span class="small">منصة التعلم والتدريب البرمجي</span>
+  </div>
+  <nav class="authFooterLinks">
+    <a href="privacy.html">سياسة الخصوصية</a>
+    <a href="terms.html">شروط الاستخدام</a>
+    <a href="https://github.com/muayad-babikeir/CodeUp" target="_blank" rel="noopener">GitHub</a>
+  </nav>
+  <p class="small authFooterCopy" id="authFooterYear">© CodeUp</p>
+</footer>
+</div>
+
+<div id="dashboardApp" class="dashboard hidden">
+<div id="mobileHeaderWrap">
+<div class="topbar wrap">
+<div class="topbrand"><div class="mark"><img src="codeup-logo.svg" alt="CodeUp"></div></div>
+<div class="topRight">
+<button class="iconBtn topAvatarBtn" id="topAvatarBtn" title="حسابي" aria-label="حسابي">
+<img id="topAvatarImg" class="hidden" alt="">
+<span id="topAvatarInitial">؟</span>
+</button>
+<button class="iconBtn" id="messagesBtn" title="الرسائل" aria-label="الرسائل">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+<span id="msgBadge" class="badge hidden">0</span>
+</button>
+<button class="iconBtn" id="notifBtn" title="الإشعارات" aria-label="الإشعارات">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+<span id="notifBadge" class="badge hidden">0</span>
+</button>
+<button id="logoutBtn" class="logout">تسجيل الخروج</button>
+</div>
+</div>
+<div id="crumbs" class="crumbs hidden"><button id="crumbHome">→ الرجوع للرئيسية</button></div>
+<div id="mobileTabSlot"></div>
+</div>
+
+<div class="wrap">
+<div id="viewRoot"></div>
+</div>
+
+<nav id="bottomNav" class="bottomNav">
+  <button data-bottomnav="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.3-4.3"/></svg><span>بحث</span></button>
+  <button data-bottomnav="messages"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span>الرسائل</span><span id="bottomMsgBadge" class="bottomBadge hidden"></span></button>
+  <button id="bottomNotifBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg><span>الإشعارات</span><span id="bottomNotifBadge" class="bottomBadge hidden"></span></button>
+  <button data-bottomnav="profile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span>حسابي</span></button>
+</nav>
+</div>
+
+<script src="js/supabase.js"></script>
+<script src="js/shared.js"></script>
+<script>
+const authApp=document.getElementById("authApp"),dash=document.getElementById("dashboardApp"),form=document.getElementById("authForm"),msg=document.getElementById("message"),btn=document.getElementById("submitBtn");
 document.getElementById("authFooterYear").textContent = `© ${new Date().getFullYear()} CodeUp`;
 let mode="login";
 function setMode(m){mode=m;loginTab.classList.toggle("active",m==="login");signupTab.classList.toggle("active",m==="signup");nameGroup.classList.toggle("hidden",m!=="signup");btn.querySelector(".btnText").textContent=m==="signup"?"إنشاء الحساب":"تسجيل الدخول";msg.className="message"}
@@ -94,7 +667,6 @@ const isSignupConfirmFlow =
 db.auth.onAuthStateChange((event, session)=>{
   if(event === "PASSWORD_RECOVERY"){
     isPasswordRecoveryFlow = true;
-    hideBoot();
     authApp.classList.remove("hidden"); dash.classList.add("hidden");
     showAuthScreen("newpassword");
   }
@@ -151,34 +723,19 @@ githubAuthBtn.onclick=async()=>{
 })();
 
 (async()=>{
-  if(window.__earlyLoginShown) return; // اتعرض اللوجين بالفعل من الفحص المبكر فوق
-  try{
-    let{data}=await db.auth.getSession();
-    // تسجيل دخول Google (أو أي مزوّد خارجي) يمرّ برابط PKCE فيه ?code= هو نفسه، لكن ما هو
-    // "تأكيد بريد" — نفرّق بينهم عبر app_metadata.provider في الجلسة الراجعة.
-    const provider = data.session?.user?.app_metadata?.provider;
-    const isOAuthLogin = !!provider && provider !== "email";
-    if(data.session && isOAuthLogin && !isPasswordRecoveryFlow){
-      history.replaceState(null,"",window.location.pathname);
-      await bootApp(data.session.user);
-    }else if(data.session && isSignupConfirmFlow && !isPasswordRecoveryFlow){
-      showAuthScreen("confirmed");
-      authApp.classList.remove("hidden");
-      history.replaceState(null,"",window.location.pathname);
-      hideBoot();
-    }else if(data.session && !isPasswordRecoveryFlow){
-      await bootApp(data.session.user);
-    }else if(!data.session && !isPasswordRecoveryFlow){
-      // ما فيش Session خالص — دلوقتي بس، بعد التأكد الكامل، نظهر شاشة الدخول.
-      // (حالة isPasswordRecoveryFlow بيتكفّل بيها حدث PASSWORD_RECOVERY تحت)
-      authApp.classList.remove("hidden");
-      hideBoot();
-    }
-  }catch(e){
-    // فشل التحقق من الجلسة (شبكة بطيئة/خطأ) — ما نسيب المستخدم عالق على شاشة
-    // البووت للأبد، نوديه لتسجيل الدخول العادي بدل ما يفضل شايف اللوجو بس.
-    authApp.classList.remove("hidden");
-    hideBoot();
+  let{data}=await db.auth.getSession();
+  // تسجيل دخول Google (أو أي مزوّد خارجي) يمرّ برابط PKCE فيه ?code= هو نفسه، لكن ما هو
+  // "تأكيد بريد" — نفرّق بينهم عبر app_metadata.provider في الجلسة الراجعة.
+  const provider = data.session?.user?.app_metadata?.provider;
+  const isOAuthLogin = !!provider && provider !== "email";
+  if(data.session && isOAuthLogin && !isPasswordRecoveryFlow){
+    history.replaceState(null,"",window.location.pathname);
+    await bootApp(data.session.user);
+  }else if(data.session && isSignupConfirmFlow && !isPasswordRecoveryFlow){
+    showAuthScreen("confirmed");
+    history.replaceState(null,"",window.location.pathname);
+  }else if(data.session && !isPasswordRecoveryFlow){
+    await bootApp(data.session.user);
   }
 })();
 
@@ -195,7 +752,6 @@ db.auth.onAuthStateChange((event, session)=>{
 });
 
 async function bootApp(user){
-  hideBoot();
   authApp.classList.add("hidden");dash.classList.remove("hidden");
   await App.init(user);
 }
@@ -678,57 +1234,18 @@ const App = {
       db.from("submissions").select("*, assignments(title)").eq("profile_id", profileId).order("created_at",{ascending:false}).limit(30)
     ]);
 
-    // إحصائيات وdور المستخدم لصفحته الشخصية فقط — كلها من this.ctx المحمّل
-    // مسبقًا (loadMyContext) بدون أي استعلام إضافي حساس، ومن memberships
-    // (RLS بتسمح لصاحبها بس يشوفه).
-    let statsHtml = "", badgesHtml = "";
-    if(isMe){
-      const enr = this.ctx.enrollments || [];
-      const totalXp = enr.reduce((s,e)=> s + (e.xp||0), 0);
-      const bestStreak = enr.reduce((m,e)=> Math.max(m, e.streak||0), 0);
-      const roleLabel = this.ctx.isPlatformAdmin ? "سوبر أدمن"
-        : (this.ctx.courseAdmins||[]).length ? "مشرف كورس"
-        : (this.ctx.leaderSquads||[]).length ? "قائد مجموعة"
-        : enr.length ? "طالب" : "عضو CodeUp";
-
-      let memberId = "";
-      try{
-        const {data: m} = await db.from("memberships").select("member_id").eq("user_id", this.ctx.user.id).maybeSingle();
-        memberId = m?.member_id || "";
-      }catch(_e){}
-
-      badgesHtml = `<div class="apBadges">
-        <span class="apBadge role">${CodeUp.escapeHtml(roleLabel)}</span>
-        ${memberId?`<span class="apBadge mid">${CodeUp.escapeHtml(memberId)}</span>`:""}
-      </div>`;
-
-      statsHtml = `<div class="apStats">
-        <div class="apStat"><b>${totalXp}</b><span>XP</span></div>
-        <div class="apStat"><b>${bestStreak}</b><span>Streak</span></div>
-        <div class="apStat"><b>${enr.length}</b><span>الكورسات</span></div>
-        <div class="apStat"><b>${(subs||[]).length}</b><span>التسليمات</span></div>
-      </div>`;
-    }
-
     this.root.innerHTML = `
-      <div class="accountPro">
-        <div class="apHead">
-          ${CodeUp.avatarHtml(profile.full_name, profile.avatar_url, 64)}
-          <div>
-            <h2>${CodeUp.escapeHtml(profile.full_name||"")}</h2>
-            ${isMe?`<p class="small mono" style="margin:2px 0 0">${CodeUp.escapeHtml(this.ctx.user.email||"")}</p>`:""}
-            ${badgesHtml}
-          </div>
-          ${isMe?`<button class="btn" id="profileSettingsBtn" style="margin-inline-start:auto">الإعدادات</button>`
-                :`<button class="btn dark" id="profileMsgBtn" style="margin-inline-start:auto">مراسلة</button>`}
-        </div>
-        ${statsHtml}
-        <div class="fbTabBar apTabBar">
-          <button data-ptab="posts" class="active">المنشورات</button>
-          <button data-ptab="submissions">التسليمات</button>
-        </div>
-        <div id="profileBody"></div>
-      </div>`;
+      <div class="profileHead">
+        <div class="convAvatar" style="width:64px;height:64px;font-size:24px">${CodeUp.escapeHtml((profile.full_name||"?")[0])}</div>
+        <div><h2>${CodeUp.escapeHtml(profile.full_name||"")}</h2>${isMe?`<p class="small mono">${CodeUp.escapeHtml(this.ctx.user.email||"")}</p>`:""}</div>
+        ${isMe?`<button class="btn" id="profileSettingsBtn" style="margin-inline-start:auto">الإعدادات</button>`
+              :`<button class="btn dark" id="profileMsgBtn" style="margin-inline-start:auto">مراسلة</button>`}
+      </div>
+      <div class="fbTabBar" style="margin-top:14px">
+        <button data-ptab="posts" class="active">المنشورات</button>
+        <button data-ptab="submissions">التسليمات</button>
+      </div>
+      <div id="profileBody"></div>`;
 
     if(isMe) document.getElementById("profileSettingsBtn").onclick = ()=> this.openAccountSettings();
     else document.getElementById("profileMsgBtn").onclick = async ()=>{
@@ -755,14 +1272,14 @@ const App = {
             </div>`);
           m.el.querySelector("#menuEditPost").onclick = async ()=>{
             m.close();
-            const newVal = await this.promptDialog({title:"تعديل المنشور", defaultValue:p.content, confirmLabel:"حفظ"});
+            const newVal = prompt("عدّل نص المنشور:", p.content);
             if(newVal===null || !newVal.trim()) return;
             try{ await db.from("posts").update({content:newVal.trim()}).eq("id", p.id).eq("profile_id", this.ctx.user.id).throwOnError(); this.renderProfile(profileId); }
             catch(e){ CodeUp.toast(e.message,"error"); }
           };
           m.el.querySelector("#menuDelPost").onclick = async ()=>{
             m.close();
-            if(!await this.confirmDialog({title:"حذف المنشور", message:"لن يظهر لأي شخص بعد الحذف.", confirmLabel:"حذف", danger:true})) return;
+            if(!confirm("حذف هذا المنشور؟ لن يظهر لأي شخص بعد الحذف.")) return;
             try{ await db.from("posts").update({status:"deleted", deleted_at:new Date().toISOString()}).eq("id", p.id).eq("profile_id", this.ctx.user.id).throwOnError(); this.renderProfile(profileId); }
             catch(e){ CodeUp.toast(e.message,"error"); }
           };
@@ -787,18 +1304,10 @@ const App = {
   },
 
   openAccountSettings(){
-    const enr = this.ctx.enrollments || [];
-    const roleLabel = this.ctx.isPlatformAdmin ? "سوبر أدمن"
-      : (this.ctx.courseAdmins||[]).length ? "مشرف كورس"
-      : (this.ctx.leaderSquads||[]).length ? "قائد مجموعة"
-      : enr.length ? "طالب" : "عضو CodeUp";
-
     const m = this.modal(`
-      <div class="accountPro">
-      <h3 style="margin-top:0">إعدادات الحساب</h3>
-
-      <div class="apSection">
-        <div class="apSecTitle">الملف الشخصي</div>
+      <h3>إعدادات الحساب</h3>
+      <div class="card" style="margin-top:10px">
+        <b>الملف الشخصي</b>
         <div class="row" style="align-items:center;gap:12px;margin-top:10px">
           <div class="topAvatarBtn" id="editAvatarPreview" style="width:56px;height:56px;font-size:20px;flex-shrink:0">
             ${this.ctx.profile.avatar_url?`<img src="${this.ctx.profile.avatar_url}" alt="">`:`<span>${CodeUp.escapeHtml((this.ctx.profile.full_name||"؟")[0])}</span>`}
@@ -812,56 +1321,15 @@ const App = {
         <input id="editFullName" value="${CodeUp.escapeHtml(this.ctx.profile.full_name||"")}">
         <button class="btn dark" id="saveProfileBtn" style="margin-top:10px">حفظ التعديلات</button>
       </div>
-
-      <div class="apSection">
-        <div class="apSecTitle">الأمان والحساب</div>
-        <div class="apRow"><span>البريد الإلكتروني</span><span class="mono small">${CodeUp.escapeHtml(this.ctx.user.email||"")}</span></div>
-        <button class="btn" id="resetPasswordBtn" style="width:100%;margin-top:10px">إعادة تعيين كلمة المرور عبر البريد</button>
-        <button class="btn" id="accountLogoutBtn" style="width:100%;margin-top:8px">تسجيل الخروج</button>
+      <div class="card" style="margin-top:10px">
+        <button class="btn" id="accountLogoutBtn" style="width:100%">تسجيل الخروج</button>
       </div>
-
-      <div class="apSection">
-        <div class="apSecTitle">عضوية CodeUp</div>
-        <div class="apRow"><span>الحالة</span><span class="apBadge role">${CodeUp.escapeHtml(roleLabel)}</span></div>
-        <p class="small" style="margin-top:8px">أضف بطاقة عضويتك إلى Google Wallet للوصول السريع إليها من هاتفك.</p>
-        <button class="btn dark" id="googleWalletBtn" style="width:100%;margin-top:6px;display:flex;align-items:center;justify-content:center;gap:8px">
-          <svg id="googleWalletBtnIcon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="14" rx="3"></rect><path d="M2 10h20"></path><path d="M6 15h4"></path></svg>
-          <span id="googleWalletBtnLabel">إضافة إلى Google Wallet</span>
-        </button>
-      </div>
-
-      <div class="apSection">
-        <div class="apSecTitle">المساعدة</div>
-        <a class="apLinkRow" href="mailto:support@codeupsd.online">التواصل مع CodeUp</a>
-        <a class="apLinkRow" href="mailto:support@codeupsd.online?subject=مشكلة%20في%20CodeUp">الإبلاغ عن مشكلة</a>
-      </div>
-
-      <div class="apSection">
-        <div class="apSecTitle">حول CodeUp</div>
-        <div class="apRow"><span>الإصدار</span><span class="mono small">1.0.0</span></div>
-      </div>
-
-      <div class="apSection" style="border-color:rgba(224,49,49,.35)">
-        <div class="apSecTitle" style="color:#E03131">منطقة خطرة</div>
-        <p class="small" style="margin-top:6px">حذف الحساب إجراء نهائي لا يمكن التراجع عنه — سيُحذف حسابك وكل بياناتك المرتبطة به.</p>
+      <div class="card" style="margin-top:10px;border-color:rgba(224,49,49,.4)">
+        <b style="color:#E03131">حذف الحساب نهائيًا</b>
+        <p class="small" style="margin-top:6px">هذا الإجراء لا يمكن التراجع عنه — سيُحذف حسابك وكل بياناتك المرتبطة به بشكل نهائي.</p>
         <button class="btn danger" id="deleteAccountStep1" style="margin-top:10px">حذف حسابي نهائيًا</button>
-      </div>
       </div>`);
     m.el.querySelector("#accountLogoutBtn").onclick = ()=>{ m.close(); App.logout(); };
-
-    m.el.querySelector("#resetPasswordBtn").onclick = async (ev)=>{
-      const btn = ev.currentTarget;
-      // نفس دالة إعادة التعيين المستخدمة في شاشة اللوجين بالضبط — بريد
-      // المستخدم معروف بالفعل (هو مسجّل دخول)، فلا داعي لأي حقل إدخال.
-      btn.disabled = true; const original = btn.textContent; btn.textContent = "جارِ الإرسال...";
-      try{
-        await db.auth.resetPasswordForEmail(this.ctx.user.email, { redirectTo: window.location.origin + window.location.pathname });
-        btn.textContent = "تم إرسال الرابط إلى بريدك"; btn.classList.add("dark");
-      }catch(err){
-        btn.disabled = false; btn.textContent = original;
-        CodeUp.toast("تعذّر إرسال رابط إعادة التعيين، حاول مرة أخرى", "error");
-      }
-    };
 
     m.el.querySelector("#changeAvatarBtn").onclick = ()=> m.el.querySelector("#avatarFileInput").click();
     m.el.querySelector("#avatarFileInput").onchange = async (e)=>{
@@ -896,66 +1364,22 @@ const App = {
         });
       }catch(err){ CodeUp.toast(err.message||"تعذّر الحفظ", "error"); }
     };
-
-    // ---------- Google Wallet ----------
-    (async ()=>{
-      const btn = m.el.querySelector("#googleWalletBtn");
-      const label = m.el.querySelector("#googleWalletBtnLabel");
-      let currentStatus = "not_created";
-
-      const setState = (state)=>{
-        currentStatus = state;
-        btn.classList.remove("danger");
-        btn.disabled = false;
-        if(state==="loading"){ label.textContent = "جاري تجهيز البطاقة..."; btn.disabled = true; }
-        else if(state==="updating"){ label.textContent = "جاري التحديث..."; btn.disabled = true; }
-        else if(state==="active"){ label.textContent = "فتح Google Wallet"; }
-        else if(state==="sync_failed"){ label.textContent = "تعذّر تجهيز البطاقة — إعادة المحاولة"; btn.classList.add("danger"); }
-        else{ label.textContent = "إضافة إلى Google Wallet"; }
-      };
-
-      // الحالة الأولية من قاعدة البيانات مباشرة (بدون استدعاء الدالة) — توفير على الاستدعاءات
-      try{
-        const { data: existing } = await db.from("membership_wallet_passes").select("status").eq("user_id", this.ctx.user.id).maybeSingle();
-        if(existing) setState(existing.status);
-      }catch(_e){ /* أول مرة للمستخدم: العمود لسه مش موجود، تبقى الحالة الافتراضية */ }
-
-      btn.onclick = async ()=>{
-        const wasReady = currentStatus === "active";
-        setState(wasReady ? "updating" : "loading");
+    m.el.querySelector("#deleteAccountStep1").onclick = ()=>{
+      if(!confirm("هذا الإجراء نهائي ولا يمكن التراجع عنه — هل أنت متأكد؟")) return;
+      const typed = prompt('للتأكيد النهائي، اكتب كلمة "حذف" بالضبط:');
+      if(typed !== "حذف"){ CodeUp.toast("لم يتطابق النص — تم الإلغاء", "info"); return; }
+      (async ()=>{
         try{
           const {data:{session}} = await db.auth.getSession();
-          const res = await fetch(`${SUPABASE_URL}/functions/v1/google-wallet`, {
-            method:"POST",
-            headers:{"Authorization":`Bearer ${session.access_token}`, "Content-Type":"application/json"},
-            body: JSON.stringify({action:"get_or_create"})
+          const res = await fetch(`${SUPABASE_URL}/functions/v1/delete-account`, {
+            method:"POST", headers:{"Authorization":`Bearer ${session.access_token}`}
           });
-          const out = await res.json();
-          if(!res.ok || out.error) throw new Error(out.error || "تعذّر تجهيز البطاقة");
-          setState("active");
-          window.open(out.add_to_wallet_url, "_blank");
-        }catch(err){
-          setState("sync_failed");
-          CodeUp.toast("تعذّر تجهيز بطاقة Google Wallet، حاول مرة أخرى", "error");
-        }
-      };
-    })();
-
-    m.el.querySelector("#deleteAccountStep1").onclick = async ()=>{
-      const step1 = await this.confirmDialog({title:"حذف الحساب نهائيًا", message:"هذا الإجراء نهائي ولا يمكن التراجع عنه.", confirmLabel:"متابعة", danger:true});
-      if(!step1) return;
-      const typed = await this.promptDialog({title:"تأكيد نهائي", message:'اكتب كلمة "حذف" بالضبط للمتابعة:', confirmLabel:"حذف حسابي", danger:true});
-      if(typed !== "حذف"){ if(typed!==null) CodeUp.toast("لم يتطابق النص — تم الإلغاء", "info"); return; }
-      try{
-        const {data:{session}} = await db.auth.getSession();
-        const res = await fetch(`${SUPABASE_URL}/functions/v1/delete-account`, {
-          method:"POST", headers:{"Authorization":`Bearer ${session.access_token}`}
-        });
-        const json = await res.json();
-        if(!res.ok || json.error) throw new Error(json.error||"تعذّر حذف الحساب");
-        await db.auth.signOut();
-        window.location.reload();
-      }catch(e){ CodeUp.toast(e.message,"error"); }
+          const json = await res.json();
+          if(!res.ok || json.error) throw new Error(json.error||"تعذّر حذف الحساب");
+          await db.auth.signOut();
+          window.location.reload();
+        }catch(e){ CodeUp.toast(e.message,"error"); }
+      })();
     };
   },
 
@@ -1042,30 +1466,6 @@ const App = {
     });
   },
 
-  // نافذة إدخال قيمة واحدة بديل prompt() الافتراضي — ترجع Promise<string|null>.
-  promptDialog({title, message, defaultValue="", placeholder="", confirmLabel="تأكيد", danger=false}){
-    return new Promise(resolve=>{
-      const bg=document.createElement("div");bg.className="modalBg";
-      bg.innerHTML=`<div class="modal confirmDialog">
-        <h3>${CodeUp.escapeHtml(title)}</h3>
-        ${message?`<p>${CodeUp.escapeHtml(message)}</p>`:""}
-        <input id="pdInput" style="margin-top:10px" value="${CodeUp.escapeHtml(defaultValue)}" placeholder="${CodeUp.escapeHtml(placeholder)}">
-        <div class="confirmActions">
-          <button class="btn" id="pdCancel">إلغاء</button>
-          <button class="btn ${danger?"danger":"dark"}" id="pdConfirm">${CodeUp.escapeHtml(confirmLabel)}</button>
-        </div>
-      </div>`;
-      document.body.appendChild(bg);
-      const input = bg.querySelector("#pdInput");
-      input.focus();
-      const finish = (result)=>{ bg.remove(); resolve(result); };
-      bg.addEventListener("click", e=>{ if(e.target===bg) finish(null); });
-      bg.querySelector("#pdCancel").onclick = ()=>finish(null);
-      bg.querySelector("#pdConfirm").onclick = ()=>finish(input.value);
-      input.onkeydown = (e)=>{ if(e.key==="Enter") finish(input.value); };
-    });
-  },
-
   // نافذة سفلية (Bottom Sheet) على الموبايل، ومنتصف الشاشة على الشاشات الأكبر — لأي نموذج
   // (مثل إنشاء فريق) بدل prompt() الافتراضي بالمتصفح. innerHtml يحدد محتواه بالكامل (تسمية،
   // حقول، زر حفظ)؛ العنصر نفسه يُغلق تلقائيًا بالنقر خارج الورقة.
@@ -1107,7 +1507,6 @@ const App = {
     if(this.view.name==="messages") return this.renderMessages(this.view.conversationId);
     if(this.view.name==="profile") return this.renderProfile(this.view.profileId);
     if(this.view.name==="search") return this.renderSearch();
-    if(this.view.name==="marketplace_listing") return this.renderMarketplaceListing(this.view.listingId);
   },
 
   async renderHome(tab){
@@ -1123,27 +1522,18 @@ const App = {
         <button data-hometab="feed" class="${tab==='feed'?'active':''}"><span class="tabIcon">${Icon('home')}</span>الرئيسية</button>
         <button data-hometab="courses" class="${tab==='courses'?'active':''}"><span class="tabIcon">${Icon('learning')}</span>الكورسات</button>
         <button data-hometab="university" class="${tab==='university'?'active':''}"><span class="tabIcon">${Icon('university')}</span>الجامعة</button>
-        ${this.ctx.techWeekEnabled?`<button data-hometab="tech_week" class="${tab==='tech_week'?'active':''}"><span class="tabIcon">${Icon('zap')}</span>الأسبوع التقني</button>`:""}
-        ${this.ctx.marketplaceEnabled?`<button data-hometab="marketplace" class="${tab==='marketplace'?'active':''}"><span class="tabIcon">${Icon('shopping_bag')}</span>Marketplace</button>`:""}
+        <button data-hometab="tech_week" class="${tab==='tech_week'?'active':''}"><span class="tabIcon">${Icon('zap')}</span>الأسبوع التقني</button>
       </div>`;
     tabSlot.querySelectorAll("[data-hometab]").forEach(b=>{
       b.onclick = ()=>{ this.view = {name:"home", homeTab:b.dataset.hometab}; this.renderHome(b.dataset.hometab); };
     });
-    // يضمن إن التاب النشط يظهر كاملًا (بدون قصّ زي "ketplace") حتى لو كان بطرف الشريط
-    const activeTabBtn = tabSlot.querySelector("[data-hometab].active");
-    if(activeTabBtn) activeTabBtn.scrollIntoView({inline:"nearest", block:"nearest"});
     this.root.innerHTML = `<div id="homeBody"></div>`;
     this.syncHeaderHeight();
 
     const body = document.getElementById("homeBody");
-    // لو المستخدم وصل لتاب متوقف حاليًا (رابط قديم محفوظ، أو الأدمن أوقفه
-    // أثناء تصفّحه) — رجوع آمن للرئيسية بدل صفحة فاضية أو خطأ.
-    if(tab === "tech_week" && !this.ctx.techWeekEnabled){ this.view = {name:"home", homeTab:"feed"}; return this.renderHome("feed"); }
-    if(tab === "marketplace" && !this.ctx.marketplaceEnabled){ this.view = {name:"home", homeTab:"feed"}; return this.renderHome("feed"); }
     if(tab === "courses") return this.renderHomeCourses(body);
     if(tab === "university") return this.renderHomeUniversity(body);
     if(tab === "tech_week") return this.renderHomeTechWeek(body);
-    if(tab === "marketplace") return this.renderHomeMarketplace(body);
     return this.renderHomeFeed(body);
   },
 
@@ -1203,7 +1593,6 @@ const App = {
               <span>${members.length}${e.team_max_size?`/${e.team_max_size}`:""} أعضاء</span>
               ${isLeader?`<span>•</span><span>${myTeam.join_policy==='approval'?'انضمام بموافقتك':'انضمام مفتوح'}</span>`:""}
             </div>
-            <div class="twActionsRow"><button class="btn dark" data-teamchat="${myTeam?.id}">💬 محادثة الفريق</button></div>
 
             <div class="twSection">
               <p class="twSectionTitle">الأعضاء</p>
@@ -1258,7 +1647,6 @@ const App = {
             <div class="twTeamHead"><b>${CodeUp.escapeHtml(t.name)}</b><span class="pill neutral">${active}${e.team_max_size?`/${e.team_max_size}`:""}</span></div>
             ${t.description?`<p class="twTeamDesc">${CodeUp.escapeHtml(t.description)}</p>`:""}
             <div class="twActionsRow">
-              <button class="btn" data-viewteam="${t.id}" data-viewteamevent="${e.id}">التفاصيل والأعضاء</button>
               <button class="btn ${t.join_policy==='approval'?'':'dark'}" data-jointeam="${t.id}" data-jointeamevent="${e.id}" data-jointeampolicy="${t.join_policy}">${t.join_policy==='approval'?'اطلب الانضمام':'انضم للفريق'}</button>
             </div>
           </div>`;
@@ -1402,12 +1790,11 @@ const App = {
           const submitBtn = sh.el.querySelector("#ntSubmit");
           submitBtn.disabled = true;
           try{
-            const { data: newTeam, error: rpcErr } = await db.rpc("tech_week_create_team", {
+            const { error: rpcErr } = await db.rpc("tech_week_create_team", {
               p_event_id: eventId, p_name: name,
               p_description: sh.el.querySelector("#ntDesc").value.trim() || null, p_join_policy: policy
             });
             if(rpcErr) throw rpcErr;
-            if(newTeam?.id) CodeUp.callTeamTopic(newTeam.id); // إنشاء Topic تيليجرام بالخلفية، فشله لا يمنع إنشاء الفريق
             CodeUp.toast("تم إنشاء الفريق والانضمام له", "success");
             sh.close();
             this.renderHomeTechWeek(body);
@@ -1419,73 +1806,15 @@ const App = {
       };
     });
 
-    const doJoinTeam = async (teamId, eventId, isApproval)=>{
-      await db.from("tech_week_registrations").upsert({
-        event_id: eventId, profile_id: this.ctx.user.id,
-        status: isApproval ? "pending" : "registered", team_id: teamId
-      }, {onConflict: "event_id,profile_id"}).throwOnError();
-    };
-
-    body.querySelectorAll("[data-teamchat]").forEach(btn=>{
-      btn.onclick = async ()=>{
-        btn.disabled = true;
-        const res = await CodeUp.callTeamTopic(btn.dataset.teamchat);
-        btn.disabled = false;
-        if(!res){ CodeUp.toast("تعذّر فتح محادثة الفريق حاليًا، حاول بعد قليل", "error"); return; }
-        const sh = this.sheet(`
-          <h3 style="margin:0 0 12px">محادثة الفريق</h3>
-          <a class="btn dark" href="${res.url}" target="_blank" rel="noopener" style="display:block;text-align:center">فتح محادثة الفريق في تيليجرام</a>
-          ${res.invite_url?`<p class="small" style="margin:12px 0 6px">أول مرة؟ انضم لمجتمع CodeUp أولًا ثم افتح المحادثة:</p>
-          <a class="btn" href="${res.invite_url}" target="_blank" rel="noopener" style="display:block;text-align:center">الانضمام للمجتمع</a>`:""}
-        `);
-      };
-    });
-
-    body.querySelectorAll("[data-viewteam]").forEach(btn=>{
-      btn.onclick = ()=>{
-        const teamId = btn.dataset.viewteam;
-        const eventId = btn.dataset.viewteamevent;
-        const t = (teamsByEvent[eventId]||[]).find(x=>x.id===teamId);
-        if(!t) return;
-        const members = (t.tech_week_registrations||[]).filter(r=>r.status==='registered'||r.status==='attended');
-        const isApproval = t.join_policy === "approval";
-        const sh = this.sheet(`
-          <h3 style="margin:0 0 4px">${CodeUp.escapeHtml(t.name)}</h3>
-          ${t.description?`<p class="small" style="margin:0 0 12px">${CodeUp.escapeHtml(t.description)}</p>`:""}
-          <div class="small" style="margin-bottom:10px">${members.length} ${members.length===1?"عضو":"أعضاء"} • ${isApproval?"انضمام بموافقة القائد":"انضمام مفتوح"}</div>
-          <div class="twSection">
-            <p class="twSectionTitle">الأعضاء</p>
-            ${members.length ? members.map(m=>`
-              <div class="twMemberRow">
-                ${CodeUp.avatarHtml(m.profiles?.full_name, m.profiles?.avatar_url, 30)}
-                <span class="twMemberName">${CodeUp.escapeHtml(m.profiles?.full_name||"")}${m.profile_id===t.leader_id?" — القائد":""}</span>
-              </div>`).join("") : `<p class="small">ما فيه أعضاء بعد</p>`}
-          </div>
-          <div class="twActionsRow" style="margin-top:18px">
-            <button class="btn" id="vtClose">رجوع</button>
-            <button class="btn dark" id="vtJoin">${isApproval?"اطلب الانضمام":"انضم للفريق"}</button>
-          </div>
-        `);
-        sh.el.querySelector("#vtClose").onclick = sh.close;
-        sh.el.querySelector("#vtJoin").onclick = async ()=>{
-          const joinBtn = sh.el.querySelector("#vtJoin");
-          joinBtn.disabled = true;
-          try{
-            await doJoinTeam(teamId, eventId, isApproval);
-            CodeUp.toast(isApproval ? "تم إرسال طلب الانضمام، بانتظار موافقة القائد" : "انضممت للفريق", "success");
-            sh.close();
-            this.renderHomeTechWeek(body);
-          }catch(e){ CodeUp.toast(e.message || "تعذّر الانضمام — قد يكون الفريق اكتمل", "error"); joinBtn.disabled = false; }
-        };
-      };
-    });
-
     body.querySelectorAll("[data-jointeam]").forEach(btn=>{
       btn.onclick = async ()=>{
         btn.disabled = true;
         const isApproval = btn.dataset.jointeampolicy === "approval";
         try{
-          await doJoinTeam(btn.dataset.jointeam, btn.dataset.jointeamevent, isApproval);
+          await db.from("tech_week_registrations").insert({
+            event_id: btn.dataset.jointeamevent, profile_id: this.ctx.user.id,
+            status: isApproval ? "pending" : "registered", team_id: btn.dataset.jointeam
+          }).throwOnError();
           CodeUp.toast(isApproval ? "تم إرسال طلب الانضمام، بانتظار موافقة القائد" : "انضممت للفريق", "success");
           this.renderHomeTechWeek(body);
         }catch(e){ CodeUp.toast(e.message || "تعذّر الانضمام — قد يكون الفريق اكتمل", "error"); btn.disabled = false; }
@@ -1580,641 +1909,6 @@ const App = {
         }catch(e){ CodeUp.toast(e.message || "تعذّر حذف الفريق", "error"); btn.disabled = false; }
       };
     });
-  },
-
-  // ---------------- CodeUp Marketplace ----------------
-  // نفس منطق الصلاحيات والحالات المُنفَّذ بالكامل بقاعدة البيانات (RPCs ذرية +
-  // Trigger يمنع تعديل status مباشرة) — الواجهة هنا للعرض والاستدعاء فقط،
-  // بدون أي منطق حساس على الفرونت إند.
-  mpTypeLabel(t){ return {sale:"للبيع", exchange:"للاستبدال", borrow:"للإعارة", free:"مجاني"}[t] || t; },
-  mpStatusLabel(s, listingType){
-    if(listingType==='sale' && s==='reserved') return "تم الاتفاق";
-    return {pending_review:"بانتظار مراجعة الأدمن", active:"متاح", reserved:"محجوز", sold:"تم البيع",
-      borrowed:"معار حاليًا", exchanged:"تم الاستبدال", given_away:"تم الإهداء", cancelled:"ملغى", rejected:"مرفوض"}[s] || s;
-  },
-  mpConditionLabel(c){ return {new:"جديد", like_new:"شبه جديد", good:"جيد", acceptable:"مقبول", needs_repair:"يحتاج إصلاح"}[c] || c; },
-
-  async renderHomeMarketplace(body){
-    body.innerHTML = `<div class="emptyState">جارِ التحميل…</div>`;
-    const [{ data: categories }, { data: listings, error }, { data: isAdminRes }] = await Promise.all([
-      db.from("marketplace_categories").select("*").order("order_index"),
-      db.from("marketplace_listings").select("id,title,price,listing_type,status,category_id,owner_id,created_at, marketplace_categories(name), owner:profiles!marketplace_listings_owner_id_fkey(full_name,avatar_url)")
-        .order("created_at",{ascending:false}).limit(60),
-      db.rpc("is_super_admin", {uid: this.ctx.user.id})
-    ]);
-    if(error){
-      body.innerHTML = `<div class="emptyState">تعذّر تحميل Marketplace. <button class="btn" id="mpRetryBtn">إعادة المحاولة</button></div>`;
-      body.querySelector("#mpRetryBtn").onclick = ()=> this.renderHomeMarketplace(body);
-      return;
-    }
-    // file_uploads.related_id عمود عام بدون FK حقيقي (يُستخدم لأنواع محتوى متعددة)،
-    // فما يقدر Supabase يدمجه تلقائيًا داخل استعلام marketplace_listings — نجيبه بطلب واحد مجمّع (مو طلب
-    // منفصل لكل منتج، عشان ما نطيح بمشكلة N+1) ونربطه يدويًا.
-    const listingIds = listings.map(l=>l.id);
-    const { data: allFiles } = listingIds.length
-      ? await db.from("file_uploads").select("id,storage_path,related_id").eq("related_type","marketplace_listing").in("related_id", listingIds)
-      : { data: [] };
-    const filesByListing = {};
-    (allFiles||[]).forEach(f=>{ (filesByListing[f.related_id] ||= []).push(f); });
-
-    const isAdmin = !!isAdminRes;
-    const mine = listings.filter(l=>l.owner_id===this.ctx.user.id);
-    const pendingReview = isAdmin ? listings.filter(l=>l.status==='pending_review') : [];
-
-    let activeCategory = "";
-    let searchQuery = "";
-
-    // أول 4 بطاقات (أول صفّين تقريبًا بشبكة عمودين) تُحمَّل فورًا (loading="eager") عشان الصورة الأولى
-    // تظهر بسرعة بدون تأخير الـlazy loading — الباقي أسفل الشاشة يتحمّل lazy فقط عند الحاجة.
-    const cardHtml = (l, idx)=>{
-      const img = (filesByListing[l.id]||[])[0];
-      const eager = idx < 4;
-      return `<button class="mpCard" data-mplisting="${l.id}">
-        <div class="mpCardImgWrap">
-          ${img ? `
-            <div class="skeleton" data-mpskeleton></div>
-            <img class="mpCardImg" data-mpthumb="${img.id}"
-                 alt="صورة منتج: ${CodeUp.escapeHtml(l.title)}"
-                 loading="${eager?'eager':'lazy'}" decoding="async" width="400" height="300">
-          ` : `<div class="mpCardImgPlaceholder">${Icon('shopping_bag')}<span>لا توجد صورة</span></div>`}
-        </div>
-        <div class="mpCardBody">
-          <div class="mpCardTitle">${CodeUp.escapeHtml(l.title)}</div>
-          ${l.listing_type==='sale' && l.price!=null ? `<div class="mpCardPrice">${l.price} ج.س</div>` : ""}
-          <div class="mpCardFooter">
-            <span class="mpBadge ${l.listing_type}">${this.mpTypeLabel(l.listing_type)}</span>
-            ${l.status!=='active' ? `<span class="mpBadge ${l.status==='sold'?'status-active':l.status==='reserved'?'status-warn':'status-neutral'}">${this.mpStatusLabel(l.status, l.listing_type)}</span>` : ""}
-            <span class="mpCardSeller">${CodeUp.avatarHtml(l.owner?.full_name, l.owner?.avatar_url, 16)}</span>
-          </div>
-        </div>
-      </button>`;
-    };
-
-    const renderResultsGrid = ()=>{
-      const gridEl = body.querySelector("#mpResultsGrid");
-      if(!gridEl) return;
-      let results = listings.filter(l=> l.status==='active' || l.owner_id===this.ctx.user.id);
-      if(activeCategory) results = results.filter(l=>l.category_id===activeCategory);
-      if(searchQuery) results = results.filter(l=>l.title.toLowerCase().includes(searchQuery));
-      if(!results.length){
-        gridEl.outerHTML = `<p class="emptyState" id="mpResultsGrid" style="display:block">ما فيه نتائج مطابقة.</p>`;
-        return;
-      }
-      gridEl.className = "mpGrid";
-      gridEl.innerHTML = results.map((l,i)=>cardHtml(l,i)).join("");
-      wireCardClicks();
-      loadThumbs();
-    };
-
-    const wireCardClicks = ()=>{
-      body.querySelectorAll("[data-mplisting]").forEach(btn=>{
-        btn.onclick = ()=> this.go({name:"marketplace_listing", listingId: btn.dataset.mplisting});
-      });
-    };
-    // كل بطاقة: نجرّب رابط صورة محسّن (مصغّر ومضغوط) أولًا؛ لو الميزة غير مفعّلة أو فشلت،
-    // CodeUp.getOptimizedSignedUrl نفسها ترجع تلقائيًا للرابط الأصلي (بدون كسر). ولو فشل تحميل
-    // الصورة بالمتصفح نفسه (onerror) نجرّب مرة واحدة إضافية بالرابط الأصلي الكامل، وإلا نعرض Placeholder.
-    const loadThumbs = ()=>{
-      body.querySelectorAll("[data-mpthumb]").forEach(async (img)=>{
-        const fileId = img.dataset.mpthumb;
-        const owner = (allFiles||[]).find(f=>f.id===fileId);
-        const wrap = img.closest(".mpCardImgWrap");
-        if(!owner?.storage_path){ return; }
-        const showPlaceholder = ()=>{
-          if(wrap) wrap.innerHTML = `<div class="mpCardImgPlaceholder">${Icon('shopping_bag')}<span>تعذّر تحميل الصورة</span></div>`;
-        };
-        img.onload = ()=>{
-          img.classList.add("loaded");
-          wrap?.querySelector("[data-mpskeleton]")?.remove();
-        };
-        let triedFallback = false;
-        img.onerror = async ()=>{
-          if(triedFallback){ showPlaceholder(); return; }
-          triedFallback = true;
-          try{ img.src = await CodeUp.getSignedUrl("submissions", owner.storage_path); }
-          catch(e){ showPlaceholder(); }
-        };
-        try{
-          img.src = await CodeUp.getOptimizedSignedUrl("submissions", owner.storage_path, {width:400, quality:65});
-        }catch(e){ showPlaceholder(); }
-      });
-    };
-
-    body.innerHTML = `
-      <div class="mpHeader">
-        <h2>CodeUp Marketplace</h2>
-        <p class="mpHeaderDesc">سوق مجتمعي للبيع والشراء والاستبدال والإعارة ومشاركة المنتجات بين أعضاء CodeUp.</p>
-      </div>
-      <div class="mpToolbar">
-        <div class="mpSearchWrap">${Icon('search')}<input id="mpSearchInput" placeholder="ابحث عن منتج…"></div>
-        <button class="btn dark mpAddBtn" id="mpNewBtn">+ إضافة منتج</button>
-      </div>
-      <div class="mpChipsRow" id="mpChipsRow">
-        <button class="mpChip active" data-mpchip="">الكل</button>
-        ${(categories||[]).map(c=>`<button class="mpChip" data-mpchip="${c.id}">${CodeUp.escapeHtml(c.name)}</button>`).join("")}
-      </div>
-
-      ${pendingReview.length ? `
-      <p class="mpSectionLabel">بانتظار مراجعتك (أدمن)</p>
-      <div class="mpGrid">${pendingReview.map(l=>`
-        <div class="mpCard" style="cursor:default;flex-direction:column;align-items:stretch">
-          <div class="mpCardTitle">${CodeUp.escapeHtml(l.title)}</div>
-          <div class="mpCardPrice">${l.price??''} ج.س</div>
-          <div class="twActionsRow" style="margin-top:2px">
-            <button class="btn dark" data-mpadminapprove="${l.id}" style="padding:6px 10px;font-size:12px">اعتماد</button>
-            <button class="btn" data-mpadminreject="${l.id}" style="padding:6px 10px;font-size:12px">رفض</button>
-          </div>
-        </div>`).join("")}</div>
-      ` : ""}
-
-      ${mine.length ? `<p class="mpSectionLabel">إعلاناتي</p>` : ""}
-      <div class="mpGrid" id="mpResultsGrid"></div>
-    `;
-
-    // نعرض إعلاناتي دائمًا أولًا ثم المتاح — يتحقق من خلال ترتيب results نفسه (owner أولًا غير مضمون ترتيبًا،
-    // فنكتفي بتضمينها ضمن النتائج القابلة للفلترة نفسها بدل تكرار قسم منفصل يعقّد البحث/الفلاتر)
-    renderResultsGrid();
-    wireCardClicks();
-
-    body.querySelector("#mpSearchInput").oninput = CodeUp.debounce((e)=>{
-      searchQuery = e.target.value.trim().toLowerCase();
-      renderResultsGrid();
-    }, 200);
-
-    body.querySelectorAll("[data-mpchip]").forEach(chip=>{
-      chip.onclick = ()=>{
-        body.querySelectorAll("[data-mpchip]").forEach(c=>c.classList.remove("active"));
-        chip.classList.add("active");
-        activeCategory = chip.dataset.mpchip;
-        renderResultsGrid();
-      };
-    });
-
-    body.querySelector("#mpNewBtn").onclick = ()=> this.openMarketplaceCreateForm(categories, ()=> this.renderHomeMarketplace(body));
-
-    body.querySelectorAll("[data-mpadminapprove]").forEach(btn=>{
-      btn.onclick = async ()=>{
-        btn.disabled = true;
-        try{
-          await db.rpc("marketplace_admin_review_listing", {p_listing_id: btn.dataset.mpadminapprove, p_decision: "active"}).throwOnError();
-          CodeUp.toast("تم اعتماد الإعلان", "success");
-          this.renderHomeMarketplace(body);
-        }catch(e){ CodeUp.toast(e.message || "تعذّر الاعتماد", "error"); btn.disabled = false; }
-      };
-    });
-    body.querySelectorAll("[data-mpadminreject]").forEach(btn=>{
-      btn.onclick = async ()=>{
-        const ok = await this.confirmDialog({title:"رفض الإعلان", message:"هل أنت متأكد من رفض هذا الإعلان؟", confirmLabel:"رفض", danger:true});
-        if(!ok) return;
-        btn.disabled = true;
-        try{
-          await db.rpc("marketplace_admin_review_listing", {p_listing_id: btn.dataset.mpadminreject, p_decision: "rejected"}).throwOnError();
-          CodeUp.toast("تم رفض الإعلان", "success");
-          this.renderHomeMarketplace(body);
-        }catch(e){ CodeUp.toast(e.message || "تعذّر الرفض", "error"); btn.disabled = false; }
-      };
-    });
-  },
-
-  // نموذج إضافة إعلان — نافذة بترويسة ثابتة (المحتوى قد يطول مع اختيار النوع والصور)
-  openMarketplaceCreateForm(categories, onDone){
-    const catOptions = (categories||[]).map(c=>`<option value="${c.id}">${CodeUp.escapeHtml(c.name)}</option>`).join("");
-    const pendingFiles = []; // {file, previewUrl}
-    const modal = this.modalScrollable("إضافة منتج جديد", `
-      <div class="mpFormRow"><label>عنوان المنتج</label><input id="mpfTitle" maxlength="100" placeholder="مثال: كتاب Algorithms"></div>
-      <div class="mpFormRow"><label>الوصف</label><textarea id="mpfDesc" rows="3" placeholder="تفاصيل إضافية عن المنتج"></textarea></div>
-      <div class="mpFormRow"><label>التصنيف</label><select id="mpfCategory"><option value="">بدون تصنيف</option>${catOptions}</select></div>
-      <div class="mpFormRow"><label>الحالة</label>
-        <select id="mpfCondition">
-          <option value="new">جديد</option><option value="like_new">شبه جديد</option>
-          <option value="good" selected>جيد</option><option value="acceptable">مقبول</option>
-          <option value="needs_repair">يحتاج إصلاح</option>
-        </select>
-      </div>
-      <div class="mpFormRow"><label>نوع العرض</label>
-        <select id="mpfType">
-          <option value="sale">للبيع</option><option value="exchange">للاستبدال</option>
-          <option value="borrow">للإعارة</option><option value="free">مجاني</option>
-        </select>
-      </div>
-      <div class="mpFormRow" id="mpfPriceRow"><label>السعر (ج.س)</label><input id="mpfPrice" type="number" min="0" step="1"></div>
-      <div class="mpFormRow" id="mpfExchangeRow" style="display:none"><label>أرغب في استبداله بـ</label><input id="mpfExchange" placeholder="مثال: كتاب Calculus أو آلة حاسبة"></div>
-      <div class="mpFormRow" id="mpfBorrowRow" style="display:none"><label>مدة الإعارة (أيام)</label><input id="mpfBorrowDays" type="number" min="1" step="1" value="7"></div>
-      <div class="mpWarnBox" id="mpfSaleWarn">إعلانات البيع تحتاج موافقة أدمن قبل الظهور للعموم. الدفع والتسليم يتمان مباشرة بينك وبين الطرف الآخر — CodeUp لا يستلم أو يضمن أي مبلغ.</div>
-
-      <div class="mpFormRow"><label>وسيلة التواصل (اختر واحدة على الأقل)</label></div>
-      <div class="mpFormRow" style="display:flex;align-items:center;gap:8px;margin-top:0">
-        <input type="checkbox" id="mpfWaEnable" style="width:auto"><label for="mpfWaEnable" style="margin:0">WhatsApp</label>
-      </div>
-      <div class="mpFormRow" id="mpfWaRow" style="display:none"><input id="mpfWaNumber" placeholder="+249912345678 (بصيغة دولية تبدأ بـ +)"></div>
-      <div class="mpFormRow" style="display:flex;align-items:center;gap:8px;margin-top:10px">
-        <input type="checkbox" id="mpfTgEnable" style="width:auto"><label for="mpfTgEnable" style="margin:0">Telegram</label>
-      </div>
-      <div class="mpFormRow" id="mpfTgRow" style="display:none"><input id="mpfTgUsername" placeholder="@username"></div>
-
-      <div class="mpFormRow"><label>الصور (حتى 3 صور)</label>
-        <div class="mpImgPickRow" id="mpfImgRow"><button type="button" class="mpAddImgBtn" id="mpfAddImgBtn">+</button></div>
-        <input type="file" id="mpfImgInput" accept="image/*" multiple style="display:none">
-      </div>
-      <div class="twActionsRow">
-        <button class="btn" id="mpfCancelBtn">إلغاء</button>
-        <button class="btn dark" id="mpfSubmitBtn">نشر الإعلان</button>
-      </div>
-    `);
-
-    const waEnable = modal.el.querySelector("#mpfWaEnable"), waRow = modal.el.querySelector("#mpfWaRow");
-    const tgEnable = modal.el.querySelector("#mpfTgEnable"), tgRow = modal.el.querySelector("#mpfTgRow");
-    waEnable.onchange = ()=> waRow.style.display = waEnable.checked ? "" : "none";
-    tgEnable.onchange = ()=> tgRow.style.display = tgEnable.checked ? "" : "none";
-
-    const typeSelect = modal.el.querySelector("#mpfType");
-    const syncTypeFields = ()=>{
-      const t = typeSelect.value;
-      modal.el.querySelector("#mpfPriceRow").style.display = t==='sale' ? "" : "none";
-      modal.el.querySelector("#mpfExchangeRow").style.display = t==='exchange' ? "" : "none";
-      modal.el.querySelector("#mpfBorrowRow").style.display = t==='borrow' ? "" : "none";
-      modal.el.querySelector("#mpfSaleWarn").style.display = t==='sale' ? "" : "none";
-    };
-    typeSelect.onchange = syncTypeFields;
-    syncTypeFields();
-
-    const imgRow = modal.el.querySelector("#mpfImgRow");
-    const addImgBtn = modal.el.querySelector("#mpfAddImgBtn");
-    const imgInput = modal.el.querySelector("#mpfImgInput");
-    const renderImgPicks = ()=>{
-      imgRow.querySelectorAll(".mpImgPickThumb").forEach(n=>n.remove());
-      pendingFiles.forEach((pf,i)=>{
-        const div = document.createElement("div");
-        div.className = "mpImgPickThumb";
-        div.innerHTML = `<img src="${pf.previewUrl}"><button type="button" data-removeimg="${i}">×</button>`;
-        imgRow.insertBefore(div, addImgBtn);
-      });
-      addImgBtn.style.display = pendingFiles.length >= 3 ? "none" : "";
-      imgRow.querySelectorAll("[data-removeimg]").forEach(b=>{
-        b.onclick = ()=>{ pendingFiles.splice(+b.dataset.removeimg,1); renderImgPicks(); };
-      });
-    };
-    addImgBtn.onclick = ()=> imgInput.click();
-    imgInput.onchange = ()=>{
-      for(const f of imgInput.files){
-        if(pendingFiles.length >= 3) break;
-        if(!f.type.startsWith("image/")) continue;
-        pendingFiles.push({file: f, previewUrl: URL.createObjectURL(f)});
-      }
-      imgInput.value = "";
-      renderImgPicks();
-    };
-
-    modal.el.querySelector("#mpfCancelBtn").onclick = modal.close;
-    modal.el.querySelector("#mpfSubmitBtn").onclick = async ()=>{
-      const submitBtn = modal.el.querySelector("#mpfSubmitBtn");
-      const title = modal.el.querySelector("#mpfTitle").value.trim();
-      const description = modal.el.querySelector("#mpfDesc").value.trim();
-      const category_id = modal.el.querySelector("#mpfCategory").value || null;
-      const condition = modal.el.querySelector("#mpfCondition").value;
-      const listing_type = typeSelect.value;
-      const price = listing_type==='sale' ? Number(modal.el.querySelector("#mpfPrice").value||0) : null;
-      const exchange_wanted_for = listing_type==='exchange' ? modal.el.querySelector("#mpfExchange").value.trim() : null;
-      const borrow_duration_days = listing_type==='borrow' ? Number(modal.el.querySelector("#mpfBorrowDays").value||0) : null;
-      const whatsapp = waEnable.checked ? modal.el.querySelector("#mpfWaNumber").value.trim() : null;
-      const telegram = tgEnable.checked ? modal.el.querySelector("#mpfTgUsername").value.trim() : null;
-
-      if(!title){ CodeUp.toast("اكتب عنوان المنتج", "error"); return; }
-      if(listing_type==='sale' && !(price>=0)){ CodeUp.toast("أدخل سعرًا صحيحًا", "error"); return; }
-      if(listing_type==='exchange' && !exchange_wanted_for){ CodeUp.toast("اكتب وش ترغب تستبدله", "error"); return; }
-      if(listing_type==='borrow' && !(borrow_duration_days>0)){ CodeUp.toast("أدخل مدة إعارة صحيحة", "error"); return; }
-      if(!whatsapp && !telegram){ CodeUp.toast("اختر وسيلة تواصل واحدة على الأقل (WhatsApp أو Telegram)", "error"); return; }
-      if(waEnable.checked && !whatsapp){ CodeUp.toast("أدخل رقم WhatsApp أو ألغِ تفعيله", "error"); return; }
-      if(tgEnable.checked && !telegram){ CodeUp.toast("أدخل يوزرنيم Telegram أو ألغِ تفعيله", "error"); return; }
-
-      await CodeUp.withBtnLoading(submitBtn, async ()=>{
-        try{
-          // إنشاء الإعلان + وسيلة التواصل بعملية ذرية واحدة (RPC) — بدون تحقق إضافي هنا؛
-          // كل قواعد العمل (السعر، الاستبدال، مدة الإعارة، صيغة الأرقام) تُفرض داخل قاعدة البيانات
-          const { data: listing, error } = await db.rpc("marketplace_create_listing", {
-            p_title: title, p_description: description || null, p_category_id: category_id,
-            p_condition: condition, p_listing_type: listing_type, p_price: price,
-            p_exchange_wanted_for: exchange_wanted_for, p_borrow_duration_days: borrow_duration_days,
-            p_whatsapp: whatsapp, p_telegram: telegram
-          }).single();
-          if(error) throw error;
-
-          for(const pf of pendingFiles){
-            try{
-              const up = await CodeUp.uploadMarketplaceImage(pf.file, this.ctx.user.id, listing.id);
-              const { data: fileRow, error: fErr } = await db.from("file_uploads").insert({
-                uploader_id: this.ctx.user.id, related_type: "marketplace_listing", related_id: listing.id,
-                storage_path: up.path, file_name: up.name, mime_type: up.type, file_size: up.size
-              }).select().single();
-              if(fErr) throw fErr;
-              CodeUp.triggerTelegramSend(fileRow.id);
-            }catch(imgErr){ CodeUp.toast("تعذّر رفع إحدى الصور — يمكنك إضافتها لاحقًا", "error"); }
-          }
-
-          CodeUp.toast(listing_type==='sale' ? "تم إرسال إعلانك لمراجعة الأدمن" : "تم نشر إعلانك", "success");
-          modal.close();
-          if(onDone) onDone();
-        }catch(e){ CodeUp.toast(e.message || "تعذّر نشر الإعلان", "error"); }
-      });
-    };
-  },
-
-  async renderMarketplaceListing(listingId){
-    this.crumbTrail([{label:"Marketplace", onClick: ()=> this.go({name:"home", homeTab:"marketplace"})}]);
-    this.root.innerHTML = `<div class="emptyState">جارِ التحميل…</div>`;
-
-    const [{ data: l, error }, { data: files }, { data: myReq }] = await Promise.all([
-      db.from("marketplace_listings").select("*, marketplace_categories(name), owner:profiles!marketplace_listings_owner_id_fkey(id,full_name,avatar_url)").eq("id", listingId).single(),
-      db.from("file_uploads").select("id,storage_path").eq("related_type","marketplace_listing").eq("related_id", listingId),
-      db.from("marketplace_requests").select("*").eq("listing_id", listingId).eq("requester_id", this.ctx.user.id).order("created_at",{ascending:false}).limit(1)
-    ]);
-    if(error || !l){ this.root.innerHTML = `<div class="emptyState">تعذّر تحميل الإعلان.</div>`; return; }
-
-    const isOwner = l.owner_id === this.ctx.user.id;
-    const myActiveReq = (myReq||[]).find(r=>r.status==='pending'||r.status==='accepted');
-
-    let ownerRequests = [];
-    if(isOwner){
-      const { data } = await db.from("marketplace_requests")
-        .select("*, requester:profiles!marketplace_requests_requester_id_fkey(id,full_name,avatar_url)")
-        .eq("listing_id", listingId).order("created_at",{ascending:false});
-      ownerRequests = data || [];
-    }
-
-    const statusClass = l.status==='active' ? 'status-active' : (['sold','given_away','exchanged','cancelled','rejected'].includes(l.status) ? 'status-neutral' : 'status-warn');
-
-    const ctaHtml = ()=>{
-      if(isOwner){
-        const canCancel = !['sold','given_away','exchanged','cancelled','rejected'].includes(l.status);
-        let extra = "";
-        if(l.status==='borrowed') extra = `<button class="btn dark" id="mpMarkReturnedBtn">تعليم كـ تم الإرجاع</button>`;
-        if(l.status==='reserved' && l.listing_type==='exchange') extra = `<button class="btn dark" id="mpCompleteExchangeBtn">تعليم كـ تم الاستبدال</button>`;
-        if(l.status==='reserved' && l.listing_type==='free') extra = `<button class="btn dark" id="mpMarkGivenBtn">تعليم كـ تم الإهداء</button>`;
-        if(l.listing_type==='sale' && l.status==='active') extra = `<button class="btn dark" id="mpAgreeBtn">تم الاتفاق</button>`;
-        if(l.listing_type==='sale' && l.status==='reserved') extra = `<button class="btn dark" id="mpSoldBtn">تم البيع</button><button class="btn" id="mpUnagreeBtn">إلغاء الاتفاق</button>`;
-        return `<div class="twActionsRow" style="margin-top:14px">${extra}${canCancel?`<button class="btn" id="mpCancelBtn">إلغاء الإعلان</button>`:""}</div>
-                <div class="twActionsRow" style="margin-top:8px"><button class="btn" id="mpDeleteBtn" style="color:#F2555F">حذف الإعلان نهائيًا</button></div>`;
-      }
-      if(l.status === 'sold') return `<div class="mpStateBanner rejected">هذا الإعلان تم بيعه بالفعل.</div>`;
-      if(l.status === 'reserved' && l.listing_type==='sale') return `<div class="mpStateBanner pending">تم الاتفاق على هذا الإعلان — غير متاح للطلب حاليًا.</div>`;
-      if(l.status !== 'active') return "";
-      if(myActiveReq){
-        const map = {pending:{cls:"pending",text:"طلبك بانتظار رد صاحب الإعلان."}, accepted:{cls:"accepted",text:"تم قبول طلبك."}, rejected:{cls:"rejected",text:"تم رفض الطلب."}};
-        const s = map[myActiveReq.status];
-        return s ? `<div class="mpStateBanner ${s.cls}">${s.text}</div>` : "";
-      }
-      const label = {sale:"شراء", exchange:"عرض استبدال", borrow:"طلب الإعارة", free:"طلب المنتج"}[l.listing_type];
-      return `<button class="btn dark" id="mpRequestBtn" style="width:100%;margin-top:14px">${label}</button>`;
-    };
-
-    this.root.innerHTML = `<div id="mpDetailBody">
-      ${files.length ? `
-      <div class="mpMainImgWrap"><img id="mpMainImg" data-mpfull="${files[0].id}" alt=""></div>
-      ${files.length>1 ? `<div class="mpThumbRow">${files.map((f,i)=>`<img class="mpThumb ${i===0?'active':''}" data-mpthumbsel="${f.id}" alt="">`).join("")}</div>` : ""}
-      ` : `<div class="mpMainImgWrap">${Icon('shopping_bag')}</div>`}
-
-      <div class="mpTitleRow">
-        <h2>${CodeUp.escapeHtml(l.title)}</h2>
-        ${l.listing_type==='sale' && l.price!=null ? `<span class="mpPriceBig">${l.price} ج.س</span>` : ""}
-      </div>
-      <div class="mpBadgeRow">
-        <span class="mpBadge ${l.listing_type}">${this.mpTypeLabel(l.listing_type)}</span>
-        <span class="mpBadge ${statusClass}">${this.mpStatusLabel(l.status, l.listing_type)}</span>
-      </div>
-
-      <div class="mpInfoList">
-        <span><b>الحالة:</b> ${this.mpConditionLabel(l.condition)}</span>
-        ${l.marketplace_categories?.name ? `<span><b>التصنيف:</b> ${CodeUp.escapeHtml(l.marketplace_categories.name)}</span>` : ""}
-        ${l.listing_type==='exchange' ? `<span><b>مرغوب استبداله بـ:</b> ${CodeUp.escapeHtml(l.exchange_wanted_for||'')}</span>` : ""}
-        ${l.listing_type==='borrow' ? `<span><b>مدة الإعارة:</b> ${l.borrow_duration_days} يوم</span>` : ""}
-      </div>
-      ${l.description ? `<p class="mpDesc">${CodeUp.escapeHtml(l.description)}</p>` : ""}
-
-      ${l.listing_type==='sale' ? `<div class="mpDisclaimer">${Icon('alert_triangle')}<span>الدفع والتسليم يتمان مباشرة بينك وبين البائع — CodeUp لا تستلم أو تضمن أي مبلغ أو تسليم.</span></div>` : ""}
-
-      <div class="mpSellerCard" id="mpOwnerRow">
-        ${CodeUp.avatarHtml(l.owner?.full_name, l.owner?.avatar_url, 38)}
-        <div class="mpSellerInfo">
-          <div class="mpSellerName">${CodeUp.escapeHtml(l.owner?.full_name||"")}</div>
-          <div class="mpSellerLabel">صاحب الإعلان</div>
-        </div>
-      </div>
-      ${!isOwner && l.status==='active' ? `
-      <div class="mpFormRow">
-        <label>تواصل مع صاحب الإعلان</label>
-        <div class="mpContactBtns">
-          <button class="mpContactBtn whatsapp" data-mpcontact="whatsapp">${Icon('whatsapp')}WhatsApp</button>
-          <button class="mpContactBtn telegram" data-mpcontact="telegram">${Icon('telegram')}Telegram</button>
-        </div>
-      </div>` : ""}
-
-      ${ctaHtml()}
-
-      ${isOwner && ownerRequests.length ? `
-      <div class="mpRequestsSection">
-        <p class="mpSectionLabel">الطلبات الواردة</p>
-        ${ownerRequests.map(r=>`
-          <div class="mpReqRow">
-            ${CodeUp.avatarHtml(r.requester?.full_name, r.requester?.avatar_url, 30)}
-            <div class="mpReqInfo">
-              <div class="mpSellerName">${CodeUp.escapeHtml(r.requester?.full_name||"")}</div>
-              <span class="mpBadge status-${r.status==='accepted'?'active':r.status==='pending'?'warn':'neutral'}">${{pending:"بانتظار الرد",accepted:"مقبول",rejected:"مرفوض",cancelled:"ملغى",completed:"مكتمل"}[r.status]}</span>
-              ${r.message ? `<p class="small" style="margin:4px 0 0">${CodeUp.escapeHtml(r.message)}</p>` : ""}
-              ${r.exchange_offer_description ? `<p class="small" style="margin:4px 0 0">الاستبدال: ${CodeUp.escapeHtml(r.exchange_offer_description)}</p>` : ""}
-              ${r.borrow_agreed_return_date ? `<p class="small" style="margin:4px 0 0">الإرجاع: ${CodeUp.formatDate(r.borrow_agreed_return_date)}</p>` : ""}
-            </div>
-            ${r.status==='pending' ? `
-            <div class="mpReqActions">
-              <button class="btn dark" data-mpreqaccept="${r.id}">قبول</button>
-              <button class="btn" data-mpreqreject="${r.id}">رفض</button>
-            </div>` : ""}
-          </div>`).join("")}
-      </div>` : ""}
-    </div>`;
-
-    const dbody = document.getElementById("mpDetailBody");
-    this.syncHeaderHeight();
-
-    const setMainImg = async (fileId)=>{
-      const f = files.find(x=>x.id===fileId);
-      const mainImg = dbody.querySelector("#mpMainImg");
-      if(!f || !mainImg) return;
-      try{ mainImg.src = await CodeUp.getSignedUrl("submissions", f.storage_path); }catch(e){}
-    };
-    if(files.length) setMainImg(files[0].id);
-    dbody.querySelectorAll("[data-mpthumbsel]").forEach(thumb=>{
-      setMainImg(thumb.dataset.mpthumbsel).then(()=>{}); // preload signed urls for thumbs too (below)
-      (async ()=>{
-        const f = files.find(x=>x.id===thumb.dataset.mpthumbsel);
-        if(!f) return;
-        try{ thumb.src = await CodeUp.getSignedUrl("submissions", f.storage_path); }catch(e){}
-      })();
-      thumb.onclick = ()=>{
-        dbody.querySelectorAll(".mpThumb").forEach(t=>t.classList.remove("active"));
-        thumb.classList.add("active");
-        setMainImg(thumb.dataset.mpthumbsel);
-      };
-    });
-    const mainImgEl = dbody.querySelector("#mpMainImg");
-    if(mainImgEl) mainImgEl.onclick = ()=>{
-      const bg = document.createElement("div");
-      bg.className = "mpLightboxBg";
-      bg.innerHTML = `<img src="${mainImgEl.src}">`;
-      bg.onclick = ()=> bg.remove();
-      document.body.appendChild(bg);
-    };
-
-    const ownerRow = dbody.querySelector("#mpOwnerRow");
-    if(ownerRow && !isOwner) ownerRow.onclick = ()=> this.go({name:"profile", profileId:l.owner.id});
-    if(ownerRow) ownerRow.style.cursor = isOwner ? "default" : "pointer";
-
-    const requestBtn = dbody.querySelector("#mpRequestBtn");
-    if(requestBtn) requestBtn.onclick = ()=> this.openMarketplaceRequestForm(l, ()=> this.renderMarketplaceListing(listingId));
-
-    dbody.querySelectorAll("[data-mpcontact]").forEach(btn=>{
-      btn.onclick = async ()=>{
-        const method = btn.dataset.mpcontact;
-        // نفتح نافذة فارغة فورًا ضمن نفس نقرة المستخدم (قبل أي await) — بعض المتصفحات وWebView
-        // بالأندرويد تحظر window.open() لو صار بعد عملية غير متزامنة، حتى لو كانت النتيجة من نفس الضغطة
-        const win = window.open("", "_blank");
-        btn.disabled = true;
-        try{
-          const { data: url, error } = await db.rpc("marketplace_get_contact_link", {p_listing_id: l.id, p_method: method});
-          if(error) throw error;
-          if(win) win.location.href = url; else location.href = url;
-        }catch(e){
-          if(win) win.close();
-          CodeUp.toast(e.message || "تعذّر فتح وسيلة التواصل", "error");
-        }finally{ btn.disabled = false; }
-      };
-    });
-
-    const cancelBtn = dbody.querySelector("#mpCancelBtn");
-    if(cancelBtn) cancelBtn.onclick = async ()=>{
-      const ok = await this.confirmDialog({title:"إلغاء الإعلان", message:"هل أنت متأكد من إلغاء هذا الإعلان؟", confirmLabel:"إلغاء الإعلان", danger:true});
-      if(!ok) return;
-      cancelBtn.disabled = true;
-      try{ await db.rpc("marketplace_cancel_listing", {p_listing_id: l.id}).throwOnError(); CodeUp.toast("تم إلغاء الإعلان","success"); this.renderMarketplaceListing(listingId); }
-      catch(e){ CodeUp.toast(e.message || "تعذّر الإلغاء","error"); cancelBtn.disabled=false; }
-    };
-
-    const agreeBtn = dbody.querySelector("#mpAgreeBtn");
-    if(agreeBtn) agreeBtn.onclick = async ()=>{
-      const ok = await this.confirmDialog({title:"تم الاتفاق؟", message:"هل تم الاتفاق فعلًا مع المشتري؟ سيتم تغيير حالة الإعلان إلى \"تم الاتفاق\". يمكنك لاحقًا تأكيد إتمام البيع أو إلغاء الاتفاق.", confirmLabel:"نعم، تم الاتفاق"});
-      if(!ok) return;
-      agreeBtn.disabled = true; agreeBtn.textContent = "جارٍ التحديث…";
-      try{ await db.rpc("marketplace_update_listing_status", {p_listing_id: l.id, p_new_status:"reserved"}).throwOnError(); CodeUp.toast("تم تعليم الإعلان كـ تم الاتفاق","success"); this.renderMarketplaceListing(listingId); }
-      catch(e){ CodeUp.toast(e.message || "تعذّر تحديث حالة الإعلان","error"); agreeBtn.disabled=false; agreeBtn.textContent="تم الاتفاق"; }
-    };
-
-    const soldBtn = dbody.querySelector("#mpSoldBtn");
-    if(soldBtn) soldBtn.onclick = async ()=>{
-      const ok = await this.confirmDialog({title:"تأكيد إتمام البيع", message:"هل تمت عملية البيع بالفعل؟ سيتم تغيير حالة الإعلان إلى \"تم البيع\"، ولن يُعتبر الإعلان متاحًا للبيع بعد ذلك.", confirmLabel:"نعم، تم البيع"});
-      if(!ok) return;
-      soldBtn.disabled = true; soldBtn.textContent = "جارٍ التحديث…";
-      try{ await db.rpc("marketplace_update_listing_status", {p_listing_id: l.id, p_new_status:"sold"}).throwOnError(); CodeUp.toast("تم تعليم الإعلان كـ تم البيع","success"); this.renderMarketplaceListing(listingId); }
-      catch(e){ CodeUp.toast(e.message || "تعذّر تحديث حالة الإعلان","error"); soldBtn.disabled=false; soldBtn.textContent="تم البيع"; }
-    };
-
-    const unagreeBtn = dbody.querySelector("#mpUnagreeBtn");
-    if(unagreeBtn) unagreeBtn.onclick = async ()=>{
-      const ok = await this.confirmDialog({title:"إلغاء الاتفاق؟", message:"سيعود الإعلان إلى حالة \"متاح للبيع\".", confirmLabel:"نعم، إلغاء الاتفاق"});
-      if(!ok) return;
-      unagreeBtn.disabled = true; unagreeBtn.textContent = "جارٍ التحديث…";
-      try{ await db.rpc("marketplace_update_listing_status", {p_listing_id: l.id, p_new_status:"active"}).throwOnError(); CodeUp.toast("تم إلغاء الاتفاق","success"); this.renderMarketplaceListing(listingId); }
-      catch(e){ CodeUp.toast(e.message || "تعذّر تحديث حالة الإعلان","error"); unagreeBtn.disabled=false; unagreeBtn.textContent="إلغاء الاتفاق"; }
-    };
-
-    const deleteBtn = dbody.querySelector("#mpDeleteBtn");
-    if(deleteBtn) deleteBtn.onclick = async ()=>{
-      const statusNote = l.status==='reserved' ? "هذا الإعلان عليه اتفاق حالي. حذف الإعلان سيزيله من Marketplace، لكن لن يُعتبر ذلك إتمامًا للبيع."
-        : l.status==='sold' ? "تم تسجيل هذا الإعلان كـ \"تم البيع\". سيتم إزالة الإعلان من Marketplace مع الاحتفاظ بسجل الصفقة حسب النظام."
-        : "هل أنت متأكد من حذف هذا الإعلان؟";
-      const ok = await this.confirmDialog({title:"حذف الإعلان؟", message:statusNote, confirmLabel:"حذف الإعلان", danger:true});
-      if(!ok) return;
-      deleteBtn.disabled = true; deleteBtn.textContent = "جارٍ الحذف…";
-      try{
-        const { data: paths, error } = await db.rpc("marketplace_delete_listing", {p_listing_id: l.id});
-        if(error) throw error;
-        if(paths && paths.length){
-          try{ await db.storage.from("submissions").remove(paths); }catch(se){ /* الإعلان اتحذف من القاعدة بنجاح؛ فشل تنظيف Storage مو حرج ولا يُوقف العملية */ }
-        }
-        CodeUp.toast("تم حذف الإعلان", "success");
-        this.go({name:"home", homeTab:"marketplace"});
-      }catch(e){ CodeUp.toast(e.message || "تعذّر حذف الإعلان — لم يتم إجراء أي تغيير","error"); deleteBtn.disabled=false; deleteBtn.textContent="حذف الإعلان نهائيًا"; }
-    };
-
-    const returnedBtn = dbody.querySelector("#mpMarkReturnedBtn");
-    if(returnedBtn) returnedBtn.onclick = async ()=>{
-      returnedBtn.disabled = true;
-      try{ await db.rpc("marketplace_mark_returned", {p_listing_id: l.id}).throwOnError(); CodeUp.toast("تم تعليم المنتج كمُرجَع","success"); this.renderMarketplaceListing(listingId); }
-      catch(e){ CodeUp.toast(e.message,"error"); returnedBtn.disabled=false; }
-    };
-    const exchBtn = dbody.querySelector("#mpCompleteExchangeBtn");
-    if(exchBtn) exchBtn.onclick = async ()=>{
-      exchBtn.disabled = true;
-      try{ await db.rpc("marketplace_complete_exchange", {p_listing_id: l.id}).throwOnError(); CodeUp.toast("تم إتمام الاستبدال","success"); this.renderMarketplaceListing(listingId); }
-      catch(e){ CodeUp.toast(e.message,"error"); exchBtn.disabled=false; }
-    };
-    const givenBtn = dbody.querySelector("#mpMarkGivenBtn");
-    if(givenBtn) givenBtn.onclick = async ()=>{
-      givenBtn.disabled = true;
-      try{ await db.rpc("marketplace_mark_given_away", {p_listing_id: l.id}).throwOnError(); CodeUp.toast("تم تعليم المنتج كمُهدى","success"); this.renderMarketplaceListing(listingId); }
-      catch(e){ CodeUp.toast(e.message,"error"); givenBtn.disabled=false; }
-    };
-
-    dbody.querySelectorAll("[data-mpreqaccept]").forEach(btn=>{
-      btn.onclick = async ()=>{
-        btn.disabled = true;
-        try{ await db.rpc("marketplace_decide_request", {p_request_id: btn.dataset.mpreqaccept, p_decision:"accepted"}).throwOnError(); CodeUp.toast("تم قبول الطلب","success"); this.renderMarketplaceListing(listingId); }
-        catch(e){ CodeUp.toast(e.message || "تعذّر القبول","error"); btn.disabled=false; }
-      };
-    });
-    dbody.querySelectorAll("[data-mpreqreject]").forEach(btn=>{
-      btn.onclick = async ()=>{
-        btn.disabled = true;
-        try{ await db.rpc("marketplace_decide_request", {p_request_id: btn.dataset.mpreqreject, p_decision:"rejected"}).throwOnError(); CodeUp.toast("تم رفض الطلب","success"); this.renderMarketplaceListing(listingId); }
-        catch(e){ CodeUp.toast(e.message || "تعذّر الرفض","error"); btn.disabled=false; }
-      };
-    });
-  },
-
-  openMarketplaceRequestForm(listing, onDone){
-    const t = listing.listing_type;
-    const extraHtml = t==='exchange'
-      ? `<div class="mpFormRow"><label>وش تعرضه للاستبدال</label><textarea id="mpreqExchange" rows="2" placeholder="مثال: كتاب Calculus بحالة ممتازة"></textarea></div>`
-      : t==='borrow'
-      ? `<div class="mpFormRow"><label>تاريخ الإرجاع المتفق عليه</label><input id="mpreqReturnDate" type="date"></div>`
-      : "";
-    const sh = this.sheet(`
-      <h3 style="margin:0 0 10px">${{sale:"طلب شراء",exchange:"عرض استبدال",borrow:"طلب إعارة",free:"طلب المنتج"}[t]}</h3>
-      <div class="mpFormRow"><label>رسالة لصاحب الإعلان (اختياري)</label><textarea id="mpreqMsg" rows="2" placeholder="أي تفاصيل تحب تضيفها"></textarea></div>
-      ${extraHtml}
-      <div class="twActionsRow">
-        <button class="btn" id="mpreqCancelBtn">إلغاء</button>
-        <button class="btn dark" id="mpreqSubmitBtn">إرسال الطلب</button>
-      </div>
-    `);
-    sh.el.querySelector("#mpreqCancelBtn").onclick = sh.close;
-    sh.el.querySelector("#mpreqSubmitBtn").onclick = async ()=>{
-      const submitBtn = sh.el.querySelector("#mpreqSubmitBtn");
-      const message = sh.el.querySelector("#mpreqMsg").value.trim() || null;
-      const exchangeOffer = t==='exchange' ? sh.el.querySelector("#mpreqExchange").value.trim() : null;
-      const returnDate = t==='borrow' ? sh.el.querySelector("#mpreqReturnDate").value : null;
-      if(t==='exchange' && !exchangeOffer){ CodeUp.toast("اكتب وش تعرضه للاستبدال","error"); return; }
-      if(t==='borrow' && !returnDate){ CodeUp.toast("اختر تاريخ الإرجاع","error"); return; }
-      await CodeUp.withBtnLoading(submitBtn, async ()=>{
-        try{
-          await db.rpc("marketplace_submit_request", {
-            p_listing_id: listing.id, p_type: t, p_message: message,
-            p_exchange_offer: exchangeOffer, p_borrow_return_date: returnDate
-          }).throwOnError();
-          CodeUp.toast("تم إرسال طلبك", "success");
-          sh.close();
-          if(onDone) onDone();
-        }catch(e){ CodeUp.toast(e.message || "تعذّر إرسال الطلب", "error"); }
-      });
-    };
   },
 
   async renderHomeCourses(body){
@@ -2624,7 +2318,7 @@ const App = {
               await db.rpc("unpin_post", {p_post_id: b.dataset.pinpost}).throwOnError();
               CodeUp.toast("تم إلغاء التثبيت", "success");
             }else{
-              const days = await this.promptDialog({title:"تثبيت المنشور", message:"عدد أيام التثبيت (اتركه فارغًا للتثبيت الدائم):", defaultValue:"3", confirmLabel:"تثبيت"});
+              const days = prompt("عدد أيام التثبيت (اتركه فارغًا للتثبيت الدائم):", "3");
               if(days===null) return;
               const until = days.trim() ? new Date(Date.now() + Number(days)*86400000).toISOString() : null;
               await db.rpc("pin_post", {p_post_id: b.dataset.pinpost, p_pinned_until: until}).throwOnError();
@@ -3284,7 +2978,7 @@ const App = {
     body.querySelectorAll("[data-submit]").forEach(b=>{
       b.onclick = async ()=>{
         if(!myEnrollment){
-          if(!await this.confirmDialog({title:"الانضمام للكورس", message:"للتسليم يجب الانضمام للكورس أولًا. تريد الانضمام الآن؟", confirmLabel:"انضمام"})) return;
+          if(!confirm("للتسليم يجب الانضمام للكورس أولًا. تريد الانضمام الآن؟")) return;
           try{
             await CodeUp.rpc.enrollInCourse(course.id);
             this.ctx = await CodeUp.loadMyContext();
@@ -3631,7 +3325,7 @@ const App = {
 
       const requireJoin = async ()=>{
         if(myEnrollment) return true;
-        if(!await this.confirmDialog({title:"الانضمام للكورس", message:"للتفاعل يجب الانضمام للكورس أولًا. تريد الانضمام الآن؟", confirmLabel:"انضمام"})) return false;
+        if(!confirm("للتفاعل يجب الانضمام للكورس أولًا. تريد الانضمام الآن؟")) return false;
         try{ await CodeUp.rpc.enrollInCourse(course.id); this.ctx = await CodeUp.loadMyContext(); myEnrollment = this.ctx.enrollments.find(e=>e.course_id===course.id); return true; }
         catch(e){ CodeUp.toast(e.message||"تعذّر الانضمام", "error"); return false; }
       };
@@ -3761,14 +3455,14 @@ const App = {
     body.querySelectorAll("[data-join]").forEach(b=>{
       b.onclick = async ()=>{
         if(!myEnrollment){
-          if(!await this.confirmDialog({title:"الانضمام للكورس", message:"للانضمام لمجموعة يجب الانضمام للكورس أولًا. تريد الانضمام الآن؟", confirmLabel:"انضمام"})) return;
+          if(!confirm("للانضمام لمجموعة يجب الانضمام للكورس أولًا. تريد الانضمام الآن؟")) return;
           try{ await CodeUp.rpc.enrollInCourse(course.id); this.ctx = await CodeUp.loadMyContext(); }
           catch(e){ CodeUp.toast(e.message||"تعذّر الانضمام", "error"); return; }
         }
         // تحذير قبل الطلب لو الطالب أصلًا بمجموعة ثانية بنفس الكورس — القبول ينقله تلقائيًا
         if(myEnrollment?.squad_id && myEnrollment.squad_id !== b.dataset.join){
           const currentSquad = squads.find(s=>s.id===myEnrollment.squad_id);
-          const ok = await this.confirmDialog({title:"تغيير المجموعة", message:`أنت حاليًا عضو بمجموعة "${currentSquad?.name||""}". لو تمت الموافقة على هذا الطلب، سيتم نقلك تلقائيًا لهذه المجموعة الجديدة وإخراجك من مجموعتك الحالية.`, confirmLabel:"متابعة"});
+          const ok = confirm(`أنت حاليًا عضو بمجموعة "${currentSquad?.name||""}". لو تمت الموافقة على هذا الطلب، سيتم نقلك تلقائيًا لهذه المجموعة الجديدة وإخراجك من مجموعتك الحالية. هل تريد المتابعة؟`);
           if(!ok) return;
         }
         b.disabled = true;
@@ -3816,7 +3510,7 @@ const App = {
     // بمستوى RLS/RPC (assign_squad_leader) وليس بمجرد إخفاء الزر هنا.
 
     m.el.querySelector("#leaveSquadBtn").onclick = async ()=>{
-      if(!await this.confirmDialog({title:"مغادرة المجموعة", confirmLabel:"مغادرة", danger:true})) return;
+      if(!confirm("هل تريد مغادرة هذه المجموعة فعلًا؟")) return;
       try{
         await db.rpc("leave_squad", {p_course_id: course.id}).throwOnError();
         CodeUp.toast("تم مغادرة المجموعة", "success");
@@ -3918,3 +3612,6 @@ function statusLabel(s){
   return {on_track:"على المسار",at_risk:"في خطر",behind:"متأخر",inactive:"غير نشط",
     submitted:"تم التسليم",late:"متأخر",missing:"لم يُسلَّم",reviewed:"تمت المراجعة"}[s] || s;
 }
+</script>
+</body>
+</html>

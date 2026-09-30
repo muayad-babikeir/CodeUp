@@ -41,11 +41,7 @@ function Icon(name){
     link: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
     x: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
     settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
-    zap: '<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>',
-    shopping_bag: '<path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/>',
-    search: '<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
-    whatsapp: '<path d="M3 21l1.65-4.95A8.5 8.5 0 1 1 8.5 19.5L3 21z" fill="none"/><path d="M8.2 8.6c.2-.5.4-.5.6-.5h.5c.17 0 .4 0 .58.44.2.5.7 1.7.75 1.85.06.14.1.3 0 .5-.1.2-.15.3-.3.46l-.4.47c-.13.14-.27.3-.12.56.15.26.68 1.13 1.47 1.83 1 .9 1.85 1.18 2.1 1.3.26.14.4.12.56-.07.16-.2.7-.8.9-1.08.2-.27.4-.22.65-.13.27.1 1.7.8 1.98.94.28.14.47.2.53.32.07.13.07.72-.17 1.4-.24.68-1.4 1.3-1.95 1.38-.5.08-1.13.11-1.83-.12-.42-.13-.96-.3-1.65-.6-2.9-1.25-4.8-4.16-4.94-4.35-.14-.2-1.17-1.56-1.17-2.98 0-1.42.75-2.1 1-2.4z"/>',
-    telegram: '<path d="M22 2L2 10l7 2.5M22 2l-4 18-8-5.5M22 2L9.5 14.5M9 12.5V18l3-3"/>'
+    zap: '<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>'
   };
   return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${paths[name]||''}</svg>`;
 }
@@ -272,15 +268,13 @@ const CodeUp = (() => {
     const user = sessionData?.session?.user;
     if (!user) return null;
 
-    const [{ data: profile }, { data: courseAdmins }, { data: squadLeaders }, { data: enrollments }, { data: universityAdmins }, { data: techWeekAdminRow }, { data: marketplaceSetting }, { data: techWeekSettings }] = await Promise.all([
-      db.from("profiles").select("id,full_name,avatar_url,is_super_admin,created_at").eq("id", user.id).single(),
+    const [{ data: profile }, { data: courseAdmins }, { data: squadLeaders }, { data: enrollments }, { data: universityAdmins }, { data: techWeekAdminRow }] = await Promise.all([
+      db.from("profiles").select("*").eq("id", user.id).single(),
       db.from("course_admins").select("course_id, role").eq("profile_id", user.id),
       db.from("squad_leaders").select("squad_id, permissions, squads(course_id, name)").eq("profile_id", user.id),
       db.from("enrollments").select("*, courses(name, slug), squads(name, emoji)").eq("profile_id", user.id),
       db.from("university_admins").select("university_id, role").eq("profile_id", user.id),
-      db.from("tech_week_admins").select("id, role").eq("profile_id", user.id).maybeSingle(),
-      db.from("app_settings").select("value").eq("key","marketplace_enabled").maybeSingle(),
-      db.from("tech_week_settings").select("is_enabled").eq("id", true).maybeSingle()
+      db.from("tech_week_admins").select("id, role").eq("profile_id", user.id).maybeSingle()
     ]);
 
     return {
@@ -294,15 +288,7 @@ const CodeUp = (() => {
       enrollments: enrollments || [],
       universityAdmins: universityAdmins || [],
       universityAdminIds: (universityAdmins || []).map(u => u.university_id),
-      isTechWeekAdmin: !!techWeekAdminRow || !!profile?.is_super_admin,
-      // ميزات قابلة للتفعيل/الإيقاف من الأدمن — القيمة الافتراضية true لو الصف
-      // مش موجود أصلًا (مثلاً قبل ترحيل قاعدة البيانات)، حتى ما تختفيش الميزة
-      // بالغلط لمجرد غياب صف الإعداد.
-      marketplaceEnabled: marketplaceSetting ? marketplaceSetting.value !== "false" : true,
-      // ملحوظة: RLS على tech_week_settings بتخفي الصف عن غير الأدمن أصلًا لو
-      // is_enabled=false (مش بس تخفي القيمة) — يعني "الصف مش موجود" للطالب
-      // العادي هي نفسها إشارة "الميزة متوقفة"، فالافتراضي هنا false لا true.
-      techWeekEnabled: !!techWeekSettings?.is_enabled
+      isTechWeekAdmin: !!techWeekAdminRow || !!profile?.is_super_admin
     };
   }
 
@@ -404,23 +390,6 @@ const CodeUp = (() => {
     return data.signedUrl;
   }
 
-  // نسخة محسّنة (مصغّرة/مضغوطة) من رابط الصورة لعرضها بقوائم/بطاقات — تستخدم Supabase Storage
-  // Image Transformation إن كانت مفعّلة بهذا المشروع (supabase-js v2: خيار transform بـcreateSignedUrl).
-  // لو الميزة غير مفعّلة بخطة المشروع، createSignedUrl نفسها ترجع خطأ لخيار transform تحديدًا — نرجع
-  // حينها تلقائيًا لنفس الرابط الأصلي الكامل (getSignedUrl) بدون أي كسر. مكان واحد فقط مسؤول عن هذا
-  // القرار — لا تكرّر منطق Storage داخل كل بطاقة.
-  async function getOptimizedSignedUrl(bucket, path, { width = 400, quality = 65 } = {}, expiresIn = 3600) {
-    try {
-      const { data, error } = await db.storage.from(bucket).createSignedUrl(path, expiresIn, {
-        transform: { width, quality }
-      });
-      if (error) throw error;
-      return data.signedUrl;
-    } catch (e) {
-      return getSignedUrl(bucket, path, expiresIn);
-    }
-  }
-
   // ---------- Realtime ----------
   // يعتمد على أن جدول notifications محمي بـ RLS (select: profile_id = auth.uid()),
   // فالاشتراك آمن بشكل افتراضي — المستخدم لا يستقبل إلا إشعاراته هو.
@@ -446,40 +415,11 @@ const CodeUp = (() => {
     } catch (e) { /* فشل صامت — الملف بأمان بـ Supabase، والمحاولة تُعاد تلقائيًا بالمهمة اليومية */ }
   }
 
-  // Topic تيليجرام لفريق الأسبوع التقني — يرجّع {url, invite_url} أو null عند الفشل
-  async function callTeamTopic(teamId) {
-    try {
-      const { data: sessionData } = await db.auth.getSession();
-      const token = sessionData?.session?.access_token;
-      if (!token) return null;
-      const r = await fetch(`${SUPABASE_URL}/functions/v1/telegram-team-topic`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
-        body: JSON.stringify({ team_id: teamId })
-      });
-      const j = await r.json();
-      return j?.ok ? j : null;
-    } catch (e) { return null; }
-  }
-
   // إرفاق صورة/صوت بتعليق — نفس bucket التسليمات، مسار منفصل تحت comments/
   async function uploadCommentAttachment(file, userId, commentId) {
     const processed = file.type.startsWith("image/") ? await compressImageIfNeeded(file) : file;
     const cleanName = processed.name.replace(/[^\w.\-]+/g, "_");
     const path = `${userId}/comments/${commentId}/${Date.now()}_${cleanName}`;
-    const { error } = await db.storage.from("submissions").upload(path, processed, { upsert: false });
-    if (error) throw error;
-    return { path, size: processed.size, type: processed.type, name: processed.name };
-  }
-
-  // صورة إعلان Marketplace — نفس bucket ونفس آلية ضغط الصور تمامًا (submissions)، مسار منفصل تحت marketplace/
-  async function uploadMarketplaceImage(file, userId, listingId) {
-    const processed = await compressImageIfNeeded(file);
-    if (processed.size > MAX_FILE_BYTES) {
-      throw new Error(`حجم الصورة كبير جدًا (${(processed.size/1024/1024).toFixed(1)} ميجا). الحد الأقصى 8 ميجابايت.`);
-    }
-    const cleanName = processed.name.replace(/[^\w.\-]+/g, "_");
-    const path = `${userId}/marketplace/${listingId}/${Date.now()}_${cleanName}`;
     const { error } = await db.storage.from("submissions").upload(path, processed, { upsert: false });
     if (error) throw error;
     return { path, size: processed.size, type: processed.type, name: processed.name };
@@ -520,5 +460,5 @@ const CodeUp = (() => {
     });
   }
 
-  return { toast, escapeHtml, avatarHtml, timeAgo, formatDate, debounce, requireSession, loadMyContext, rpc, call, uploadSubmissionFile, uploadCommentAttachment, uploadMarketplaceImage, getSignedUrl, getOptimizedSignedUrl, subscribeToMyNotifications, triggerTelegramSend, callTeamTopic, buildCommentsBlock, wireCommentsToggle, setBtnLoading, withBtnLoading, compressImageIfNeeded };
+  return { toast, escapeHtml, avatarHtml, timeAgo, formatDate, debounce, requireSession, loadMyContext, rpc, call, uploadSubmissionFile, uploadCommentAttachment, getSignedUrl, subscribeToMyNotifications, triggerTelegramSend, buildCommentsBlock, wireCommentsToggle, setBtnLoading, withBtnLoading, compressImageIfNeeded };
 })();

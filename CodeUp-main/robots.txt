@@ -1,0 +1,15 @@
+User-agent: *
+Allow: /
+Allow: /index.html
+Allow: /privacy.html
+Allow: /terms.html
+
+# لوحة الإدارة — بيانات إدارية خاصة، ما لازم تنفهرس
+Disallow: /admin/
+Disallow: /admin/index.html
+
+# مجلدات داخلية غير مخصّصة للفهرسة
+Disallow: /database/
+Disallow: /supabase/
+
+Sitemap: https://codeupsd.online/sitemap.xml

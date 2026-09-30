@@ -170,7 +170,7 @@ function openEventModal(event){
   };
   const delBtn = m.el.querySelector("#evDelete");
   if(delBtn) delBtn.onclick = async ()=>{
-    if(!await Admin.confirmDialog({title:`حذف "${event.title}"`, message:"سيُحذف كل تسجيلات الطلاب فيها معها، ولا يمكن التراجع.", confirmLabel:"حذف نهائيًا", danger:true})) return;
+    if(!confirm(`حذف "${event.title}" نهائيًا؟\n\nسيُحذف كل تسجيلات الطلاب فيها معها، ولا يمكن التراجع.`)) return;
     const { error } = await db.from("tech_week_events").delete().eq("id", event.id);
     if(error){ CodeUp.toast(error.message, "error"); return; }
     m.close(); Admin.go("tech_week_events");
@@ -202,7 +202,7 @@ async function openRegistrationsDrawer(event){
   const d = Admin.drawer(`<div class="emptyState">جارِ التحميل…</div>`);
   const isTeamMode = event.registration_mode === "team";
   const [{ data: regs, error }, teamsRes] = await Promise.all([
-    db.from("tech_week_registrations").select("*, profiles(full_name)").eq("event_id", event.id).order("created_at"),
+    db.from("tech_week_registrations").select("*, profiles(full_name,email)").eq("event_id", event.id).order("created_at"),
     isTeamMode ? db.from("tech_week_teams").select("*").eq("event_id", event.id).order("created_at") : Promise.resolve({data:[]})
   ]);
   if(error){ d.el.innerHTML = `<div class="alertBox error"><span>تعذّر تحميل المسجّلين.</span></div>`; return; }
@@ -211,7 +211,7 @@ async function openRegistrationsDrawer(event){
   const markAttendedBtn = (r)=> r.status==='registered'?`<button class="btn" data-markattended="${r.id}">تم الحضور</button>`:"";
   const memberLine = (r)=>`
         <div class="attentionItem">
-          <div class="aiBody">${CodeUp.escapeHtml(r.profiles?.full_name||"")}
+          <div class="aiBody">${CodeUp.escapeHtml(r.profiles?.full_name||r.profiles?.email||"")}
             <div class="aiMeta">${r.status==='registered'?'مسجّل':r.status==='attended'?'حضر':r.status==='pending'?'قيد المراجعة (بانتظار موافقة القائد)':'ألغى التسجيل'}</div>
           </div>
           ${markAttendedBtn(r)}
@@ -226,7 +226,7 @@ async function openRegistrationsDrawer(event){
         return `<div class="card2" style="margin-bottom:10px">
           <div style="display:flex;justify-content:space-between;align-items:center">
             <b>${CodeUp.escapeHtml(t.name)}</b>
-            <span class="small">${t.telegram_topic_status==='ready'?'💬 ':t.telegram_topic_status==='closed'?'🔒 ':''}${activeCount}${event.team_max_size?` / ${event.team_max_size}`:""} عضو</span>
+            <span class="small">${activeCount}${event.team_max_size?` / ${event.team_max_size}`:""} عضو</span>
           </div>
           <div style="margin-top:8px">${members.map(memberLine).join("") || `<p class="small" style="margin:0">لا يوجد أعضاء بعد.</p>`}</div>
         </div>`;
@@ -239,32 +239,12 @@ async function openRegistrationsDrawer(event){
         <b>${CodeUp.escapeHtml(event.title)}</b>
         <button class="iconBtn" id="regsDrawerClose" aria-label="إغلاق">${Icon("x")}</button>
       </div>
-      ${isTeamMode && teams.some(t=>t.telegram_thread_id && t.telegram_topic_status!=='closed')
-        ? `<button class="btn" id="closeTeamTopics" style="margin-bottom:10px">🔒 إغلاق محادثات الفرق بتيليجرام</button>` : ""}
       <p class="small">${isTeamMode
         ? `${teams.length} فريق${event.capacity?` من أصل ${event.capacity}`:""}`
         : `${regs.filter(r=>r.status==='registered').length} مسجّل${event.capacity?` من أصل ${event.capacity}`:""}`}</p>
       ${listHtml}
     `;
     d.el.querySelector("#regsDrawerClose").onclick = d.close;
-    const closeTopicsBtn = d.el.querySelector("#closeTeamTopics");
-    if(closeTopicsBtn) closeTopicsBtn.onclick = async ()=>{
-      if(!confirm("سيتم إغلاق Topics كل فرق هذي الفعالية بتيليجرام (يبقى المحتوى ظاهرًا للقراءة). متابعة؟")) return;
-      closeTopicsBtn.disabled = true;
-      try{
-        const { data: sd } = await db.auth.getSession();
-        const r = await fetch(`${SUPABASE_URL}/functions/v1/telegram-team-topic`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${sd?.session?.access_token}` },
-          body: JSON.stringify({ action: "close_event", event_id: event.id })
-        });
-        const j = await r.json();
-        if(!j.ok) throw new Error(j.error || "فشل");
-        CodeUp.toast(`تم إغلاق ${j.closed} محادثة${j.failed?` (فشل ${j.failed})`:""}`, j.failed?"error":"success");
-        teams.forEach(t=>{ if(t.telegram_thread_id) t.telegram_topic_status = "closed"; });
-        draw();
-      }catch(e){ CodeUp.toast(e.message || "تعذّر الإغلاق", "error"); closeTopicsBtn.disabled = false; }
-    };
     d.el.querySelectorAll("[data-markattended]").forEach(b=>{
       b.onclick = async ()=>{
         await db.from("tech_week_registrations").update({status:"attended"}).eq("id", b.dataset.markattended);
@@ -330,7 +310,7 @@ Admin.sections.tech_week_announcements = {
     };
     body.querySelectorAll("[data-del]").forEach(b=>{
       b.onclick = async ()=>{
-        if(!await Admin.confirmDialog({title:"حذف الإعلان", message:"لا يمكن التراجع عن هذا الإجراء.", confirmLabel:"حذف", danger:true})) return;
+        if(!confirm("حذف هذا الإعلان نهائيًا؟")) return;
         const { error } = await db.from("tech_week_announcements").delete().eq("id", b.dataset.del);
         if(error){ CodeUp.toast(error.message, "error"); return; }
         Admin.go("tech_week_announcements");
@@ -345,20 +325,17 @@ Admin.sections.tech_week_team = {
   async render(body){
     body.innerHTML = `<div class="card">${Array(2).fill(`<div class="skeleton skeleton-line w80" style="height:30px;margin-bottom:10px"></div>`).join("")}</div>`;
     const [{ data: admins, error }, { data: profiles }] = await Promise.all([
-      db.from("tech_week_admins").select("*, profiles(full_name)").order("created_at",{ascending:false}),
-      db.from("profiles").select("id,full_name").order("full_name")
+      db.from("tech_week_admins").select("*, profiles(full_name,email)").order("created_at",{ascending:false}),
+      db.from("profiles").select("id,full_name,email").order("full_name")
     ]);
     if(error){ body.innerHTML = `<div class="alertBox error"><span>تعذّر تحميل الفريق.</span><button class="btn alertRetry" id="twtRetry">إعادة المحاولة</button></div>`; body.querySelector("#twtRetry").onclick=()=>Admin.go("tech_week_team"); return; }
-    const twIds = [...new Set([...(admins||[]).map(a=>a.profile_id), ...(profiles||[]).map(p=>p.id)])];
-    const { data: twEmailRows } = twIds.length ? await db.rpc("get_profile_emails", { p_user_ids: twIds }) : { data: [] };
-    const twEmailById = {}; (twEmailRows||[]).forEach(e=> twEmailById[e.id]=e.email);
 
     body.innerHTML = `
       <p class="small" style="margin-bottom:10px">صلاحية واحدة مرنة حاليًا (تصل لكل محتوى الأسبوع التقني) — يمكن تقسيمها لاحقًا حسب الحاجة.</p>
       <div class="toolbar"><button class="btn dark" id="assignTwAdminBtn">+ إضافة عضو للفريق</button></div>
       <div class="card"><div class="tableScroll"><table><thead><tr><th>العضو</th><th>الدور</th><th></th></tr></thead>
       <tbody>${(admins||[]).map(a=>`
-        <tr><td>${CodeUp.escapeHtml(a.profiles?.full_name||twEmailById[a.profile_id]||"")}</td>
+        <tr><td>${CodeUp.escapeHtml(a.profiles?.full_name||a.profiles?.email||"")}</td>
         <td><span class="pill ${a.role}">${a.role==='owner'?'مالك':'أدمن'}</span></td>
         <td><button class="btn danger" data-remove="${a.id}">إزالة</button></td></tr>`).join("") || `<tr><td colspan="3"><div class="emptyStatePro"><p style="margin:0">لا يوجد أعضاء بالفريق بعد.</p></div></td></tr>`}
       </tbody></table></div></div>`;
@@ -367,7 +344,7 @@ Admin.sections.tech_week_team = {
       const m = Admin.modal(`
         <h3>إضافة عضو لفريق الأسبوع التقني</h3>
         <label>المستخدم</label>
-        <select id="twaUser">${(profiles||[]).map(p=>`<option value="${p.id}">${CodeUp.escapeHtml(p.full_name||twEmailById[p.id]||p.id)}</option>`).join("")}</select>
+        <select id="twaUser">${(profiles||[]).map(p=>`<option value="${p.id}">${CodeUp.escapeHtml(p.full_name||p.email)}</option>`).join("")}</select>
         <label>الدور</label>
         <select id="twaRole"><option value="admin">أدمن</option><option value="owner">مالك</option></select>
         <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
@@ -388,7 +365,7 @@ Admin.sections.tech_week_team = {
     };
     body.querySelectorAll("[data-remove]").forEach(b=>{
       b.onclick = async ()=>{
-        if(!await Admin.confirmDialog({title:"إزالة عضو الفريق", message:"سيفقد هذا العضو صلاحية إدارة الأسبوع التقني.", confirmLabel:"إزالة", danger:true})) return;
+        if(!confirm("إزالة هذا العضو من فريق الأسبوع التقني؟")) return;
         const { error } = await db.from("tech_week_admins").delete().eq("id", b.dataset.remove);
         if(error){ CodeUp.toast(error.message, "error"); return; }
         Admin.go("tech_week_team");
