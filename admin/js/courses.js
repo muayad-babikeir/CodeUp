@@ -98,15 +98,20 @@ Admin.sections.course_admins = {
   label: "أدمن الكورسات",
   async render(body){
     const [{data: admins}, {data: profiles}] = await Promise.all([
-      db.from("course_admins").select("*, courses(name), profiles(full_name,email)").order("created_at",{ascending:false}),
-      db.from("profiles").select("id, full_name, email").order("full_name")
+      db.from("course_admins").select("*, courses(name), profiles(full_name)").order("created_at",{ascending:false}),
+      db.from("profiles").select("id, full_name").order("full_name")
     ]);
+    // Email is no longer selectable directly (RLS column grant) — fetch it
+    // separately through the guarded RPC for the ids actually shown here.
+    const allIds = [...new Set([...(admins||[]).map(a=>a.profile_id), ...(profiles||[]).map(p=>p.id)])];
+    const { data: emailRows } = allIds.length ? await db.rpc("get_profile_emails", { p_user_ids: allIds }) : { data: [] };
+    const emailById = {}; (emailRows||[]).forEach(e=> emailById[e.id]=e.email);
     body.innerHTML = `
       <div class="toolbar"><button class="btn dark" id="assignBtn">+ تعيين أدمن كورس</button></div>
       <div class="card"><table><thead><tr><th>المستخدم</th><th>الكورس</th><th>الدور</th><th></th></tr></thead>
       <tbody>${(admins||[]).map(a=>`
         <tr>
-          <td>${CodeUp.escapeHtml(a.profiles?.full_name||a.profiles?.email||"")}</td>
+          <td>${CodeUp.escapeHtml(a.profiles?.full_name||emailById[a.profile_id]||"")}</td>
           <td>${CodeUp.escapeHtml(a.courses?.name||"")}</td>
           <td><span class="pill ${a.role}">${a.role==='owner'?'مالك':'أدمن'}</span></td>
           <td><button class="btn danger" data-remove="${a.id}">إزالة</button></td>
@@ -119,7 +124,7 @@ Admin.sections.course_admins = {
         <label>الكورس</label>
         <select id="acCourse">${Admin.courses.map(c=>`<option value="${c.id}">${CodeUp.escapeHtml(c.name)}</option>`).join("")}</select>
         <label>المستخدم</label>
-        <select id="acUser">${(profiles||[]).map(p=>`<option value="${p.id}">${CodeUp.escapeHtml(p.full_name||p.email)}</option>`).join("")}</select>
+        <select id="acUser">${(profiles||[]).map(p=>`<option value="${p.id}">${CodeUp.escapeHtml(p.full_name||emailById[p.id]||p.id)}</option>`).join("")}</select>
         <label>الدور</label>
         <select id="acRole"><option value="admin">أدمن</option><option value="owner">مالك</option></select>
         <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
@@ -226,11 +231,11 @@ Admin.sections.settings = {
 Admin.sections.progress = {
   label: "التقدم",
   async render(body){
-    const { data } = await db.from("enrollments").select("*, profiles(full_name,email), squads(name)").eq("course_id", Admin.currentCourseId).order("xp",{ascending:false});
+    const { data } = await db.from("enrollments").select("*, profiles(full_name), squads(name)").eq("course_id", Admin.currentCourseId).order("xp",{ascending:false});
     body.innerHTML = `<div class="card"><table><thead><tr><th>الطالب</th><th>المجموعة</th><th>الحالة</th><th>التقدم</th><th>XP</th><th>Streak</th></tr></thead>
       <tbody>${(data||[]).map(e=>`
         <tr>
-          <td>${CodeUp.escapeHtml(e.profiles?.full_name||e.profiles?.email||"")}</td>
+          <td>${CodeUp.escapeHtml(e.profiles?.full_name||"")}</td>
           <td>${CodeUp.escapeHtml(e.squads?.name||"—")}</td>
           <td><span class="pill ${e.status==='on_track'?'approved':e.status==='behind'?'rejected':'pending'}">${enrollmentStatusLabel(e.status)}</span></td>
           <td>${e.progress}%</td><td>${e.xp}</td><td>${e.streak}</td>

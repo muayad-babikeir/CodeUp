@@ -202,7 +202,7 @@ async function openRegistrationsDrawer(event){
   const d = Admin.drawer(`<div class="emptyState">جارِ التحميل…</div>`);
   const isTeamMode = event.registration_mode === "team";
   const [{ data: regs, error }, teamsRes] = await Promise.all([
-    db.from("tech_week_registrations").select("*, profiles(full_name,email)").eq("event_id", event.id).order("created_at"),
+    db.from("tech_week_registrations").select("*, profiles(full_name)").eq("event_id", event.id).order("created_at"),
     isTeamMode ? db.from("tech_week_teams").select("*").eq("event_id", event.id).order("created_at") : Promise.resolve({data:[]})
   ]);
   if(error){ d.el.innerHTML = `<div class="alertBox error"><span>تعذّر تحميل المسجّلين.</span></div>`; return; }
@@ -211,7 +211,7 @@ async function openRegistrationsDrawer(event){
   const markAttendedBtn = (r)=> r.status==='registered'?`<button class="btn" data-markattended="${r.id}">تم الحضور</button>`:"";
   const memberLine = (r)=>`
         <div class="attentionItem">
-          <div class="aiBody">${CodeUp.escapeHtml(r.profiles?.full_name||r.profiles?.email||"")}
+          <div class="aiBody">${CodeUp.escapeHtml(r.profiles?.full_name||"")}
             <div class="aiMeta">${r.status==='registered'?'مسجّل':r.status==='attended'?'حضر':r.status==='pending'?'قيد المراجعة (بانتظار موافقة القائد)':'ألغى التسجيل'}</div>
           </div>
           ${markAttendedBtn(r)}
@@ -325,17 +325,20 @@ Admin.sections.tech_week_team = {
   async render(body){
     body.innerHTML = `<div class="card">${Array(2).fill(`<div class="skeleton skeleton-line w80" style="height:30px;margin-bottom:10px"></div>`).join("")}</div>`;
     const [{ data: admins, error }, { data: profiles }] = await Promise.all([
-      db.from("tech_week_admins").select("*, profiles(full_name,email)").order("created_at",{ascending:false}),
-      db.from("profiles").select("id,full_name,email").order("full_name")
+      db.from("tech_week_admins").select("*, profiles(full_name)").order("created_at",{ascending:false}),
+      db.from("profiles").select("id,full_name").order("full_name")
     ]);
     if(error){ body.innerHTML = `<div class="alertBox error"><span>تعذّر تحميل الفريق.</span><button class="btn alertRetry" id="twtRetry">إعادة المحاولة</button></div>`; body.querySelector("#twtRetry").onclick=()=>Admin.go("tech_week_team"); return; }
+    const twIds = [...new Set([...(admins||[]).map(a=>a.profile_id), ...(profiles||[]).map(p=>p.id)])];
+    const { data: twEmailRows } = twIds.length ? await db.rpc("get_profile_emails", { p_user_ids: twIds }) : { data: [] };
+    const twEmailById = {}; (twEmailRows||[]).forEach(e=> twEmailById[e.id]=e.email);
 
     body.innerHTML = `
       <p class="small" style="margin-bottom:10px">صلاحية واحدة مرنة حاليًا (تصل لكل محتوى الأسبوع التقني) — يمكن تقسيمها لاحقًا حسب الحاجة.</p>
       <div class="toolbar"><button class="btn dark" id="assignTwAdminBtn">+ إضافة عضو للفريق</button></div>
       <div class="card"><div class="tableScroll"><table><thead><tr><th>العضو</th><th>الدور</th><th></th></tr></thead>
       <tbody>${(admins||[]).map(a=>`
-        <tr><td>${CodeUp.escapeHtml(a.profiles?.full_name||a.profiles?.email||"")}</td>
+        <tr><td>${CodeUp.escapeHtml(a.profiles?.full_name||twEmailById[a.profile_id]||"")}</td>
         <td><span class="pill ${a.role}">${a.role==='owner'?'مالك':'أدمن'}</span></td>
         <td><button class="btn danger" data-remove="${a.id}">إزالة</button></td></tr>`).join("") || `<tr><td colspan="3"><div class="emptyStatePro"><p style="margin:0">لا يوجد أعضاء بالفريق بعد.</p></div></td></tr>`}
       </tbody></table></div></div>`;
@@ -344,7 +347,7 @@ Admin.sections.tech_week_team = {
       const m = Admin.modal(`
         <h3>إضافة عضو لفريق الأسبوع التقني</h3>
         <label>المستخدم</label>
-        <select id="twaUser">${(profiles||[]).map(p=>`<option value="${p.id}">${CodeUp.escapeHtml(p.full_name||p.email)}</option>`).join("")}</select>
+        <select id="twaUser">${(profiles||[]).map(p=>`<option value="${p.id}">${CodeUp.escapeHtml(p.full_name||twEmailById[p.id]||p.id)}</option>`).join("")}</select>
         <label>الدور</label>
         <select id="twaRole"><option value="admin">أدمن</option><option value="owner">مالك</option></select>
         <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">

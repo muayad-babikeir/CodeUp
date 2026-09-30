@@ -160,21 +160,21 @@ async function renderLeaderSection(section, body){
 
   if(section==="mysquad" || section==="members"){
     body.innerHTML = `<div class="card">${Array(3).fill(`<div class="skeleton skeleton-line w80" style="height:30px;margin-bottom:10px"></div>`).join("")}</div>`;
-    const { data: members, error } = await db.from("enrollments").select("*, profiles(full_name,email)").eq("squad_id", squadId);
+    const { data: members, error } = await db.from("enrollments").select("*, profiles(full_name)").eq("squad_id", squadId);
     if(error){ body.innerHTML = `<div class="alertBox error"><span>تعذّر تحميل الأعضاء.</span><button class="btn alertRetry" id="mbRetry">إعادة المحاولة</button></div>`; body.querySelector("#mbRetry").onclick=()=>Admin.go(section); return; }
     body.innerHTML = `<div class="card"><div class="tableScroll"><table><thead><tr><th>الطالب</th><th>الحالة</th><th>التقدم</th><th>XP</th></tr></thead>
       <tbody>${(members||[]).map(m=>`
-        <tr><td>${CodeUp.escapeHtml(m.profiles?.full_name||m.profiles?.email||"")}</td><td><span class="pill ${m.status==='on_track'?'approved':m.status==='behind'?'rejected':'pending'}">${enrollmentStatusLabel(m.status)}</span></td><td>${m.progress}%</td><td>${m.xp}</td></tr>
+        <tr><td>${CodeUp.escapeHtml(m.profiles?.full_name||"")}</td><td><span class="pill ${m.status==='on_track'?'approved':m.status==='behind'?'rejected':'pending'}">${enrollmentStatusLabel(m.status)}</span></td><td>${m.progress}%</td><td>${m.xp}</td></tr>
       `).join("") || `<tr><td colspan="4"><div class="emptyStatePro"><p style="margin:0">لا يوجد أعضاء في مجموعتك بعد.</p></div></td></tr>`}
       </tbody></table></div></div>`;
     return;
   }
 
   if(section==="ljoin"){
-    const { data, error } = await db.from("squad_join_requests").select("*, profiles!user_id(full_name,email)").eq("squad_id", squadId).order("created_at",{ascending:false});
+    const { data, error } = await db.from("squad_join_requests").select("*, profiles!user_id(full_name)").eq("squad_id", squadId).order("created_at",{ascending:false});
     if(error){ body.innerHTML = `<div class="emptyState">تعذّر تحميل طلبات الانضمام: ${CodeUp.escapeHtml(error.message)}</div>`; return; }
     renderRequestQueue(body, data||[], {
-      title:(r)=>CodeUp.escapeHtml(r.profiles?.full_name||r.profiles?.email||""),
+      title:(r)=>CodeUp.escapeHtml(r.profiles?.full_name||""),
       subtitle:(r)=> r.message?CodeUp.escapeHtml(r.message):"بدون رسالة",
       onApprove: async (r)=> CodeUp.rpc.approveJoinRequest(r.id),
       onReject: async (r, reason)=> CodeUp.rpc.rejectJoinRequest(r.id, reason),

@@ -45,7 +45,7 @@ async function renderSuperDashboard(body){
     db.from("submissions").select("id",{count:"exact",head:true}).gte("submitted_at", weekAgo),
     db.from("submissions").select("id",{count:"exact",head:true}).gte("submitted_at", prevWeekAgo).lt("submitted_at", weekAgo),
     db.from("activity_log").select("*, profiles(full_name)").order("created_at",{ascending:false}).limit(8),
-    db.from("submissions").select("*, assignments!inner(title), profiles(full_name,email)").order("submitted_at",{ascending:false}).limit(6),
+    db.from("submissions").select("*, assignments!inner(title), profiles(full_name)").order("submitted_at",{ascending:false}).limit(6),
     db.from("courses").select("id,name,status").order("created_at",{ascending:false}).limit(8),
     db.from("submissions").select("submitted_at").gte("submitted_at", weekAgo)
   ]);
@@ -144,7 +144,7 @@ async function renderCourseAdminDashboard(body, cid){
     db.from("leader_applications").select("id",{count:"exact",head:true}).eq("course_id",cid).eq("status","pending"),
     db.from("file_uploads").select("id",{count:"exact",head:true}).eq("course_id",cid).eq("archive_status","failed"),
     db.from("activity_log").select("*, profiles(full_name)").eq("course_id",cid).order("created_at",{ascending:false}).limit(8),
-    db.from("submissions").select("*, assignments!inner(title,course_id), profiles(full_name,email)").eq("assignments.course_id",cid).order("submitted_at",{ascending:false}).limit(6),
+    db.from("submissions").select("*, assignments!inner(title,course_id), profiles(full_name)").eq("assignments.course_id",cid).order("submitted_at",{ascending:false}).limit(6),
     db.from("submissions").select("submitted_at, assignments!inner(course_id)").eq("assignments.course_id",cid).gte("submitted_at", weekAgo)
   ]);
 
@@ -299,7 +299,7 @@ function recentSubmissionsTable(rows){
   return `<div class="tableScroll"><table><thead><tr><th>الطالب</th><th>الواجب</th><th>الحالة</th><th>التاريخ</th><th></th></tr></thead>
     <tbody>${rows.map(s=>`
       <tr>
-        <td>${CodeUp.escapeHtml(s.profiles?.full_name||s.profiles?.email||"—")}</td>
+        <td>${CodeUp.escapeHtml(s.profiles?.full_name||"—")}</td>
         <td>${CodeUp.escapeHtml(s.assignments?.title||"—")}</td>
         <td><span class="pill ${s.status==='reviewed'?'approved':s.status==='late'?'pending':''}">${{submitted:"تم التسليم",late:"متأخر",missing:"لم يُسلَّم",reviewed:"تمت المراجعة"}[s.status]||s.status}</span></td>
         <td class="small" style="color:var(--ink60)">${CodeUp.timeAgo(s.submitted_at)}</td>
@@ -386,7 +386,7 @@ function wireDashboard(body, {cid}){
   // زر "مراجعة" بجدول آخر التسليمات — نفس نافذة المراجعة المستخدمة أصلًا بصفحة التسليمات
   body.querySelectorAll("[data-quickreview]").forEach(btn=>{
     btn.onclick = async ()=>{
-      const { data: sub } = await db.from("submissions").select("*, assignments!inner(title), profiles(full_name,email)").eq("id", btn.dataset.quickreview).single();
+      const { data: sub } = await db.from("submissions").select("*, assignments!inner(title), profiles(full_name)").eq("id", btn.dataset.quickreview).single();
       if(sub) openReviewModal(sub);
     };
   });

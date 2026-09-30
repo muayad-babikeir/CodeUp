@@ -109,7 +109,7 @@ Admin.sections.marketplace_listings = {
 
     const draw = async (statusFilter)=>{
       let q = db.from("marketplace_listings")
-        .select("*, marketplace_categories(name), owner:profiles!marketplace_listings_owner_id_fkey(full_name,email)")
+        .select("*, marketplace_categories(name), owner:profiles!marketplace_listings_owner_id_fkey(full_name)")
         .order("created_at",{ascending:false}).limit(100);
       if(statusFilter) q = q.eq("status", statusFilter);
       const { data: listings, error } = await q;
@@ -131,7 +131,7 @@ Admin.sections.marketplace_listings = {
               <td>${CodeUp.escapeHtml(l.title)}</td>
               <td>${MP_TYPE_LABEL[l.listing_type]||l.listing_type}</td>
               <td>${mpStatusBadge(l)}</td>
-              <td>${CodeUp.escapeHtml(l.owner?.full_name || l.owner?.email || "")}</td>
+              <td>${CodeUp.escapeHtml(l.owner?.full_name || "")}</td>
               <td>${CodeUp.escapeHtml(l.marketplace_categories?.name || "—")}</td>
               <td style="white-space:nowrap">
                 <button class="btn" data-viewlisting="${l.id}">عرض</button>
@@ -286,7 +286,7 @@ Admin.sections.marketplace_reports = {
 
     const draw = async ()=>{
       const { data: reports, error } = await db.from("marketplace_reports")
-        .select("*, marketplace_listings(title), reporter:profiles!marketplace_reports_reported_by_fkey(full_name,email)")
+        .select("*, marketplace_listings(title), reporter:profiles!marketplace_reports_reported_by_fkey(full_name)")
         .order("created_at",{ascending:false});
       if(error){ body.innerHTML = `<div class="alertBox error"><span>تعذّر تحميل البلاغات.</span><button class="btn alertRetry" id="mprRetry">إعادة المحاولة</button></div>`; body.querySelector("#mprRetry").onclick=()=>Admin.go("marketplace_reports"); return; }
 
@@ -298,7 +298,7 @@ Admin.sections.marketplace_reports = {
         ${reports.map(r=>`
           <tr>
             <td>${CodeUp.escapeHtml(r.marketplace_listings?.title || "—")}</td>
-            <td>${CodeUp.escapeHtml(r.reporter?.full_name || r.reporter?.email || "")}</td>
+            <td>${CodeUp.escapeHtml(r.reporter?.full_name || "")}</td>
             <td>${CodeUp.escapeHtml(r.reason)}</td>
             <td>${{pending:"بانتظار المراجعة",under_review:"قيد المراجعة",resolved:"تمت المعالجة",rejected:"مرفوض"}[r.status]||r.status}</td>
             <td style="white-space:nowrap">

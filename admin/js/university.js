@@ -13,10 +13,13 @@ Admin.sections.universities = {
     body.innerHTML = `<div class="card">${Array(2).fill(`<div class="skeleton skeleton-line w80" style="height:34px;margin-bottom:10px"></div>`).join("")}</div>`;
     const [{data: universities, error}, {data: admins}, {data: profiles}] = await Promise.all([
       db.from("universities").select("*").order("order_index"),
-      db.from("university_admins").select("*, universities(name), profiles(full_name,email)").order("created_at",{ascending:false}),
-      db.from("profiles").select("id,full_name,email").order("full_name")
+      db.from("university_admins").select("*, universities(name), profiles(full_name)").order("created_at",{ascending:false}),
+      db.from("profiles").select("id,full_name").order("full_name")
     ]);
     if(error){ body.innerHTML = `<div class="alertBox error"><span>تعذّر تحميل الجامعات.</span><button class="btn alertRetry" id="univsRetry">إعادة المحاولة</button></div>`; body.querySelector("#univsRetry").onclick=()=>Admin.go("universities"); return; }
+    const uaIds = [...new Set([...(admins||[]).map(a=>a.profile_id), ...(profiles||[]).map(p=>p.id)])];
+    const { data: uaEmailRows } = uaIds.length ? await db.rpc("get_profile_emails", { p_user_ids: uaIds }) : { data: [] };
+    const uaEmailById = {}; (uaEmailRows||[]).forEach(e=> uaEmailById[e.id]=e.email);
 
     body.innerHTML = `
       <div class="toolbar"><button class="btn dark" id="newUnivBtn">+ جامعة جديدة</button></div>
@@ -34,7 +37,7 @@ Admin.sections.universities = {
         <div class="tableScroll"><table><thead><tr><th>المستخدم</th><th>الجامعة</th><th>الدور</th><th></th></tr></thead>
         <tbody>${(admins||[]).map(a=>`
           <tr>
-            <td>${CodeUp.escapeHtml(a.profiles?.full_name||a.profiles?.email||"")}</td>
+            <td>${CodeUp.escapeHtml(a.profiles?.full_name||uaEmailById[a.profile_id]||"")}</td>
             <td>${CodeUp.escapeHtml(a.universities?.name||"")}</td>
             <td><span class="pill ${a.role}">${a.role==='owner'?'مالك':'أدمن'}</span></td>
             <td><button class="btn danger" data-removeadmin="${a.id}">إزالة</button></td>
@@ -60,7 +63,7 @@ Admin.sections.universities = {
         <label>الجامعة</label>
         <select id="uaUniv">${(universities||[]).map(u=>`<option value="${u.id}">${CodeUp.escapeHtml(u.name)}</option>`).join("")}</select>
         <label>المستخدم</label>
-        <select id="uaUser">${(profiles||[]).map(p=>`<option value="${p.id}">${CodeUp.escapeHtml(p.full_name||p.email)}</option>`).join("")}</select>
+        <select id="uaUser">${(profiles||[]).map(p=>`<option value="${p.id}">${CodeUp.escapeHtml(p.full_name||uaEmailById[p.id]||p.id)}</option>`).join("")}</select>
         <label>الدور</label>
         <select id="uaRole"><option value="admin">أدمن</option><option value="owner">مالك</option></select>
         <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">

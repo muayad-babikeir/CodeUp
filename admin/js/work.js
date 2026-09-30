@@ -168,7 +168,7 @@ Admin.sections.submissions = {
     const cid = Admin.currentCourseId;
     body.innerHTML = `<div class="card">${Array(4).fill(`<div class="skeleton skeleton-line w80" style="height:38px;margin-bottom:10px"></div>`).join("")}</div>`;
     const { data: subs, error } = await db.from("submissions")
-      .select("*, assignments!inner(title,course_id), profiles(full_name,email)")
+      .select("*, assignments!inner(title,course_id), profiles(full_name)")
       .eq("assignments.course_id", cid).order("submitted_at",{ascending:false}).limit(100);
     if(error){ body.innerHTML = `<div class="alertBox error"><span>تعذّر تحميل التسليمات.</span><button class="btn alertRetry" id="subRetry">إعادة المحاولة</button></div>`; body.querySelector("#subRetry").onclick=()=>Admin.go("submissions"); return; }
 
@@ -190,10 +190,10 @@ Admin.sections.submissions = {
     const tbody = body.querySelector("#subsBody");
     let q = "";
     const draw = (list)=>{
-      const filtered = q ? list.filter(s=>(s.profiles?.full_name||s.profiles?.email||"").toLowerCase().includes(q)) : list;
+      const filtered = q ? list.filter(s=>(s.profiles?.full_name||"").toLowerCase().includes(q)) : list;
       tbody.innerHTML = filtered.map(s=>`
         <tr>
-          <td>${CodeUp.escapeHtml(s.profiles?.full_name||s.profiles?.email||"")}</td>
+          <td>${CodeUp.escapeHtml(s.profiles?.full_name||"")}</td>
           <td>${CodeUp.escapeHtml(s.assignments?.title||"")}</td>
           <td><span class="pill ${s.status==='reviewed'?'approved':s.status==='late'?'pending':''}">${subStatusAr(s.status)}</span></td>
           <td>${s.grade??"—"}</td>

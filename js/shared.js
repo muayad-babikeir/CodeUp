@@ -273,7 +273,7 @@ const CodeUp = (() => {
     if (!user) return null;
 
     const [{ data: profile }, { data: courseAdmins }, { data: squadLeaders }, { data: enrollments }, { data: universityAdmins }, { data: techWeekAdminRow }] = await Promise.all([
-      db.from("profiles").select("*").eq("id", user.id).single(),
+      db.from("profiles").select("id,full_name,avatar_url,is_super_admin,created_at").eq("id", user.id).single(),
       db.from("course_admins").select("course_id, role").eq("profile_id", user.id),
       db.from("squad_leaders").select("squad_id, permissions, squads(course_id, name)").eq("profile_id", user.id),
       db.from("enrollments").select("*, courses(name, slug), squads(name, emoji)").eq("profile_id", user.id),

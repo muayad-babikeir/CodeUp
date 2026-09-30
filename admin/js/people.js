@@ -4,7 +4,7 @@ Admin.sections.users = {
   label: "المستخدمون",
   async render(body){
     body.innerHTML = `<div class="card">${Array(5).fill(`<div style="display:flex;gap:10px;align-items:center;margin-bottom:10px"><div class="skeleton skeleton-avatar"></div><div style="flex:1"><div class="skeleton skeleton-line w60"></div></div></div>`).join("")}</div>`;
-    const { data: profiles, error } = await db.from("profiles").select("*").order("created_at",{ascending:false}).limit(200);
+    const { data: profiles, error } = await db.from("profiles").select("id, full_name, avatar_url, is_super_admin, created_at").order("created_at",{ascending:false}).limit(200);
     if(error){ body.innerHTML = `<div class="alertBox error"><span>تعذّر تحميل المستخدمين.</span><button class="btn alertRetry" id="usersRetry">إعادة المحاولة</button></div>`; body.querySelector("#usersRetry").onclick=()=>Admin.go("users"); return; }
 
     // حالة Google Wallet لكل مستخدم — استعلام واحد مجمّع بدل استعلام لكل صف
@@ -229,13 +229,13 @@ Admin.sections.squads = {
 };
 
 async function openAssignLeaderModal(squad){
-  const { data: members } = await db.from("enrollments").select("profile_id, profiles(full_name,email)").eq("squad_id", squad.id);
+  const { data: members } = await db.from("enrollments").select("profile_id, profiles(full_name)").eq("squad_id", squad.id);
   if(!members || !members.length){ CodeUp.toast("لا يوجد أعضاء بهذه المجموعة بعد", "error"); return; }
   const m = Admin.modal(`
     <h3>تعيين قائد — ${CodeUp.escapeHtml(squad.name)}</h3>
     <p class="small">اختيار قائد جديد يُنزل القائد الحالي (إن وُجد) لعضو عادي تلقائيًا.</p>
     <label>العضو</label>
-    <select id="newLeaderSelect">${members.map(mm=>`<option value="${mm.profile_id}">${CodeUp.escapeHtml(mm.profiles?.full_name||mm.profiles?.email||"")}</option>`).join("")}</select>
+    <select id="newLeaderSelect">${members.map(mm=>`<option value="${mm.profile_id}">${CodeUp.escapeHtml(mm.profiles?.full_name||"")}</option>`).join("")}</select>
     <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
       <button class="btn" id="alCancel">إلغاء</button><button class="btn dark" id="alSave">تعيين</button>
     </div><div id="alMsg" class="emptyState" style="display:none;padding:8px;color:#F2555F"></div>
@@ -288,7 +288,7 @@ Admin.sections.leaders = {
   async render(body){
     const cid = Admin.currentCourseId;
     body.innerHTML = `<div class="card">${Array(2).fill(`<div class="skeleton skeleton-line w80" style="height:38px;margin-bottom:10px"></div>`).join("")}</div>`;
-    const { data: leaders, error } = await db.from("squad_leaders").select("*, profiles(full_name,email), squads!inner(name,course_id)").eq("squads.course_id", cid);
+    const { data: leaders, error } = await db.from("squad_leaders").select("*, profiles(full_name), squads!inner(name,course_id)").eq("squads.course_id", cid);
     if(error){ body.innerHTML = `<div class="alertBox error"><span>تعذّر تحميل القادة.</span><button class="btn alertRetry" id="ldRetry">إعادة المحاولة</button></div>`; body.querySelector("#ldRetry").onclick=()=>Admin.go("leaders"); return; }
     const PERMS = [
       {key:"can_add_assignment", label:"إضافة واجب"},
@@ -300,7 +300,7 @@ Admin.sections.leaders = {
         const perms = l.permissions||{};
         return `
         <tr>
-          <td>${CodeUp.escapeHtml(l.profiles?.full_name||l.profiles?.email||"")}</td>
+          <td>${CodeUp.escapeHtml(l.profiles?.full_name||"")}</td>
           <td>${CodeUp.escapeHtml(l.squads?.name||"")}</td>
           <td>${PERMS.map(p=>`
             <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-bottom:4px">

@@ -6,11 +6,11 @@ Admin.sections.join_requests = {
     const cid = Admin.currentCourseId;
     body.innerHTML = `<div class="card">${Array(2).fill(`<div class="skeleton skeleton-line w80" style="height:34px;margin-bottom:10px"></div>`).join("")}</div>`;
     const { data, error } = await db.from("squad_join_requests")
-      .select("*, profiles!user_id(full_name,email), squads!inner(name,course_id)")
+      .select("*, profiles!user_id(full_name), squads!inner(name,course_id)")
       .eq("squads.course_id", cid).order("created_at",{ascending:false});
     if(error){ body.innerHTML = `<div class="alertBox error"><span>تعذّر تحميل طلبات الانضمام.</span><button class="btn alertRetry" id="jrRetry">إعادة المحاولة</button></div>`; body.querySelector("#jrRetry").onclick=()=>Admin.go("join_requests"); return; }
     renderRequestQueue(body, data||[], {
-      title: (r)=> `${CodeUp.escapeHtml(r.profiles?.full_name||r.profiles?.email||"")} → ${CodeUp.escapeHtml(r.squads?.name||"")}`,
+      title: (r)=> `${CodeUp.escapeHtml(r.profiles?.full_name||"")} → ${CodeUp.escapeHtml(r.squads?.name||"")}`,
       subtitle: (r)=> r.message ? CodeUp.escapeHtml(r.message) : "بدون رسالة",
       onApprove: async (r)=> CodeUp.rpc.approveJoinRequest(r.id),
       onReject: async (r, reason)=> CodeUp.rpc.rejectJoinRequest(r.id, reason),
@@ -25,13 +25,13 @@ Admin.sections.leader_applications = {
     const cid = Admin.currentCourseId;
     body.innerHTML = `<div class="card">${Array(2).fill(`<div class="skeleton skeleton-line w80" style="height:34px;margin-bottom:10px"></div>`).join("")}</div>`;
     const { data, error } = await db.from("leader_applications")
-      .select("*, profiles!user_id(full_name,email)")
+      .select("*, profiles!user_id(full_name)")
       .eq("course_id", cid).order("created_at",{ascending:false});
     if(error){ body.innerHTML = `<div class="alertBox error"><span>تعذّر تحميل طلبات القيادة.</span><button class="btn alertRetry" id="laRetry">إعادة المحاولة</button></div>`; body.querySelector("#laRetry").onclick=()=>Admin.go("leader_applications"); return; }
     const { data: squads } = await db.from("squads").select("id,name").eq("course_id", cid).eq("status","active");
 
     renderRequestQueue(body, data||[], {
-      title: (r)=> `${CodeUp.escapeHtml(r.profiles?.full_name||r.profiles?.email||"")}`,
+      title: (r)=> `${CodeUp.escapeHtml(r.profiles?.full_name||"")}`,
       subtitle: (r)=> `${r.message?CodeUp.escapeHtml(r.message):""}${r.experience?" — خبرة: "+CodeUp.escapeHtml(r.experience):""}`,
       onApprove: async (r)=>{
         const squadId = await pickSquadForApproval(squads||[]);
