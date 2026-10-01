@@ -232,7 +232,7 @@ const Admin = {
     }
     const courseOpItems = ["content","squads","join_requests","leader_applications","assignments","submissions","timeline","announcements","progress","files","settings"];
     if(this.role === "super"){
-      const courseItems = ["courses","course_admins"];
+      const courseItems = ["courses","course_admins","tracks"];
       if(this.currentCourseId){
         courseItems.push("content","squads","leaders","join_requests","leader_applications","assignments","submissions","timeline","announcements","progress","files","settings");
       }

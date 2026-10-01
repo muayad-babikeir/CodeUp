@@ -221,6 +221,33 @@ function lessonContentType(l){
   return {label:"محتوى", icon:"file"};
 }
 
+// ===== مصادر التعلّم (patch_54) — بطاقات متساوية تُفتح خارج CodeUp، بدون مشغّل مضمَّن =====
+function lpTypeIcon(t){
+  return ({youtube_video:"play", youtube_course:"play", pdf:"file", article:"file", docs:"file", anki:"download"})[t] || "link";
+}
+function lpSafeUrl(r){
+  let u = String(r.url||"");
+  if(!/^https?:\/\//i.test(u)) return "#";
+  if((r.type==="youtube_video"||r.type==="youtube_course") && r.start_at){
+    try{ const x = new URL(u); x.searchParams.set("t", r.start_at+"s"); u = x.toString(); }catch(_e){}
+  }
+  return u;
+}
+function lpResourceRow(r, badge){
+  const lang = ({ar:"عربي", en:"English"})[r.language] || "";
+  const sub = [r.publisher, lang].filter(Boolean).join(" · ");
+  return `<div class="lpRes">
+    <span class="lpIc">${Icon(lpTypeIcon(r.type))}</span>
+    <div class="lpT">
+      ${badge?`<span class="lpTag">${badge}</span>`:""}
+      <b>${CodeUp.escapeHtml(r.title)}</b>
+      ${sub?`<div class="small">${CodeUp.escapeHtml(sub)}</div>`:""}
+      ${r.id&&!r.legacy?`<button class="lpRep" data-reportres="${CodeUp.escapeHtml(r.id)}">الرابط لا يعمل؟</button>`:""}
+    </div>
+    <a class="btn" href="${CodeUp.escapeHtml(lpSafeUrl(r))}" target="_blank" rel="noopener noreferrer">${r.type==="anki"?"تحميل":"فتح"}</a>
+  </div>`;
+}
+
 const App = {
   ctx: null,
   view: {name:"home"},
@@ -2220,6 +2247,69 @@ const App = {
     };
   },
 
+  // مسارات التعلّم (patch_54): ترتيب الكورسات في مراحل. لو الجداول غير موجودة أو فارغة يرجع "" ولا يتأثر عرض الكورسات
+  async trackSectionHtml(){
+    try{
+      const {data: tracks, error} = await db.from("tracks").select("id,name,description,track_courses(course_id,stage,stage_title,order_index,is_optional,prereq_note,courses(id,name,slug,status))").eq("is_active", true).order("created_at");
+      if(error || !tracks || !tracks.length) return "";
+      const pub = t=>(t.track_courses||[]).filter(tc=>tc.courses && tc.courses.status==="published");
+      const courseIds = [...new Set(tracks.flatMap(t=>pub(t).map(tc=>tc.course_id)))];
+      if(!courseIds.length) return "";
+      const {data: unitsRows} = await db.from("units").select("course_id, lessons(id)").in("course_id", courseIds);
+      const lessonIds = {}, all = [];
+      (unitsRows||[]).forEach(u=>{ const ids=(u.lessons||[]).map(l=>l.id); lessonIds[u.course_id]=(lessonIds[u.course_id]||[]).concat(ids); all.push(...ids); });
+      let doneSet = new Set();
+      if(all.length){
+        const {data: doneRows} = await db.from("lesson_progress").select("lesson_id").eq("profile_id", this.ctx.user.id).eq("status","completed").in("lesson_id", all);
+        doneSet = new Set((doneRows||[]).map(r=>r.lesson_id));
+      }
+      const info = cid=>{ const ids=lessonIds[cid]||[]; const done=ids.filter(i=>doneSet.has(i)).length; return {total:ids.length, done, complete: ids.length>0 && done>=ids.length}; };
+      const esc = CodeUp.escapeHtml;
+      return tracks.map(t=>{
+        const rows = pub(t);
+        if(!rows.length) return "";
+        const byStage = {};
+        rows.forEach(tc=>{ (byStage[tc.stage] ||= []).push(tc); });
+        const nums = Object.keys(byStage).map(Number).sort((a,b)=>a-b);
+        nums.forEach(n=>byStage[n].sort((a,b)=>a.order_index-b.order_index));
+        const req = rows.filter(tc=>!tc.is_optional);
+        const base = req.length ? req : rows;
+        const doneBase = base.filter(tc=>info(tc.course_id).complete).length;
+        const stageDone = n=>{ const r=byStage[n].filter(tc=>!tc.is_optional); return (r.length?r:byStage[n]).every(tc=>info(tc.course_id).complete); };
+        const curStage = nums.find(n=>!stageDone(n));
+        const stageTitle = n=>byStage[n].find(tc=>tc.stage_title)?.stage_title || `المرحلة ${n}`;
+        const pct = Math.round(doneBase/base.length*100);
+        const curIdx = nums.indexOf(curStage);
+        const stagesHtml = nums.map((n,i)=>{
+          const state = stageDone(n) ? "done" : (n===curStage ? "cur" : "");
+          return `<div class="pathStage ${state}">
+            <div class="pathRail"><span class="pathDot">${state==="done"?"✓":(i+1)}</span><i></i></div>
+            <div class="pathBody"><h4>${esc(stageTitle(n))}</h4>
+            ${byStage[n].map(tc=>{
+              const c = info(tc.course_id);
+              const st = c.complete ? "completed" : (c.done>0 ? "current" : "");
+              const label = c.complete ? "مكتمل" : (c.done>0 ? "قيد التعلم" : "لم يبدأ");
+              const pctC = c.total ? Math.round(c.done/c.total*100) : 0;
+              const note = (curStage!==undefined && n>curStage && tc.prereq_note) ? `<div class="pathWarn">${esc(tc.prereq_note)}</div>` : "";
+              return `<div class="card2 pathCourse ${st==="current"?"lpHere":""}" data-pathcourse="${tc.course_id}" data-slug="${esc(tc.courses.slug||"")}" role="button" tabindex="0">
+                <div class="row" style="margin:0"><b>${esc(tc.courses.name)}</b><span class="pathStat ${st}">${label}</span></div>
+                <div class="small">${tc.is_optional?"اختياري · ":""}<bdi dir="ltr">${c.done} / ${c.total}</bdi> دروس</div>
+                ${c.done?`<div class="progressTrack" style="margin-top:8px"><div class="progressFill" style="width:${pctC}%"></div></div>`:""}
+                ${note}
+              </div>`;
+            }).join("")}</div>
+          </div>`;
+        }).join("");
+        return `<div class="card2 pathHead">
+            <div class="row" style="margin:0"><b>${esc(t.name)}</b><bdi dir="ltr" class="mono small">${doneBase} / ${base.length} كورسات</bdi></div>
+            ${curStage!==undefined?`<div class="small" style="margin:2px 0 10px">أنت الآن في المرحلة ${curIdx+1} من ${nums.length}: ${esc(stageTitle(curStage))}</div>`:`<div class="small" style="margin:2px 0 10px">أكملت جميع مراحل المسار</div>`}
+            <div class="progressTrack"><div class="progressFill" style="width:${pct}%"></div></div>
+          </div>
+          <div class="pathList">${stagesHtml}</div>`;
+      }).join("");
+    }catch(_e){ return ""; }
+  },
+
   async renderHomeCourses(body){
     // Skeleton فوري قبل أي تحقق كاش/طلب — يُستبدل بالمحتوى الحقيقي بدون أي إعادة رسم إضافية
     body.innerHTML = `<div class="grid">${Array.from({length:4}, ()=>`<div class="courseCard skeleton-row" aria-hidden="true" style="pointer-events:none">
@@ -2245,7 +2335,7 @@ const App = {
     }
     const enrolledIds = new Set(this.ctx.enrollments.map(e=>e.course_id));
     const myCourses = this.ctx.enrollments;
-    let html = "";
+    let html = await this.trackSectionHtml();
 
     if(myCourses.length){
       // تقدّم "المحتوى التعليمي" (lesson_progress) منفصل تمامًا عن enrollments.progress/xp/streak
@@ -2322,6 +2412,11 @@ const App = {
       html += `<div class="emptyState">لا توجد كورسات متاحة حاليًا.</div>`;
     }
     body.innerHTML = html;
+    body.querySelectorAll("[data-pathcourse]").forEach(el=>{
+      const open = ()=> this.go({name:"course", courseId: el.dataset.pathcourse, courseSlug: el.dataset.slug, tab:"learning"});
+      el.onclick = open;
+      el.onkeydown = (ev)=>{ if(ev.key==="Enter"||ev.key===" "){ ev.preventDefault(); open(); } };
+    });
     body.querySelectorAll(".courseCard").forEach(el=>{
       el.onclick = (ev)=>{
         if(ev.target.closest(".ccCta")) return; // الزر يفتح نفس الشي، نتجنب فتح مزدوج للحدث
@@ -3062,6 +3157,30 @@ const App = {
     const donePct = flatLessons.length ? Math.round((doneCount/flatLessons.length)*100) : 0;
     const numberInUnit = sortedUnits.find(u=>u.id===lesson.unitId).lessons.findIndex(l=>l.id===lessonId)+1;
 
+    // مصادر التعلّم من الجداول الجديدة — لو فشل الطلب (الجدول غير موجود بعد) نكمل بالحقول القديمة فقط
+    let dbRes = [];
+    try{
+      const rr = await db.from("lesson_resources").select("id, role, order_index, resources(id,type,title,url,publisher,language,start_at,is_active)").eq("lesson_id", lessonId).order("order_index");
+      if(!rr.error && rr.data) dbRes = rr.data.filter(x=>x.resources && x.resources.is_active!==false);
+    }catch(_e){}
+    const roleRank = {recommended:0, alternative:1, deep_dive:2};
+    dbRes.sort((a,b)=>(roleRank[a.role]-roleRank[b.role]) || (a.order_index-b.order_index));
+    const legacyVideo = lesson.video_url ? {legacy:true, type:"youtube_video", title:"فيديو الدرس", url:lesson.video_url} : null;
+    const recDb = dbRes.find(x=>x.role==="recommended");
+    const recItem = recDb ? recDb.resources : legacyVideo;
+    const altItems = [
+      ...(recDb && legacyVideo ? [legacyVideo] : []),
+      ...dbRes.filter(x=>x.role==="alternative").map(x=>x.resources)
+    ];
+    const refItems = [
+      ...dbRes.filter(x=>x.role==="deep_dive").map(x=>x.resources),
+      ...(lesson.pdf_url ? [{legacy:true, type:"pdf", title:"ملف الدرس (PDF)", url:lesson.pdf_url}] : []),
+      ...(lesson.anki_ar_url ? [{legacy:true, type:"anki", title:"بطاقات Anki — العربية", url:lesson.anki_ar_url}] : []),
+      ...(lesson.anki_en_url ? [{legacy:true, type:"anki", title:"بطاقات Anki — English", url:lesson.anki_en_url}] : [])
+    ];
+    const unitLessons = sortedUnits.find(u=>u.id===lesson.unitId).lessons;
+    const posHtml = unitLessons.map(l=>`<i class="${doneSet.has(l.id)?'d':(l.id===lessonId?'c':'')}"></i>`).join("");
+
     this.crumbTrail([
       {label: course.name, onClick: ()=>this.go({name:"course",courseId,courseSlug,tab:"learning"})},
       {label: lesson.title, onClick: ()=>{}}
@@ -3098,22 +3217,24 @@ const App = {
           <h2 class="lessonPageTitle">الدرس ${String(numberInUnit).padStart(2,"0")} — ${CodeUp.escapeHtml(lesson.title)}</h2>
           <div class="lessonTypeTag" style="margin-bottom:14px">${Icon(ct.icon)} ${ct.label}</div>
 
-          ${lesson.video_url ? youtubeEmbedHtml(lesson.video_url) : ""}
-          ${lesson.text_content ? `<div class="card2"><p class="small" style="white-space:pre-wrap;color:var(--ink)">${CodeUp.escapeHtml(lesson.text_content)}</p></div>` : ""}
+          <div class="lpPos" aria-hidden="true">${posHtml}</div>
 
-          ${lesson.pdf_url ? `
-          <div class="card2">
-            <b class="lessonSectionTitle">ملفات الدرس</b>
-            <a class="btn" style="margin-top:8px;display:inline-flex;align-items:center" href="${lesson.pdf_url}" target="_blank"><span class="inlineBtnIcon">${Icon("file")}</span> فتح ملف PDF</a>
-          </div>` : ""}
+          ${recItem ? `
+          <b class="lessonSectionTitle">مصدر التعلم الموصى به</b>
+          <div class="card2 lpRec" style="margin-top:8px">${lpResourceRow(recItem, "الموصى به")}</div>
+          <div class="small" style="margin:-4px 2px 12px">تُفتح المصادر خارج CodeUp، وفتح الرابط لا يُكمل الدرس.</div>` : ""}
 
-          ${(lesson.anki_ar_url || lesson.anki_en_url) ? `
-          <div class="card2">
-            <b class="lessonSectionTitle">Anki</b>
-            <p class="small" style="margin:4px 0 8px">بطاقات المراجعة لهذا الدرس</p>
-            ${lesson.anki_ar_url?`<a class="btn" style="margin-inline-end:8px;display:inline-flex;align-items:center" href="${lesson.anki_ar_url}" target="_blank"><span class="inlineBtnIcon">${Icon("download")}</span> العربية</a>`:""}
-            ${lesson.anki_en_url?`<a class="btn" style="display:inline-flex;align-items:center" href="${lesson.anki_en_url}" target="_blank"><span class="inlineBtnIcon">${Icon("download")}</span> English</a>`:""}
-          </div>` : ""}
+          ${altItems.length ? `
+          <b class="lessonSectionTitle">مصادر بديلة</b>
+          <div class="card2" style="margin-top:8px">${altItems.map(r=>lpResourceRow(r)).join("")}</div>` : ""}
+
+          ${lesson.text_content ? `<div class="card2"><b class="lessonSectionTitle">الشرح المكتوب</b><p class="small" style="white-space:pre-wrap;color:var(--ink);margin:8px 0 0">${CodeUp.escapeHtml(lesson.text_content)}</p></div>` : ""}
+
+          ${refItems.length ? `
+          <b class="lessonSectionTitle">مراجع ومذاكرة</b>
+          <div class="card2" style="margin-top:8px">${refItems.map(r=>lpResourceRow(r)).join("")}</div>` : ""}
+
+          ${(!recItem && !altItems.length && !refItems.length && !lesson.text_content) ? `<div class="card2"><p class="small" style="margin:0">لا توجد مصادر لهذا الدرس بعد.</p></div>` : ""}
 
           ${(linkedAssignments||[]).length ? `
           <div class="card2">
@@ -3135,10 +3256,10 @@ const App = {
           </button>
 
           <div class="lessonNavRow">
-            ${prevLesson?`<button class="btn lessonNavBtn" data-golesson="${prevLesson.id}"><span class="inlineBtnIcon">${Icon("arrow_right")}</span> الدرس السابق</button>`:`<span></span>`}
+            ${prevLesson?`<button class="btn lessonNavBtn" data-golesson="${prevLesson.id}"><span class="inlineBtnIcon">${Icon("arrow_right")}</span><span class="lpNavTxt">الدرس السابق<small>${CodeUp.escapeHtml(prevLesson.title)}</small></span></button>`:`<span></span>`}
             ${isLast
               ? `<span class="small" style="align-self:center">${doneCount>=flatLessons.length?"أكملت جميع دروس الكورس":"هذا آخر درس بالكورس"}</span>`
-              : `<button class="btn dark lessonNavBtn" data-golesson="${nextLesson.id}">الدرس التالي <span class="inlineBtnIcon">${Icon("arrow_left")}</span></button>`}
+              : `<button class="btn dark lessonNavBtn" data-golesson="${nextLesson.id}"><span class="lpNavTxt">الدرس التالي<small>${CodeUp.escapeHtml(nextLesson.title)}</small></span><span class="inlineBtnIcon">${Icon("arrow_left")}</span></button>`}
           </div>
         </div>
 
@@ -3150,7 +3271,17 @@ const App = {
       <div class="lessonDrawer" id="lessonDrawer">${sidebarHtml}</div>
     `;
 
-    if(lesson.video_url) wireYoutubeEmbeds(this.root);
+    this.root.querySelectorAll("[data-reportres]").forEach(btn=>{
+      btn.onclick = async ()=>{
+        btn.disabled = true;
+        try{
+          await db.from("resource_reports").insert({resource_id: btn.dataset.reportres, profile_id: this.ctx.user.id}).throwOnError();
+          btn.textContent = "شكرًا، تم إرسال البلاغ";
+        }catch(e){
+          btn.textContent = /duplicate|unique/i.test(e.message||"") ? "سبق أن أبلغت عن هذا الرابط" : "تعذّر إرسال البلاغ";
+        }
+      };
+    });
 
     document.getElementById("backToContentBtn").onclick = ()=> this.go({name:"course",courseId,courseSlug,tab:"learning"});
 
@@ -3211,7 +3342,15 @@ const App = {
 
     const contentTypeOf = lessonContentType;
 
-    body.innerHTML = sortedUnits.map(u=>{
+    const hereLesson = currentLessonId ? sortedUnits.flatMap(u=>u.lessons.map(l=>({...l, unitTitle:u.title}))).find(l=>l.id===currentLessonId) : null;
+    const hereHtml = !allLessonIds.length ? "" : (hereLesson ? `<div class="card2 lpHere">
+      <div class="small">أنت هنا</div>
+      <b class="lpHereTitle">${CodeUp.escapeHtml(hereLesson.title)}</b>
+      <div class="small" style="margin-bottom:10px">${CodeUp.escapeHtml(hereLesson.unitTitle)}</div>
+      <button class="btn dark" data-lessonid="${hereLesson.id}" data-courseslug="${CodeUp.escapeHtml(course.slug)}">متابعة التعلّم</button>
+    </div>` : `<div class="card2 lpHere"><b>أكملت جميع دروس الكورس</b></div>`);
+
+    body.innerHTML = hereHtml + sortedUnits.map(u=>{
       const total = u.lessons.length;
       const done = u.lessons.filter(l=>doneSet.has(l.id)).length;
       const pct = total ? Math.round((done/total)*100) : 0;

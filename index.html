@@ -591,6 +591,36 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
 /* شارات XP/Streak — تستخدم Lime كلون نجاح/طاقة مميز عن باقي الحالات */
 .xpPill{display:inline-flex;align-items:center;gap:4px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-weight:700;color:var(--green-ink);background:var(--green);padding:3px 9px;border-radius:999px}
 .btn.success{background:var(--green-soft);color:var(--green);border-color:rgba(61,209,111,.35)}
+<style id="learningPathV1">
+/* patch_54: المصادر + أنت هنا + المسار — بنفس رموز التصميم الحالية */
+.lpPos{display:flex;gap:5px;margin:4px 0 16px}.lpPos i{flex:1;height:5px;border-radius:9px;background:rgba(255,255,255,.07)}.lpPos i.d{background:var(--green)}.lpPos i.c{background:var(--accent)}
+.lpRec{border-color:rgba(29,155,240,.55)}
+.lpRes{display:flex;gap:12px;align-items:center;padding:12px 0;border-top:1px solid var(--line)}
+.lpRes:first-child{border-top:0;padding-top:0}.lpRes:last-child{padding-bottom:0}
+.lpIc{flex:none;width:38px;height:38px;border-radius:10px;background:rgba(29,155,240,.12);color:var(--accent);display:grid;place-items:center}
+.lpIc svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2}
+.lpT{flex:1;min-width:0}.lpT b{display:block;font-weight:500;font-size:14px;line-height:1.45}
+.lpTag{display:inline-block;font-size:11px;font-weight:600;color:var(--accent);background:rgba(29,155,240,.14);padding:1px 8px;border-radius:999px;margin-bottom:4px}
+.lpRep{background:none;border:0;color:var(--ink40);font-size:12px;font-family:inherit;cursor:pointer;padding:6px 0;min-height:32px}
+.lpNavTxt{display:flex;flex-direction:column;align-items:flex-start;text-align:start;line-height:1.4}
+.lpNavTxt small{font-size:11px;font-weight:400;opacity:.75;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lpHere{border-color:rgba(29,155,240,.5);background:rgba(29,155,240,.07)}
+.lpHereTitle{display:block;font-size:16px;margin:2px 0}
+.pathHead{border-color:rgba(29,155,240,.5);background:rgba(29,155,240,.07)}
+.pathList{margin:14px 0 6px}
+.pathStage{display:grid;grid-template-columns:32px 1fr;gap:12px}
+.pathRail{display:flex;flex-direction:column;align-items:center}
+.pathRail i{flex:1;width:2px;background:var(--line);margin:4px 0}
+.pathStage:last-child .pathRail i{display:none}
+.pathDot{flex:none;width:32px;height:32px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:700;border:2px solid var(--line);color:var(--ink60)}
+.pathStage.done .pathDot{background:var(--green);border-color:var(--green);color:var(--green-ink)}
+.pathStage.done .pathRail i{background:var(--green)}
+.pathStage.cur .pathDot{border-color:var(--accent);color:var(--accent);box-shadow:0 0 0 4px rgba(29,155,240,.16)}
+.pathBody{min-width:0}.pathBody h4{font-size:14.5px;margin:5px 0 8px}
+.pathCourse{cursor:pointer}
+.pathStat{padding:1px 8px;border-radius:999px;font-size:11px;background:rgba(255,255,255,.07);color:var(--ink60);white-space:nowrap}
+.pathStat.completed{background:var(--green-soft);color:var(--green)}.pathStat.current{background:rgba(29,155,240,.14);color:var(--accent)}
+.pathWarn{font-size:12px;color:#F2B84B;margin-top:8px}
 </style>
 </head>
 <body>
@@ -734,6 +764,6 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
 })();
 </script>
 <script src="js/shared.js?v=3"></script>
-<script src="js/app.js?v=4"></script>
+<script src="js/app.js?v=6"></script>
 </body>
 </html>

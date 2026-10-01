@@ -142,11 +142,15 @@ async function openLessonModal(unitId, lesson, onDone){
     <label style="margin-top:10px;display:block">بطاقات Anki — English Version (رابط مباشر، اختياري)</label>
     <input id="lAnkiEn" value="${lesson?CodeUp.escapeHtml(lesson.anki_en_url||""):""}" placeholder="https://...">
     <label>الترتيب</label><input id="lOrder" type="number" value="${lesson?.order_index??0}">
+    <div id="lResBox"></div>
     <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
       <button class="btn" id="lCancel">إلغاء</button><button class="btn dark" id="lSave">حفظ</button>
     </div><div id="lMsg" class="emptyState" style="display:none;padding:8px;color:#F2555F"></div>
   `);
   m.el.querySelector("#lCancel").onclick = m.close;
+  const resBox = m.el.querySelector("#lResBox");
+  if(isEdit) renderLessonResources(resBox, lesson.id);
+  else resBox.innerHTML = `<div class="small" style="margin-top:14px">احفظ الدرس أولًا ثم أضف مصادر التعلّم.</div>`;
   m.el.querySelector("#lSave").onclick = async ()=>{
     const msgEl = m.el.querySelector("#lMsg");
     const payload = {
@@ -164,5 +168,88 @@ async function openLessonModal(unitId, lesson, onDone){
       else await db.from("lessons").insert({...payload, unit_id: unitId}).throwOnError();
       CodeUp.toast("تم الحفظ", "success"); m.close(); onDone();
     }catch(e){ msgEl.style.display="block"; msgEl.textContent = e.message; }
+  };
+}
+
+
+// ===== مصادر التعلّم للدرس (patch_54) — جدولا resources / lesson_resources =====
+const LP_ROLE_LABEL = {recommended:"موصى به", alternative:"بديل", deep_dive:"مرجع"};
+const LP_TYPE_LABEL = {youtube_video:"فيديو يوتيوب", youtube_course:"دورة يوتيوب", article:"مقال", docs:"توثيق", pdf:"PDF", website:"موقع", interactive:"تفاعلي", github:"GitHub", external_course:"دورة خارجية"};
+
+async function renderLessonResources(box, lessonId){
+  const esc = CodeUp.escapeHtml;
+  box.innerHTML = `<div class="small" style="margin-top:14px">جارِ تحميل المصادر…</div>`;
+  const {data, error} = await db.from("lesson_resources").select("id, role, order_index, resource_id, resources(id,title,url,type)").eq("lesson_id", lessonId).order("order_index");
+  if(error){
+    box.innerHTML = `<div class="small" style="margin-top:14px;color:#F2555F">تعذّر تحميل المصادر — تأكد من تشغيل patch_54 في Supabase. (${esc(error.message)})</div>`;
+    return;
+  }
+  const rows = data || [];
+  const reports = {};
+  if(rows.length){
+    const r = await db.from("resource_reports").select("resource_id").in("resource_id", rows.map(x=>x.resource_id));
+    (r.data||[]).forEach(x=>{ reports[x.resource_id] = (reports[x.resource_id]||0)+1; });
+  }
+  box.innerHTML = `
+    <label style="margin-top:14px;display:block">مصادر التعلّم</label>
+    ${rows.map(x=>`
+      <div style="display:flex;gap:8px;align-items:center;padding:8px 0;border-top:1px solid var(--line)">
+        <div style="flex:1;min-width:0"><b style="font-size:13px">${esc(x.resources?.title||"")}</b>
+          <div class="small">${esc(LP_TYPE_LABEL[x.resources?.type]||"")}${reports[x.resource_id]?` · <span style="color:#F2555F">بلاغات: ${reports[x.resource_id]}</span>`:""}</div></div>
+        <select data-rrole="${x.id}">${Object.keys(LP_ROLE_LABEL).map(k=>`<option value="${k}" ${x.role===k?"selected":""}>${LP_ROLE_LABEL[k]}</option>`).join("")}</select>
+        <button class="btn danger" data-rdel="${x.id}">إزالة</button>
+      </div>`).join("") || `<div class="small">لا توجد مصادر بعد. الفيديو وPDF وAnki أعلاه تظهر للطالب تلقائيًا.</div>`}
+    <button class="btn" id="addResBtn" style="margin-top:8px">+ إضافة مصدر</button>`;
+
+  const demoteRecommended = async ()=>{
+    await db.from("lesson_resources").update({role:"alternative"}).eq("lesson_id", lessonId).eq("role","recommended").throwOnError();
+  };
+  box.querySelectorAll("[data-rrole]").forEach(sel=>{
+    sel.onchange = async ()=>{
+      try{
+        if(sel.value==="recommended") await demoteRecommended();
+        await db.from("lesson_resources").update({role: sel.value}).eq("id", sel.dataset.rrole).throwOnError();
+        renderLessonResources(box, lessonId);
+      }catch(e){ CodeUp.toast(e.message,"error"); }
+    };
+  });
+  box.querySelectorAll("[data-rdel]").forEach(b=>{
+    b.onclick = async ()=>{
+      if(!confirm("إزالة هذا المصدر من الدرس؟")) return;
+      try{ await db.from("lesson_resources").delete().eq("id", b.dataset.rdel).throwOnError(); renderLessonResources(box, lessonId); }
+      catch(e){ CodeUp.toast(e.message,"error"); }
+    };
+  });
+  box.querySelector("#addResBtn").onclick = ()=>{
+    const m2 = Admin.modal(`
+      <h3>مصدر تعلّم جديد</h3>
+      <label>النوع</label><select id="rType">${Object.keys(LP_TYPE_LABEL).map(k=>`<option value="${k}">${LP_TYPE_LABEL[k]}</option>`).join("")}</select>
+      <label>العنوان</label><input id="rTitle">
+      <label>الرابط</label><input id="rUrl" placeholder="https://..." dir="ltr">
+      <label>الناشر / القناة (اختياري)</label><input id="rPub">
+      <label>اللغة</label><select id="rLang"><option value="ar">عربي</option><option value="en">English</option><option value="other">أخرى</option></select>
+      <label>الدور</label><select id="rRole">${Object.keys(LP_ROLE_LABEL).map(k=>`<option value="${k}" ${k==="alternative"?"selected":""}>${LP_ROLE_LABEL[k]}</option>`).join("")}</select>
+      <label>بداية الفيديو بالثواني (اختياري، ليوتيوب)</label><input id="rStart" type="number" min="0">
+      <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end"><button class="btn" id="rCancel">إلغاء</button><button class="btn dark" id="rSave">حفظ</button></div>
+      <div id="rMsg" class="emptyState" style="display:none;padding:8px;color:#F2555F"></div>`);
+    m2.el.querySelector("#rCancel").onclick = m2.close;
+    m2.el.querySelector("#rSave").onclick = async ()=>{
+      const g = id=>m2.el.querySelector(id).value.trim();
+      const msg = m2.el.querySelector("#rMsg");
+      const fail = t=>{ msg.style.display="block"; msg.textContent=t; };
+      if(!g("#rTitle")) return fail("العنوان إلزامي");
+      if(!/^https?:\/\//i.test(g("#rUrl"))) return fail("الرابط يجب أن يبدأ بـ https://");
+      try{
+        const {data: res} = await db.from("resources").insert({
+          type: g("#rType"), title: g("#rTitle"), url: g("#rUrl"), publisher: g("#rPub")||null,
+          language: g("#rLang"), start_at: g("#rStart") ? Number(g("#rStart")) : null,
+          created_by: Admin.ctx?.user?.id || null
+        }).select("id").single().throwOnError();
+        const role = g("#rRole");
+        if(role==="recommended") await demoteRecommended();
+        await db.from("lesson_resources").insert({lesson_id: lessonId, resource_id: res.id, role, order_index: rows.length}).throwOnError();
+        CodeUp.toast("تمت إضافة المصدر","success"); m2.close(); renderLessonResources(box, lessonId);
+      }catch(e){ fail(e.message); }
+    };
   };
 }
