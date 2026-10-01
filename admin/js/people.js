@@ -195,6 +195,7 @@ Admin.sections.squads = {
     (counts||[]).forEach(e=>{ if(e.squad_id) memberCount[e.squad_id] = (memberCount[e.squad_id]||0)+1; });
     const pendingCount = {};
     (joinReqs||[]).forEach(r=>{ if(r.squad_id) pendingCount[r.squad_id] = (pendingCount[r.squad_id]||0)+1; });
+    const canDelete = Admin.role === "super" || (Admin.ctx?.courseAdminCourseIds||[]).includes(cid); // الحذف: سوبر أدمن أو أدمن هذا الكورس (محمي أيضًا بـRPC)
     const isSuper = Admin.role === "super"; // تعيين القائد: سوبر أدمن فقط (محمي أيضًا بـRPC/RLS، مو بس إخفاء الزر)
 
     body.innerHTML = `
@@ -211,6 +212,7 @@ Admin.sections.squads = {
           <td>
             <button class="btn" data-edit="${sq.id}">تعديل</button>
             ${isSuper?`<button class="btn" data-assignleader="${sq.id}">تعيين قائد</button>`:""}
+            ${canDelete?`<button class="btn danger" data-delsquad="${sq.id}">حذف</button>`:""}
           </td>
         </tr>`).join("") || `<tr><td colspan="7"><div class="emptyStatePro"><h4>لا توجد مجموعات بعد</h4><p>أنشئ أول مجموعة لتنظيم طلاب هذا الكورس.</p></div></td></tr>`}
       </tbody></table></div></div>`;
@@ -218,6 +220,10 @@ Admin.sections.squads = {
     body.querySelector("#newSquadBtn").onclick = ()=> openSquadModal(cid);
     body.querySelectorAll("[data-edit]").forEach(b=>{
       b.onclick = ()=> openSquadModal(cid, squads.find(s=>s.id===b.dataset.edit));
+    });
+    body.querySelectorAll("[data-delsquad]").forEach(b=>{
+      const sq = squads.find(s=>s.id===b.dataset.delsquad);
+      b.onclick = ()=> openDeleteSquadModal(sq, memberCount[sq.id]||0, pendingCount[sq.id]||0);
     });
     body.querySelectorAll("[data-assignleader]").forEach(b=>{
       b.onclick = ()=> openAssignLeaderModal(squads.find(s=>s.id===b.dataset.assignleader));
@@ -227,6 +233,39 @@ Admin.sections.squads = {
     });
   }
 };
+
+// حذف مجموعة نهائيًا عبر RPC delete_squad_permanently (يتحقق من الصلاحية واسم التأكيد، ويرفض الحذف لو فيه واجبات خاصة بالمجموعة)
+function openDeleteSquadModal(squad, members, pending){
+  const esc = CodeUp.escapeHtml;
+  const leaders = (squad.squad_leaders||[]).length;
+  const m = Admin.modal(`
+    <h3>حذف المجموعة — ${esc(squad.name)}</h3>
+    <p class="small" style="margin-top:0">الحذف نهائي ولا يمكن التراجع عنه. ما سيحدث:</p>
+    <ul class="small" style="margin:0 0 12px;padding-inline-start:18px;line-height:1.9">
+      <li>الأعضاء (${members}) يبقون مسجّلين بالكورس لكن بلا مجموعة.</li>
+      <li>${leaders ? `القادة (${leaders}) يفقدون صفة القيادة.` : "لا يوجد قادة للمجموعة."}</li>
+      <li>طلبات الانضمام المعلّقة (${pending}) تُحذف.</li>
+      <li>إن كانت المجموعة مرتبطة بواجبات خاصة بها فسيُرفض الحذف. احذف الواجبات أو انقلها أولًا، أو اجعل المجموعة «مؤرشفة» من التعديل بدل حذفها.</li>
+    </ul>
+    <label>اكتب اسم المجموعة للتأكيد: <b>${esc(squad.name)}</b></label>
+    <input id="dsConfirm" autocomplete="off" placeholder="${esc(squad.name)}">
+    <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
+      <button class="btn" id="dsCancel">إلغاء</button><button class="btn danger" id="dsGo" disabled>حذف نهائيًا</button>
+    </div>
+    <div id="dsMsg" class="emptyState" style="display:none;padding:8px;color:#F2555F"></div>
+  `);
+  const input = m.el.querySelector("#dsConfirm"), go = m.el.querySelector("#dsGo"), msg = m.el.querySelector("#dsMsg");
+  m.el.querySelector("#dsCancel").onclick = m.close;
+  input.oninput = ()=>{ go.disabled = input.value.trim() !== squad.name.trim(); };
+  go.onclick = async ()=>{
+    go.disabled = true; msg.style.display = "none";
+    try{
+      await db.rpc("delete_squad_permanently", {p_squad_id: squad.id, p_confirm_name: input.value.trim()}).throwOnError();
+      CodeUp.toast("تم حذف المجموعة", "success");
+      m.close(); Admin.go("squads");
+    }catch(e){ msg.style.display = "block"; msg.textContent = e.message; go.disabled = input.value.trim() !== squad.name.trim(); }
+  };
+}
 
 async function openAssignLeaderModal(squad){
   const { data: members } = await db.from("enrollments").select("profile_id, profiles(full_name)").eq("squad_id", squad.id);

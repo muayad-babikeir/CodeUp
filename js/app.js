@@ -282,55 +282,56 @@ const App = {
     await this.routeFromHash(false, true);
   },
 
-  // تحكّم تمرير موحّد لمنطقة الهيدر (topbar + crumbs/tabs) — هاتف فقط (≤720px).
-  // مستمع واحد فقط على window (السكرول الحقيقي بالتطبيق كله، لا يوجد حاوية تمرير
-  // داخلية منفصلة — نفس الافتراض المستخدم أصلًا بميزة "اسحب للتحديث"). يحرّك الغلاف
-  // كوحدة واحدة (عنصر واحد يتحرك، لا تعدد مستمعين لكل عنصر فرعي على حدة) ويزامن
-  // انكماش padding-top للمحتوى بنفس اللحظة حتى ما تفضل فجوة فاضية مكان الهيدر.
+  // تحكّم تمرير الهيدر (هاتف فقط ≤720px) — مستمع واحد فقط على window.
+  // الهيدر يتحرك بـtransform فقط ولا يتغيّر أي شيء بالتخطيط أثناء الإخفاء/الإظهار (لا padding ولا height)،
+  // فلا توجد حلقة تغذية راجعة تسبب الاهتزاز. القرار يعتمد على تراكم الحركة بنفس الاتجاه حتى تتجاوز عتبة واضحة.
   initHeaderScroll(){
     const wrap = document.getElementById("mobileHeaderWrap");
-    const content = document.querySelector(".dashboard > .wrap");
-    if(!wrap || !content) return;
+    if(!wrap) return;
+    const THRESHOLD = 14;                       // px تراكمية بنفس الاتجاه قبل تغيير الحالة
+    const mq = window.matchMedia("(max-width:720px)");
+    let lastY = Math.max(0, window.scrollY), acc = 0, hidden = false, ticking = false;
 
-    let lastY = window.scrollY;
-    let hidden = false;
-    let settling = false; // true لفترة وجيزة بعد أي تبديل، لتجاهل الحدث الناتج عن التبديل نفسه
-    const DEAD_ZONE = 6;   // نتجاهل حركات أصغر من هذا حتى ما يهتز الهيدر مع أدنى لمسة
-    const TOP_ZONE = 24;   // قرب القمة = يظهر الهيدر دائمًا، بغض النظر عن الاتجاه
+    const apply = (v)=>{ if(v === hidden) return; hidden = v; wrap.classList.toggle("headerHidden", v); };
+    const reset = ()=>{ acc = 0; lastY = Math.max(0, window.scrollY); apply(false); };
+    this._setHeaderHidden = (v)=>{ if(v) apply(true); else reset(); }; // go() يرجّع الهيدر ظاهرًا عند أي تنقل
 
-    const setHidden = (v)=>{
-      if(v === hidden) return; // ما نكرر نفس الحالة (يمنع استدعاءات متكررة بلا داعٍ)
-      hidden = v;
-      wrap.classList.toggle("headerHidden", v);
-      content.classList.toggle("headerCollapsedContent", v);
-      // تبديل الهيدر يغيّر ارتفاع المحتوى (padding-top) فورًا، وهذا التغيير بالتخطيط نفسه
-      // كان يطلق حدث سكرول جديد بفرق (diff) ناتج عن التبديل لا عن حركة المستخدم — فيدخل
-      // بحلقة تذبذب (يختفي/يظهر بسرعة). نتجاهل أي حدث سكرول لأول لحظتين (rAF) بعد أي تبديل،
-      // ونعيد ضبط lastY على الوضع المستقر الجديد بعدها.
-      settling = true;
-      requestAnimationFrame(()=> requestAnimationFrame(()=>{ lastY = window.scrollY; settling = false; }));
-    };
-    this._setHeaderHidden = setHidden; // يسمح لـgo() يرجّع الهيدر ظاهرًا عند أي تنقل بين الصفحات/التابات
-
-    const onScroll = ()=>{
-      if(window.innerWidth > 720){ setHidden(false); lastY = window.scrollY; return; } // الديسكتوب غير معني بهذا السلوك إطلاقًا
-      if(settling) return; // نتجاهل أي حدث أثناء استقرار التخطيط بعد آخر تبديل
-      // محتوى الصفحة قصير (بالكاد أطول من الشاشة، مثل تبويب الأسبوع التقني أحيانًا) —
-      // نطاق التمرير الفعلي صغير جدًا، فأي ارتداد (bounce) بسيط بحواف الصفحة كان يخلي
-      // الفرق (diff) يتذبذب حوالين DEAD_ZONE ذهابًا وإيابًا، ويسبب اهتزاز الهيدر إخفاء/إظهار
-      // متكرر. الحل: نتجاهل السلوك كليًا لما ما يكون فيه مساحة تمرير حقيقية أصلًا.
-      const scrollable = document.documentElement.scrollHeight - window.innerHeight;
-      if(scrollable < 150){ setHidden(false); lastY = window.scrollY; return; }
-      const y = Math.max(0, window.scrollY);
-      const diff = y - lastY;
-      if(y <= TOP_ZONE){ setHidden(false); lastY = y; return; }
-      if(Math.abs(diff) < DEAD_ZONE) return; // منطقة ميتة — يمنع الرجفان مع أدنى تغيّر اتجاه
-      if(diff > 0) setHidden(true);       // نازل → يختفي
-      else setHidden(false);              // طالع (ولو بسيط) → يظهر فورًا بدون انتظار القمة
+    const update = ()=>{
+      ticking = false;
+      if(!mq.matches){ reset(); return; }
+      const doc = document.documentElement;
+      const range = doc.scrollHeight - doc.clientHeight;      // مساحة التمرير الفعلية
+      const headerH = wrap.offsetHeight;
+      // لا تمرير حقيقي (أو شبه معدوم): لا إخفاء/إظهار إطلاقًا
+      if(range <= headerH + THRESHOLD * 2){ reset(); return; }
+      const y = Math.min(Math.max(0, window.scrollY), range);  // قصّ حدّي الارتداد (rubber-band) أعلى/أسفل
+      if(y <= 0){ reset(); return; }                           // أعلى الصفحة: ظاهر دائمًا
+      const dy = y - lastY;
       lastY = y;
+      if(dy === 0) return;
+      if(acc !== 0 && (dy > 0) !== (acc > 0)) acc = 0;         // تغيّر الاتجاه يصفّر التراكم
+      acc += dy;
+      if(acc >= THRESHOLD && y > headerH){ apply(true); acc = 0; }   // نزول مستمر → يختفي
+      else if(acc <= -THRESHOLD){ apply(false); acc = 0; }           // صعود مستمر → يظهر
     };
-    window.addEventListener("scroll", onScroll, {passive:true});
-    window.addEventListener("resize", ()=>{ this.syncHeaderHeight(); if(window.innerWidth > 720) setHidden(false); }, {passive:true});
+
+    window.addEventListener("scroll", ()=>{ if(!ticking){ ticking = true; requestAnimationFrame(update); } }, {passive:true});
+    // resize يُطلَق أيضًا عند ظهور/اختفاء شريط المتصفح أثناء التمرير — لا نصفّر الحالة إلا عند الخروج من نطاق الهاتف
+    window.addEventListener("resize", ()=>{ this.syncHeaderHeight(); if(!mq.matches) reset(); }, {passive:true});
+    this.syncHeaderHeight();
+  },
+
+  // App Bar صفحة الدرس (هاتف): سهم رجوع + عنوان مختصر. info=null يعيد الهيدر العادي.
+  setLessonAppBar(info){
+    const wrap = document.getElementById("mobileHeaderWrap");
+    const bar = document.getElementById("lessonAppBar");
+    if(!wrap || !bar) return;
+    if(!info){ wrap.classList.remove("lessonBarMode"); bar.innerHTML = ""; this.syncHeaderHeight(); return; }
+    bar.innerHTML = `<button class="appBarBack" id="appBarBack" type="button" aria-label="رجوع إلى محتوى الكورس">${Icon("arrow_right")}</button><div class="appBarTitle" id="appBarTitle"></div>`;
+    const t = bar.querySelector("#appBarTitle");
+    t.textContent = info.title; t.title = info.title;
+    bar.querySelector("#appBarBack").onclick = ()=> this.go({name:"course", courseId:info.courseId, courseSlug:info.courseSlug, tab:"learning"});
+    wrap.classList.add("lessonBarMode");
     this.syncHeaderHeight();
   },
 
@@ -382,6 +383,7 @@ const App = {
       if(tabSlot) tabSlot.innerHTML = "";
     }
     this.view = view;
+    this.setLessonAppBar(null);
     if(updateHash){
       if(view.name === "course" && view.courseSlug){
         history.pushState(null, "", `#/course/${view.courseSlug}/${view.tab||"learning"}`);
@@ -3120,6 +3122,7 @@ const App = {
   },
 
   async renderLessonPage(courseId, courseSlug, lessonId){
+    this.setLessonAppBar({courseId, courseSlug, title:"الدرس"});
     this.root.innerHTML = `<div class="lessonPageBody">
       <div class="lessonMain skeleton-row" aria-hidden="true">
         <div class="skeleton skeleton-line w40" style="height:14px;margin-bottom:10px"></div>
@@ -3209,12 +3212,13 @@ const App = {
     const ct = lessonContentType(lesson);
     const isDone = doneSet.has(lesson.id);
 
+    this.setLessonAppBar({courseId, courseSlug, title:`الدرس ${String(numberInUnit).padStart(2,"0")} — ${lesson.title}`});
+
     this.root.innerHTML = `
-      <button class="btn backToContentBtn" id="backToContentBtn"><span class="inlineBtnIcon">${Icon("arrow_right")}</span> العودة إلى المحتوى</button>
       <div class="lessonPageBody">
         <div class="lessonMain">
-          <div class="small">الوحدة ${sortedUnits.findIndex(u=>u.id===lesson.unitId)+1} — ${CodeUp.escapeHtml(lesson.unitTitle)}</div>
-          <h2 class="lessonPageTitle">الدرس ${String(numberInUnit).padStart(2,"0")} — ${CodeUp.escapeHtml(lesson.title)}</h2>
+          <div class="small">${CodeUp.escapeHtml(course.name)} · الوحدة ${sortedUnits.findIndex(u=>u.id===lesson.unitId)+1} — ${CodeUp.escapeHtml(lesson.unitTitle)}</div>
+          <h2 class="lessonPageTitle">${CodeUp.escapeHtml(lesson.title)}</h2>
           <div class="lessonTypeTag" style="margin-bottom:14px">${Icon(ct.icon)} ${ct.label}</div>
 
           <div class="lpPos" aria-hidden="true">${posHtml}</div>
@@ -3282,8 +3286,6 @@ const App = {
         }
       };
     });
-
-    document.getElementById("backToContentBtn").onclick = ()=> this.go({name:"course",courseId,courseSlug,tab:"learning"});
 
     this.root.querySelectorAll("[data-golesson]").forEach(btn=>{
       btn.onclick = ()=> goLesson(btn.dataset.golesson);

@@ -137,10 +137,10 @@ body{
   #mobileHeaderWrap{
     display:block; position:fixed; top:0; inset-inline:0; z-index:95;
     background:var(--surface-solid); border-bottom:1px solid var(--line);
-    transition:transform .28s cubic-bezier(.4,0,.2,1);
-    transform:translateY(0);
+    transition:transform .22s ease-out;
+    transform:translate3d(0,0,0); will-change:transform;
   }
-  #mobileHeaderWrap.headerHidden{ transform:translateY(-100%); }
+  #mobileHeaderWrap.headerHidden{ transform:translate3d(0,-100%,0); }
   /* الهيدر صار مُدارًا كوحدة واحدة عبر الغلاف الثابت — نلغي sticky/margin
      الفردية لعناصره الداخلية حتى ما تتحرك بسرعة مختلفة عن بعض */
   #mobileHeaderWrap .topbar{position:static; border-radius:0; margin:0}
@@ -149,8 +149,8 @@ body{
   /* المحتوى يحجز نفس ارتفاع الهيدر فعليًا (يُحسب ديناميكيًا بجافاسكريبت)، وينكمش
      بالتزامن مع اختفاء الهيدر (نفس مدة/منحنى الحركة) حتى يملأ المنشور المساحة
      المُفرَّغة بدل ما تفضل فجوة فاضية معلّقة مكان الهيدر. */
-  .dashboard > .wrap{ padding-top:var(--mobileHeaderH,0px); transition:padding-top .28s cubic-bezier(.4,0,.2,1); }
-  .dashboard > .wrap.headerCollapsedContent{ padding-top:0 !important; }
+  /* المحتوى يحجز ارتفاع الهيدر دائمًا — لا يتغيّر أثناء الإخفاء/الإظهار (لا layout shift) */
+  .dashboard > .wrap{ padding-top:var(--mobileHeaderH,0px); }
 }
 /* ===== الدردشة (نمط X) ===== */
 .chatShell{display:grid;grid-template-columns:320px 1fr;gap:0;height:calc(100vh - 160px);min-height:480px;border:1px solid var(--line);border-radius:16px;overflow:hidden;margin-top:14px;position:relative}
@@ -622,6 +622,20 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
 .pathStat.completed{background:var(--green-soft);color:var(--green)}.pathStat.current{background:rgba(29,155,240,.14);color:var(--accent)}
 .pathWarn{font-size:12px;color:#F2B84B;margin-top:8px}
 </style>
+<style id="lessonAppBarV1">
+/* App Bar صفحة الدرس: صف واحد بارتفاع ثابت، هاتف فقط (على الديسكتوب تبقى الـcrumbs) */
+.appBar{display:none}
+@media (max-width:720px){
+  #mobileHeaderWrap.lessonBarMode .topbar,
+  #mobileHeaderWrap.lessonBarMode #crumbs{display:none}
+  #mobileHeaderWrap.lessonBarMode .appBar{display:flex}
+  .appBar{align-items:center;gap:4px;height:52px;padding:0 6px}
+  .appBarBack{flex:none;width:44px;height:44px;display:grid;place-items:center;border:0;background:none;color:var(--ink);border-radius:12px;cursor:pointer}
+  .appBarBack:active{background:var(--surface)}
+  .appBarBack svg{width:22px;height:22px}
+  .appBarTitle{flex:1;min-width:0;font-size:15px;font-weight:600;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+}
+</style>
 </head>
 <body>
 <div id="bootScreen" class="bootScreen">
@@ -727,6 +741,7 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
 </div>
 </div>
 <div id="crumbs" class="crumbs hidden"><button id="crumbHome">→ الرجوع للرئيسية</button></div>
+<div id="lessonAppBar" class="appBar"></div>
 <div id="mobileTabSlot"></div>
 </div>
 
@@ -764,6 +779,6 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
 })();
 </script>
 <script src="js/shared.js?v=3"></script>
-<script src="js/app.js?v=6"></script>
+<script src="js/app.js?v=7"></script>
 </body>
 </html>
