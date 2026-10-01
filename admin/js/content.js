@@ -172,64 +172,90 @@ async function openLessonModal(unitId, lesson, onDone){
 }
 
 
-// ===== مصادر التعلّم للدرس (patch_54) — جدولا resources / lesson_resources =====
-const LP_ROLE_LABEL = {recommended:"موصى به", alternative:"بديل", deep_dive:"مرجع"};
+// ===== مصادر التعلّم للدرس (patch_54/57) — جدولا resources / lesson_resources =====
+// الأدوار تطابق أقسام صفحة الدرس عند الطالب
+const LP_ROLE_LABEL = {recommended:"المصدر الأساسي", alternative:"مصدر بديل", deep_dive:"تعمّق", study:"للمذاكرة"};
+const LP_ROLE_RANK = {recommended:0, alternative:1, deep_dive:2, study:3};
 const LP_TYPE_LABEL = {youtube_video:"فيديو يوتيوب", youtube_course:"دورة يوتيوب", article:"مقال", docs:"توثيق", pdf:"PDF", website:"موقع", interactive:"تفاعلي", github:"GitHub", external_course:"دورة خارجية"};
+const LP_LANG_LABEL = {ar:"عربي", en:"English", other:"أخرى"};
 
 async function renderLessonResources(box, lessonId){
   const esc = CodeUp.escapeHtml;
   box.innerHTML = `<div class="small" style="margin-top:14px">جارِ تحميل المصادر…</div>`;
-  const {data, error} = await db.from("lesson_resources").select("id, role, order_index, resource_id, resources(id,title,url,type)").eq("lesson_id", lessonId).order("order_index");
+  const {data, error} = await db.from("lesson_resources").select("id, role, order_index, resource_id, resources(id,title,url,type,publisher,language,duration_minutes,start_at)").eq("lesson_id", lessonId);
   if(error){
-    box.innerHTML = `<div class="small" style="margin-top:14px;color:#F2555F">تعذّر تحميل المصادر — تأكد من تشغيل patch_54 في Supabase. (${esc(error.message)})</div>`;
+    box.innerHTML = `<div class="small" style="margin-top:14px;color:#F2555F">تعذّر تحميل المصادر — تأكد من تشغيل patch_54 وpatch_57 في Supabase. (${esc(error.message)})</div>`;
     return;
   }
-  const rows = data || [];
+  const rows = (data||[]).sort((a,b)=>(LP_ROLE_RANK[a.role]-LP_ROLE_RANK[b.role]) || (a.order_index-b.order_index));
   const reports = {};
   if(rows.length){
     const r = await db.from("resource_reports").select("resource_id").in("resource_id", rows.map(x=>x.resource_id));
     (r.data||[]).forEach(x=>{ reports[x.resource_id] = (reports[x.resource_id]||0)+1; });
   }
-  box.innerHTML = `
-    <label style="margin-top:14px;display:block">مصادر التعلّم</label>
-    ${rows.map(x=>`
-      <div style="display:flex;gap:8px;align-items:center;padding:8px 0;border-top:1px solid var(--line)">
+  const meta = x=>[LP_TYPE_LABEL[x.resources?.type], x.resources?.publisher, LP_LANG_LABEL[x.resources?.language], x.resources?.duration_minutes?`${x.resources.duration_minutes} د`:""].filter(Boolean).join(" · ");
+  const group = role=>rows.filter(x=>x.role===role);
+  const sectionHtml = role=>{
+    const g = group(role); if(!g.length) return "";
+    return `<div class="small" style="margin:12px 0 4px;font-weight:700">${LP_ROLE_LABEL[role]}${role==="recommended"?" (واحد فقط)":""}</div>` + g.map((x,i)=>`
+      <div style="display:flex;gap:6px;align-items:center;padding:8px 0;border-top:1px solid var(--line)">
         <div style="flex:1;min-width:0"><b style="font-size:13px">${esc(x.resources?.title||"")}</b>
-          <div class="small">${esc(LP_TYPE_LABEL[x.resources?.type]||"")}${reports[x.resource_id]?` · <span style="color:#F2555F">بلاغات: ${reports[x.resource_id]}</span>`:""}</div></div>
-        <select data-rrole="${x.id}">${Object.keys(LP_ROLE_LABEL).map(k=>`<option value="${k}" ${x.role===k?"selected":""}>${LP_ROLE_LABEL[k]}</option>`).join("")}</select>
+          <div class="small">${esc(meta(x))}${reports[x.resource_id]?` · <span style="color:#F2555F">بلاغات: ${reports[x.resource_id]}</span>`:""}</div></div>
+        <button class="btn" data-rup="${x.id}" ${i===0?"disabled":""} aria-label="تحريك للأعلى">↑</button>
+        <button class="btn" data-rdown="${x.id}" ${i===g.length-1?"disabled":""} aria-label="تحريك للأسفل">↓</button>
+        <button class="btn" data-redit="${x.id}">تعديل</button>
         <button class="btn danger" data-rdel="${x.id}">إزالة</button>
-      </div>`).join("") || `<div class="small">لا توجد مصادر بعد. الفيديو وPDF وAnki أعلاه تظهر للطالب تلقائيًا.</div>`}
-    <button class="btn" id="addResBtn" style="margin-top:8px">+ إضافة مصدر</button>`;
-
-  const demoteRecommended = async ()=>{
-    await db.from("lesson_resources").update({role:"alternative"}).eq("lesson_id", lessonId).eq("role","recommended").throwOnError();
+      </div>`).join("");
   };
-  box.querySelectorAll("[data-rrole]").forEach(sel=>{
-    sel.onchange = async ()=>{
-      try{
-        if(sel.value==="recommended") await demoteRecommended();
-        await db.from("lesson_resources").update({role: sel.value}).eq("id", sel.dataset.rrole).throwOnError();
-        renderLessonResources(box, lessonId);
-      }catch(e){ CodeUp.toast(e.message,"error"); }
-    };
-  });
+  box.innerHTML = `
+    <label style="margin-top:14px;display:block">مصادر التعلّم (المصدر الأساسي، البدائل، التعمّق، للمذاكرة)</label>
+    <div class="small" style="margin-bottom:4px">رابط الفيديو وPDF وAnki في الحقول أعلاه تظهر للطالب تلقائيًا (الفيديو كمصدر أساسي إن لم تضف مصدرًا أساسيًا هنا، وPDF وAnki ضمن «للمذاكرة»).</div>
+    ${["recommended","alternative","deep_dive","study"].map(sectionHtml).join("") || `<div class="small">لا توجد مصادر مضافة بعد.</div>`}
+    <button class="btn" id="addResBtn" style="margin-top:10px">+ إضافة مصدر</button>`;
+
+  const byId = Object.fromEntries(rows.map(x=>[x.id,x]));
+  const reload = ()=>renderLessonResources(box, lessonId);
+  const demoteRecommended = async (exceptId)=>{
+    let q = db.from("lesson_resources").update({role:"alternative"}).eq("lesson_id", lessonId).eq("role","recommended");
+    if(exceptId) q = q.neq("id", exceptId);
+    await q.throwOnError();
+  };
+  // ترتيب: نبدّل مكان العنصر مع جاره داخل نفس القسم ثم نعيد ترقيم القسم كاملًا (0..n)
+  const move = async (id, dir)=>{
+    const x = byId[id]; const g = group(x.role); const i = g.findIndex(y=>y.id===id); const j = i+dir;
+    if(j<0 || j>=g.length) return;
+    [g[i], g[j]] = [g[j], g[i]];
+    try{
+      await Promise.all(g.map((y,k)=>db.from("lesson_resources").update({order_index:k}).eq("id", y.id).throwOnError()));
+      reload();
+    }catch(e){ CodeUp.toast(e.message,"error"); }
+  };
+  box.querySelectorAll("[data-rup]").forEach(b=>b.onclick=()=>move(b.dataset.rup,-1));
+  box.querySelectorAll("[data-rdown]").forEach(b=>b.onclick=()=>move(b.dataset.rdown,1));
   box.querySelectorAll("[data-rdel]").forEach(b=>{
     b.onclick = async ()=>{
       if(!confirm("إزالة هذا المصدر من الدرس؟")) return;
-      try{ await db.from("lesson_resources").delete().eq("id", b.dataset.rdel).throwOnError(); renderLessonResources(box, lessonId); }
+      try{ await db.from("lesson_resources").delete().eq("id", b.dataset.rdel).throwOnError(); reload(); }
       catch(e){ CodeUp.toast(e.message,"error"); }
     };
   });
-  box.querySelector("#addResBtn").onclick = ()=>{
+  box.querySelectorAll("[data-redit]").forEach(b=>b.onclick=()=>openResourceModal(byId[b.dataset.redit]));
+  box.querySelector("#addResBtn").onclick = ()=>openResourceModal(null);
+
+  // نافذة إضافة/تعديل مصدر (نفس النموذج للحالتين)
+  function openResourceModal(row){
+    const edit = !!row, r = row?.resources || {};
+    const opt = (map, cur)=>Object.keys(map).map(k=>`<option value="${k}" ${k===cur?"selected":""}>${map[k]}</option>`).join("");
     const m2 = Admin.modal(`
-      <h3>مصدر تعلّم جديد</h3>
-      <label>النوع</label><select id="rType">${Object.keys(LP_TYPE_LABEL).map(k=>`<option value="${k}">${LP_TYPE_LABEL[k]}</option>`).join("")}</select>
-      <label>العنوان</label><input id="rTitle">
-      <label>الرابط</label><input id="rUrl" placeholder="https://..." dir="ltr">
-      <label>الناشر / القناة (اختياري)</label><input id="rPub">
-      <label>اللغة</label><select id="rLang"><option value="ar">عربي</option><option value="en">English</option><option value="other">أخرى</option></select>
-      <label>الدور</label><select id="rRole">${Object.keys(LP_ROLE_LABEL).map(k=>`<option value="${k}" ${k==="alternative"?"selected":""}>${LP_ROLE_LABEL[k]}</option>`).join("")}</select>
-      <label>بداية الفيديو بالثواني (اختياري، ليوتيوب)</label><input id="rStart" type="number" min="0">
+      <h3>${edit?"تعديل المصدر":"مصدر تعلّم جديد"}</h3>
+      <label>القسم في صفحة الدرس</label><select id="rRole">${opt(LP_ROLE_LABEL, row?.role||"alternative")}</select>
+      <label>النوع</label><select id="rType">${opt(LP_TYPE_LABEL, r.type||"youtube_video")}</select>
+      <label>العنوان</label><input id="rTitle" value="${esc(r.title||"")}">
+      <label>الرابط</label><input id="rUrl" dir="ltr" placeholder="https://..." value="${esc(r.url||"")}">
+      <label>الناشر / القناة (اختياري)</label><input id="rPub" value="${esc(r.publisher||"")}">
+      <label>اللغة</label><select id="rLang">${opt(LP_LANG_LABEL, r.language||"ar")}</select>
+      <label>المدة بالدقائق (اختياري)</label><input id="rDur" type="number" min="1" max="1000" value="${r.duration_minutes??""}">
+      <label>بداية الفيديو بالثواني (اختياري، ليوتيوب)</label><input id="rStart" type="number" min="0" value="${r.start_at??""}">
       <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end"><button class="btn" id="rCancel">إلغاء</button><button class="btn dark" id="rSave">حفظ</button></div>
       <div id="rMsg" class="emptyState" style="display:none;padding:8px;color:#F2555F"></div>`);
     m2.el.querySelector("#rCancel").onclick = m2.close;
@@ -239,17 +265,28 @@ async function renderLessonResources(box, lessonId){
       const fail = t=>{ msg.style.display="block"; msg.textContent=t; };
       if(!g("#rTitle")) return fail("العنوان إلزامي");
       if(!/^https?:\/\//i.test(g("#rUrl"))) return fail("الرابط يجب أن يبدأ بـ https://");
+      const dur = g("#rDur") ? Number(g("#rDur")) : null;
+      if(dur!==null && !(dur>=1 && dur<=1000)) return fail("المدة بين 1 و1000 دقيقة");
+      const payload = {
+        type: g("#rType"), title: g("#rTitle"), url: g("#rUrl"), publisher: g("#rPub")||null,
+        language: g("#rLang"), duration_minutes: dur, start_at: g("#rStart") ? Number(g("#rStart")) : null
+      };
+      const role = g("#rRole");
       try{
-        const {data: res} = await db.from("resources").insert({
-          type: g("#rType"), title: g("#rTitle"), url: g("#rUrl"), publisher: g("#rPub")||null,
-          language: g("#rLang"), start_at: g("#rStart") ? Number(g("#rStart")) : null,
-          created_by: Admin.ctx?.user?.id || null
-        }).select("id").single().throwOnError();
-        const role = g("#rRole");
-        if(role==="recommended") await demoteRecommended();
-        await db.from("lesson_resources").insert({lesson_id: lessonId, resource_id: res.id, role, order_index: rows.length}).throwOnError();
-        CodeUp.toast("تمت إضافة المصدر","success"); m2.close(); renderLessonResources(box, lessonId);
+        if(edit){
+          await db.from("resources").update(payload).eq("id", row.resource_id).throwOnError();
+          if(role==="recommended") await demoteRecommended(row.id);
+          if(role!==row.role){
+            const last = rows.filter(y=>y.role===role).length;
+            await db.from("lesson_resources").update({role, order_index:last}).eq("id", row.id).throwOnError();
+          }
+        }else{
+          const {data: res} = await db.from("resources").insert({...payload, created_by: Admin.ctx?.user?.id || null}).select("id").single().throwOnError();
+          if(role==="recommended") await demoteRecommended();
+          await db.from("lesson_resources").insert({lesson_id: lessonId, resource_id: res.id, role, order_index: rows.filter(y=>y.role===role).length}).throwOnError();
+        }
+        CodeUp.toast(edit?"تم حفظ التعديل":"تمت إضافة المصدر","success"); m2.close(); reload();
       }catch(e){ fail(e.message); }
     };
-  };
+  }
 }

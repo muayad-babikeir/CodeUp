@@ -233,19 +233,31 @@ function lpSafeUrl(r){
   }
   return u;
 }
-function lpResourceRow(r, badge){
-  const lang = ({ar:"عربي", en:"English"})[r.language] || "";
-  const sub = [r.publisher, lang].filter(Boolean).join(" · ");
-  return `<div class="lpRes">
-    <span class="lpIc">${Icon(lpTypeIcon(r.type))}</span>
-    <div class="lpT">
-      ${badge?`<span class="lpTag">${badge}</span>`:""}
-      <b>${CodeUp.escapeHtml(r.title)}</b>
-      ${sub?`<div class="small">${CodeUp.escapeHtml(sub)}</div>`:""}
-      ${r.id&&!r.legacy?`<button class="lpRep" data-reportres="${CodeUp.escapeHtml(r.id)}">الرابط لا يعمل؟</button>`:""}
-    </div>
-    <a class="btn" href="${CodeUp.escapeHtml(lpSafeUrl(r))}" target="_blank" rel="noopener noreferrer">${r.type==="anki"?"تحميل":"فتح"}</a>
-  </div>`;
+const LP_TYPE_LABEL = {youtube_video:"فيديو", youtube_course:"دورة", article:"مقال", docs:"توثيق", pdf:"PDF", website:"موقع", interactive:"تفاعلي", github:"GitHub", external_course:"دورة خارجية", anki:"بطاقات"};
+const LP_CHEV = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>';
+function lpLang(l){ return ({ar:"عربي", en:"English"})[l] || ""; }
+function lpDur(r){ return r.duration_minutes ? `${r.duration_minutes} د` : ""; }
+// صف مصدر: الصف كله رابط يُفتح خارج CodeUp. opts.sub يستبدل السطر الفرعي (للمراجع الثابتة PDF/Anki)
+function lpRow(r){
+  const esc = CodeUp.escapeHtml;
+  const sub = r._sub !== undefined ? r._sub : [r.publisher, lpDur(r)].filter(Boolean).join(" · ");
+  const pill = lpLang(r.language);
+  return `<a class="lpRow" href="${esc(lpSafeUrl(r))}" target="_blank" rel="noopener noreferrer">
+    <span class="lpIc lpIc-${r.type==="youtube_video"||r.type==="youtube_course"?"play":"other"}">${Icon(lpTypeIcon(r.type))}</span>
+    <span class="lpT"><b>${esc(r.title)}</b>${sub?`<span class="small">${esc(sub)}</span>`:""}</span>
+    ${pill?`<span class="lpPill">${pill}</span>`:""}
+    <span class="lpChev">${LP_CHEV}</span>
+  </a>`;
+}
+// المصدر الأساسي: بطاقة كبيرة (هي نفسها رابط)
+function lpPrimary(r){
+  const esc = CodeUp.escapeHtml;
+  const meta = [r.publisher, lpLang(r.language), LP_TYPE_LABEL[r.type], lpDur(r)].filter(Boolean).join(" · ");
+  return `<a class="card2 lpPrimary" href="${esc(lpSafeUrl(r))}" target="_blank" rel="noopener noreferrer">
+    <span class="lpStar">★ المصدر الأساسي</span>
+    <b class="lpPrimaryTitle">${esc(r.title)}</b>
+    ${meta?`<span class="small">${esc(meta)}</span>`:""}
+  </a>`;
 }
 
 const App = {
@@ -3187,10 +3199,10 @@ const App = {
     // مصادر التعلّم من الجداول الجديدة — لو فشل الطلب (الجدول غير موجود بعد) نكمل بالحقول القديمة فقط
     let dbRes = [];
     try{
-      const rr = await db.from("lesson_resources").select("id, role, order_index, resources(id,type,title,url,publisher,language,start_at,is_active)").eq("lesson_id", lessonId).order("order_index");
+      const rr = await db.from("lesson_resources").select("id, role, order_index, resources(id,type,title,url,publisher,language,start_at,duration_minutes,is_active)").eq("lesson_id", lessonId).order("order_index");
       if(!rr.error && rr.data) dbRes = rr.data.filter(x=>x.resources && x.resources.is_active!==false);
     }catch(_e){}
-    const roleRank = {recommended:0, alternative:1, deep_dive:2};
+    const roleRank = {recommended:0, alternative:1, deep_dive:2, study:3};
     dbRes.sort((a,b)=>(roleRank[a.role]-roleRank[b.role]) || (a.order_index-b.order_index));
     const legacyVideo = lesson.video_url ? {legacy:true, type:"youtube_video", title:"فيديو الدرس", url:lesson.video_url} : null;
     const recDb = dbRes.find(x=>x.role==="recommended");
@@ -3199,11 +3211,12 @@ const App = {
       ...(recDb && legacyVideo ? [legacyVideo] : []),
       ...dbRes.filter(x=>x.role==="alternative").map(x=>x.resources)
     ];
-    const refItems = [
-      ...dbRes.filter(x=>x.role==="deep_dive").map(x=>x.resources),
-      ...(lesson.pdf_url ? [{legacy:true, type:"pdf", title:"ملف الدرس (PDF)", url:lesson.pdf_url}] : []),
-      ...(lesson.anki_ar_url ? [{legacy:true, type:"anki", title:"بطاقات Anki — العربية", url:lesson.anki_ar_url}] : []),
-      ...(lesson.anki_en_url ? [{legacy:true, type:"anki", title:"بطاقات Anki — English", url:lesson.anki_en_url}] : [])
+    const deepItems = dbRes.filter(x=>x.role==="deep_dive").map(x=>x.resources);
+    const studyItems = [
+      ...(lesson.pdf_url ? [{legacy:true, type:"pdf", title:"ملف الدرس PDF", url:lesson.pdf_url, _sub:"ملخص للمراجعة"}] : []),
+      ...(lesson.anki_ar_url ? [{legacy:true, type:"anki", title:"بطاقات Anki", url:lesson.anki_ar_url, _sub:"العربية"}] : []),
+      ...(lesson.anki_en_url ? [{legacy:true, type:"anki", title:"Anki Cards", url:lesson.anki_en_url, _sub:"English"}] : []),
+      ...dbRes.filter(x=>x.role==="study").map(x=>x.resources)
     ];
     const unitLessons = sortedUnits.find(u=>u.id===lesson.unitId).lessons;
     const posHtml = unitLessons.map(l=>`<i class="${doneSet.has(l.id)?'d':(l.id===lessonId?'c':'')}"></i>`).join("");
@@ -3247,32 +3260,41 @@ const App = {
 
           <div class="lpPos" aria-hidden="true">${posHtml}</div>
 
-          ${recItem ? `
-          <b class="lessonSectionTitle">مصدر التعلم الموصى به</b>
-          <div class="card2 lpRec" style="margin-top:8px">${lpResourceRow(recItem, "الموصى به")}</div>
-          <div class="small" style="margin:-4px 2px 12px">تُفتح المصادر خارج CodeUp، وفتح الرابط لا يُكمل الدرس.</div>` : ""}
+          ${recItem ? `${lpPrimary(recItem)}
+          <div class="small lpNote">تُفتح المصادر في نافذة جديدة، وإكمال الدرس يتم من الزر أسفل الصفحة.</div>` : ""}
 
           ${altItems.length ? `
-          <b class="lessonSectionTitle">مصادر بديلة</b>
-          <div class="card2" style="margin-top:8px">${altItems.map(r=>lpResourceRow(r)).join("")}</div>` : ""}
+          <div class="lpSecHead"><b>مصادر بديلة</b><span class="small">شرح بأسلوب مختلف</span></div>
+          <div class="card2 lpList">
+            ${altItems.slice(0,2).map(lpRow).join("")}
+            ${altItems.length>2 ? `<div class="hidden" id="lpMoreBox">${altItems.slice(2).map(lpRow).join("")}</div>
+            <button class="lpMoreBtn" id="lpMoreBtn" type="button" data-count="${altItems.length-2}">${altItems.length-2===1?"عرض مصدر إضافي":`عرض ${altItems.length-2} مصادر إضافية`}</button>` : ""}
+          </div>` : ""}
 
           ${lesson.text_content ? `<div class="card2"><b class="lessonSectionTitle">الشرح المكتوب</b><p class="small" style="white-space:pre-wrap;color:var(--ink);margin:8px 0 0">${CodeUp.escapeHtml(lesson.text_content)}</p></div>` : ""}
 
-          ${refItems.length ? `
-          <b class="lessonSectionTitle">مراجع ومذاكرة</b>
-          <div class="card2" style="margin-top:8px">${refItems.map(r=>lpResourceRow(r)).join("")}</div>` : ""}
+          ${deepItems.length ? `
+          <div class="card2 lpList lpDeep" id="lpDeep">
+            <button class="lpDeepHead" id="lpDeepBtn" type="button" aria-expanded="false"><b>تعمّق</b><span class="lpChev lpDeepChev">${Icon("chevron_down")}</span></button>
+            <div class="hidden" id="lpDeepBody">${deepItems.map(lpRow).join("")}</div>
+          </div>` : ""}
 
-          ${(!recItem && !altItems.length && !refItems.length && !lesson.text_content) ? `<div class="card2"><p class="small" style="margin:0">لا توجد مصادر لهذا الدرس بعد.</p></div>` : ""}
+          ${studyItems.length ? `
+          <div class="lpSecHead"><b>للمذاكرة</b></div>
+          <div class="card2 lpList">${studyItems.map(lpRow).join("")}</div>` : ""}
+
+          ${(!recItem && !altItems.length && !deepItems.length && !studyItems.length && !lesson.text_content) ? `<div class="card2"><p class="small" style="margin:0">لا توجد مصادر لهذا الدرس بعد.</p></div>` : ""}
 
           ${(linkedAssignments||[]).length ? `
-          <div class="card2">
-            <b class="lessonSectionTitle">التطبيق العملي</b>
-            ${linkedAssignments.map(a=>`
-              <div style="margin-top:8px;display:flex;justify-content:space-between;align-items:center;gap:8px">
-                <span class="small">${CodeUp.escapeHtml(a.title)}</span>
-                <button class="btn dark" data-openassignment="${a.id}">فتح التمرين</button>
-              </div>`).join("")}
+          <div class="lpSecHead"><b>التطبيق العملي</b></div>
+          <div class="card2 lpList">
+            ${linkedAssignments.map(a=>`<div class="lpPractice">
+              <span class="lpT"><b>${CodeUp.escapeHtml(a.title)}</b><span class="small">يفتح الواجب نفسه مباشرة</span></span>
+              <button class="btn dark" data-openassignment="${a.id}">فتح التمرين</button>
+            </div>`).join("")}
           </div>` : ""}
+
+          ${dbRes.length ? `<button class="lpReportBtn" id="lpReportBtn" type="button">الإبلاغ عن رابط لا يعمل</button>` : ""}
 
           <div class="card2">
             <div class="row"><b>تقدمك في هذا الكورس</b><bdi dir="ltr" class="mono small">${doneCount} / ${flatLessons.length} — ${donePct}%</bdi></div>
@@ -3299,23 +3321,46 @@ const App = {
       <div class="lessonDrawer" id="lessonDrawer">${sidebarHtml}</div>
     `;
 
-    this.root.querySelectorAll("[data-reportres]").forEach(btn=>{
-      btn.onclick = async ()=>{
-        btn.disabled = true;
-        try{
-          await db.from("resource_reports").insert({resource_id: btn.dataset.reportres, profile_id: this.ctx.user.id}).throwOnError();
-          btn.textContent = "شكرًا، تم إرسال البلاغ";
-        }catch(e){
-          btn.textContent = /duplicate|unique/i.test(e.message||"") ? "سبق أن أبلغت عن هذا الرابط" : "تعذّر إرسال البلاغ";
-        }
+    const moreBtn = document.getElementById("lpMoreBtn");
+    if(moreBtn){
+      const n = Number(moreBtn.dataset.count)||0;
+      moreBtn.onclick = ()=>{
+        const open = document.getElementById("lpMoreBox").classList.toggle("hidden") === false;
+        moreBtn.textContent = open ? "إخفاء المصادر الإضافية" : (n===1 ? "عرض مصدر إضافي" : `عرض ${n} مصادر إضافية`);
       };
-    });
-
+    }
+    const deepBtn = document.getElementById("lpDeepBtn");
+    if(deepBtn){
+      deepBtn.onclick = ()=>{
+        const open = document.getElementById("lpDeepBody").classList.toggle("hidden") === false;
+        document.getElementById("lpDeep").classList.toggle("open", open);
+        deepBtn.setAttribute("aria-expanded", open ? "true" : "false");
+      };
+    }
+    const reportBtn = document.getElementById("lpReportBtn");
+    if(reportBtn){
+      reportBtn.onclick = ()=>{
+        const esc = CodeUp.escapeHtml;
+        const sh = this.sheet(`<h3>الإبلاغ عن رابط لا يعمل</h3><p class="small" style="margin-top:0">اختر المصدر الذي لا يفتح:</p>${dbRes.map(x=>`<button class="btn lpReportItem" data-rid="${esc(x.resources.id)}">${esc(x.resources.title)}</button>`).join("")}`);
+        sh.el.querySelectorAll("[data-rid]").forEach(b=>{
+          b.onclick = async ()=>{
+            b.disabled = true;
+            try{
+              await db.from("resource_reports").insert({resource_id: b.dataset.rid, profile_id: this.ctx.user.id}).throwOnError();
+              CodeUp.toast("شكرًا، تم إرسال البلاغ", "success"); sh.close();
+            }catch(e){
+              CodeUp.toast(/duplicate|unique/i.test(e.message||"") ? "سبق أن أبلغت عن هذا الرابط" : "تعذّر إرسال البلاغ", /duplicate|unique/i.test(e.message||"") ? "info" : "error");
+              if(/duplicate|unique/i.test(e.message||"")) sh.close(); else b.disabled = false;
+            }
+          };
+        });
+      };
+    }
     this.root.querySelectorAll("[data-golesson]").forEach(btn=>{
       btn.onclick = ()=> goLesson(btn.dataset.golesson);
     });
     this.root.querySelectorAll("[data-openassignment]").forEach(btn=>{
-      btn.onclick = ()=> this.go({name:"course",courseId,courseSlug,tab:"assignments"});
+      btn.onclick = ()=> this.go({name:"course",courseId,courseSlug,tab:"assignments",assignmentId:btn.dataset.openassignment});
     });
 
     document.getElementById("completeLessonBtn").onclick = async (e)=>{
@@ -3436,7 +3481,7 @@ const App = {
       const sub = subByAssignment[a.id];
       const status = sub ? sub.status : "missing";
       return `
-      <div class="card2">
+      <div class="card2" data-assignment-card="${a.id}">
         <div class="row"><b>${CodeUp.escapeHtml(a.title)}</b><span class="tag ${status}">${statusLabel(status)}</span></div>
         <p class="small">${CodeUp.escapeHtml(a.description||"")}</p>
         <p class="small mono">deadline: ${CodeUp.formatDate(a.deadline)}</p>
@@ -3448,6 +3493,18 @@ const App = {
       </div>`;
     }).join("");
     wireFileCardPreviews(body);
+
+    // قادم من "فتح التمرين" بصفحة الدرس: انتقل لنفس الواجب وميّزه مؤقتًا
+    const focusId = this.view && this.view.assignmentId;
+    if(focusId){
+      const target = body.querySelector(`[data-assignment-card="${focusId}"]`);
+      if(target){
+        target.classList.add("assignmentFocus");
+        target.scrollIntoView({block:"center"});
+        setTimeout(()=>target.classList.remove("assignmentFocus"), 2600);
+      }
+      delete this.view.assignmentId;
+    }
 
     body.querySelectorAll("[data-submit]").forEach(b=>{
       b.onclick = async ()=>{
