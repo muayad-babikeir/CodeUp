@@ -622,18 +622,45 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
 .pathStat.completed{background:var(--green-soft);color:var(--green)}.pathStat.current{background:rgba(29,155,240,.14);color:var(--accent)}
 .pathWarn{font-size:12px;color:#F2B84B;margin-top:8px}
 </style>
-<style id="lessonAppBarV1">
+<style id="appBarV1">
 /* App Bar صفحة الدرس: صف واحد بارتفاع ثابت، هاتف فقط (على الديسكتوب تبقى الـcrumbs) */
 .appBar{display:none}
 @media (max-width:720px){
-  #mobileHeaderWrap.lessonBarMode .topbar,
-  #mobileHeaderWrap.lessonBarMode #crumbs{display:none}
-  #mobileHeaderWrap.lessonBarMode .appBar{display:flex}
+  #mobileHeaderWrap.barMode .topbar,
+  #mobileHeaderWrap.barMode #crumbs{display:none}
+  #mobileHeaderWrap.barMode .appBar{display:flex}
   .appBar{align-items:center;gap:4px;height:52px;padding:0 6px}
   .appBarBack{flex:none;width:44px;height:44px;display:grid;place-items:center;border:0;background:none;color:var(--ink);border-radius:12px;cursor:pointer}
   .appBarBack:active{background:var(--surface)}
   .appBarBack svg{width:22px;height:22px}
   .appBarTitle{flex:1;min-width:0;font-size:15px;font-weight:600;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+}
+</style>
+<style id="uiUnifyV1">
+/* ===== توحيد الواجهة: رموز موحّدة + أزرار/بطاقات/أيقونات/نوافذ/حالات — بدون تغيير الهوية أو الوظائف ===== */
+:root{--r-card:16px;--r-ctl:10px;--r-sheet:20px}
+button,a,[role="button"]{-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+.card2,.box,.courseCard,.courseHeader,.unitAccordion{border-radius:var(--r-card)}
+.btn,.logout,.iconBtn{border-radius:var(--r-ctl)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:40px}
+.btn.dark,.lessonCompleteBtn,.ccCta{min-height:44px}
+.btn svg,.inlineBtnIcon svg{width:16px;height:16px;flex:none}
+.inlineBtnIcon{display:inline-flex;align-items:center;vertical-align:middle}
+.emptyState{padding:36px 16px;color:var(--ink60);font-size:13.5px;text-align:center;line-height:1.7}
+.emptyState .btn{margin-top:12px}
+.loadingState{margin-top:14px}
+body:has(.modalBg){overflow:hidden}
+@media (max-width:640px){
+  .modalBg{align-items:flex-end;padding:0}
+  .modalBg .modal{width:100%;max-width:none;border-radius:var(--r-sheet) var(--r-sheet) 0 0;max-height:88vh;padding-bottom:max(22px,env(safe-area-inset-bottom,0px));animation:sheetSlideUp .22s ease-out}
+  .modalBg:has(.confirmDialog){align-items:center;padding:16px}
+  .modalBg .modal.confirmDialog{width:min(360px,100%);border-radius:var(--r-sheet);padding-bottom:22px;animation:modalPopIn .18s ease-out}
+  .modalBg .modal.modalFixedShell{padding:0}
+}
+@media (max-width:720px){
+  .dashboard{padding-inline:14px}
+  .welcome{margin-top:16px}
+  .sectionHead{margin:22px 0 10px}
 }
 </style>
 </head>
@@ -741,7 +768,7 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
 </div>
 </div>
 <div id="crumbs" class="crumbs hidden"><button id="crumbHome">→ الرجوع للرئيسية</button></div>
-<div id="lessonAppBar" class="appBar"></div>
+<div id="appBarHost" class="appBar"></div>
 <div id="mobileTabSlot"></div>
 </div>
 
@@ -778,7 +805,7 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
   }catch(e){ /* أي خطأ هنا — نسيب المسار الكامل تحت يتكفّل بالفallback */ }
 })();
 </script>
-<script src="js/shared.js?v=3"></script>
-<script src="js/app.js?v=7"></script>
+<script src="js/shared.js?v=4"></script>
+<script src="js/app.js?v=8"></script>
 </body>
 </html>

@@ -148,6 +148,10 @@ function skeletonPostHtml(){
     </div>
   </div>`;
 }
+// حالة تحميل موحّدة لكل الصفحات (بدل نص "جارِ التحميل…" المتفرق) — هيكل ثابت تقريبًا لتقليل القفز
+function loadingHtml(){
+  return `<div class="card2 loadingState" role="status" aria-label="جارِ التحميل"><div class="skeleton skeleton-line w40" style="height:14px;margin-bottom:12px"></div><div class="skeleton skeleton-line w80" style="margin-bottom:8px"></div><div class="skeleton skeleton-line w80"></div></div>`;
+}
 function skeletonPostsHtml(n){ return Array.from({length:n}, skeletonPostHtml).join(""); }
 
 // صف Skeleton بسيط لقوائم أفقية (محادثات/بحث): دائرة أفتار + سطرين، بنفس class .convRow الحقيقي

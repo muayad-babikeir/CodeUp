@@ -321,18 +321,38 @@ const App = {
     this.syncHeaderHeight();
   },
 
-  // App Bar صفحة الدرس (هاتف): سهم رجوع + عنوان مختصر. info=null يعيد الهيدر العادي.
-  setLessonAppBar(info){
+  // App Bar موحّد لكل الصفحات الداخلية (هاتف): سهم رجوع + عنوان. info=null (الرئيسية) = بدون App Bar.
+  // يُحدَّث بنفس العناصر دون إعادة بناء حتى لا يظهر وميض عند الانتقال من العنوان المؤقت للنهائي.
+  setAppBar(info){
     const wrap = document.getElementById("mobileHeaderWrap");
-    const bar = document.getElementById("lessonAppBar");
-    if(!wrap || !bar) return;
-    if(!info){ wrap.classList.remove("lessonBarMode"); bar.innerHTML = ""; this.syncHeaderHeight(); return; }
-    bar.innerHTML = `<button class="appBarBack" id="appBarBack" type="button" aria-label="رجوع إلى محتوى الكورس">${Icon("arrow_right")}</button><div class="appBarTitle" id="appBarTitle"></div>`;
-    const t = bar.querySelector("#appBarTitle");
+    const host = document.getElementById("appBarHost");
+    if(!wrap || !host) return;
+    if(!info){
+      if(wrap.classList.contains("barMode")){ wrap.classList.remove("barMode"); host.innerHTML = ""; this.syncHeaderHeight(); }
+      return;
+    }
+    let t = host.querySelector("#appBarTitle");
+    if(!t){
+      host.innerHTML = `<button class="appBarBack" id="appBarBack" type="button" aria-label="رجوع">${Icon("arrow_right")}</button><div class="appBarTitle" id="appBarTitle"></div>`;
+      t = host.querySelector("#appBarTitle");
+    }
     t.textContent = info.title; t.title = info.title;
-    bar.querySelector("#appBarBack").onclick = ()=> this.go({name:"course", courseId:info.courseId, courseSlug:info.courseSlug, tab:"learning"});
-    wrap.classList.add("lessonBarMode");
-    this.syncHeaderHeight();
+    host.querySelector("#appBarBack").onclick = info.back;
+    if(!wrap.classList.contains("barMode")){ wrap.classList.add("barMode"); this.syncHeaderHeight(); }
+  },
+
+  // عنوان مؤقت + وجهة رجوع لكل صفحة داخلية (تُحسَّن لاحقًا من crumbTrail بعد تحميل البيانات)
+  appBarDefaults(view){
+    const home = tab=>()=>this.go({name:"home", homeTab:tab});
+    const map = {
+      course: {title:"الكورس", back: home("courses")},
+      lesson: {title:"الدرس", back: ()=>this.go({name:"course", courseId:view.courseId, courseSlug:view.courseSlug, tab:"learning"})},
+      messages: {title:"الرسائل", back: home("feed")},
+      profile: {title: view.profileId===this.ctx?.user?.id ? "حسابي" : "الملف الشخصي", back: home("feed")},
+      search: {title:"البحث", back: home("feed")},
+      marketplace_listing: {title:"Marketplace", back: home("marketplace")}
+    };
+    return map[view.name] || {title:"CodeUp", back: home("feed")};
   },
 
   // منطق تسجيل الخروج الموحّد — تستخدمه Topbar (كمبيوتر) وإعدادات الحساب (موبايل)، بدون تكرار
@@ -383,7 +403,7 @@ const App = {
       if(tabSlot) tabSlot.innerHTML = "";
     }
     this.view = view;
-    this.setLessonAppBar(null);
+    this.setAppBar(view.name==="home" ? null : this.appBarDefaults(view));
     if(updateHash){
       if(view.name === "course" && view.courseSlug){
         history.pushState(null, "", `#/course/${view.courseSlug}/${view.tab||"learning"}`);
@@ -398,7 +418,8 @@ const App = {
     if(this._setHeaderHidden) this._setHeaderHidden(false); // الهيدر يظهر دايمًا عند أي تنقل جديد، بدل ما يفضل مخفي من الصفحة السابقة
   },
 
-  crumbTrail(items){
+  crumbTrail(items, opts){
+    opts = opts || {};
     this.crumbs.classList.remove("hidden");
     const home = this.crumbs.querySelector("#crumbHome");
     this.crumbs.innerHTML = "";
@@ -407,6 +428,10 @@ const App = {
       const sep=document.createElement("span");sep.textContent="/";sep.className="mono";this.crumbs.appendChild(sep);
       const b=document.createElement("button");b.textContent=it.label;b.onclick=it.onClick;this.crumbs.appendChild(b);
     });
+    // الهاتف: عنوان الصفحة = آخر عنصر، والرجوع = العنصر الأب (أو الرئيسية)
+    const title = opts.title || (items.length ? items[items.length-1].label : null);
+    const back = opts.back || (items.length>1 ? items[items.length-2].onClick : ()=>this.go({name:"home"}));
+    if(title) this.setAppBar({title, back});
     this.syncHeaderHeight();
   },
 
@@ -522,7 +547,7 @@ const App = {
   },
 
   async renderMessages(conversationId){
-    this.crumbTrail([]);
+    this.crumbTrail([], {title:"الرسائل", back: ()=>this.go({name:"home", homeTab:"feed"})});
     const isMobile = window.innerWidth < 720;
     this.root.innerHTML = `
       <div class="chatShell ${isMobile && conversationId ? 'showThread' : ''} ${isMobile && !conversationId ? 'showList' : ''}">
@@ -697,7 +722,7 @@ const App = {
   },
 
   async renderProfile(profileId){
-    this.crumbTrail([]);
+    this.crumbTrail([], {title: profileId===this.ctx.user.id ? "حسابي" : "الملف الشخصي", back: ()=>this.go({name:"home", homeTab:"feed"})});
     const isMe = profileId === this.ctx.user.id;
     const {data: profile} = await db.from("profiles").select("id,full_name,avatar_url,created_at").eq("id", profileId).single();
     if(!profile){ this.root.innerHTML = `<div class="emptyState">المستخدم غير موجود.</div>`; return; }
@@ -989,7 +1014,7 @@ const App = {
   },
 
   async renderSearch(){
-    this.crumbTrail([]);
+    this.crumbTrail([], {title:"البحث", back: ()=>this.go({name:"home", homeTab:"feed"})});
     this.root.innerHTML = `
       <div class="card2" style="margin-top:14px">
         <input type="text" id="globalSearchInput" placeholder="ابحث عن منشور أو شخص…" style="width:100%">
@@ -1128,7 +1153,7 @@ const App = {
   },
 
   async render(){
-    this.root.innerHTML = `<div class="emptyState">جارِ التحميل…</div>`;
+    this.root.innerHTML = `${loadingHtml()}`;
     this.updateBottomNavActive();
     if(this.view.name==="home") return this.renderHome(this.view.homeTab);
     if(this.view.name==="course") return this.renderCourse(this.view.courseId, this.view.tab||"learning");
@@ -1180,7 +1205,7 @@ const App = {
   // ومسابقات وورش). عدد المسجّلين الفعلي لكل فعالية لا يظهر هنا عمدًا (RLS تمنع
   // الطالب من رؤية تسجيلات غيره) — يظهر فقط بلوحة تحكم الأدمن.
   async renderHomeTechWeek(body){
-    body.innerHTML = `<div class="emptyState">جارِ التحميل…</div>`;
+    body.innerHTML = `${loadingHtml()}`;
     const [{ data: events, error }, { data: myRegs }, { data: announcements }, { data: allTeams }] = await Promise.all([
       db.from("tech_week_events").select("*").eq("status","published").order("starts_at",{ascending:true,nullsFirst:false}),
       db.from("tech_week_registrations").select("event_id,status,team_id").eq("profile_id", this.ctx.user.id),
@@ -1627,7 +1652,7 @@ const App = {
   mpConditionLabel(c){ return {new:"جديد", like_new:"شبه جديد", good:"جيد", acceptable:"مقبول", needs_repair:"يحتاج إصلاح"}[c] || c; },
 
   async renderHomeMarketplace(body){
-    body.innerHTML = `<div class="emptyState">جارِ التحميل…</div>`;
+    body.innerHTML = `${loadingHtml()}`;
     const [{ data: categories }, { data: listings, error }, { data: isAdminRes }] = await Promise.all([
       db.from("marketplace_categories").select("*").order("order_index"),
       db.from("marketplace_listings").select("id,title,price,listing_type,status,category_id,owner_id,created_at, marketplace_categories(name), owner:profiles!marketplace_listings_owner_id_fkey(full_name,avatar_url)")
@@ -1952,8 +1977,8 @@ const App = {
   },
 
   async renderMarketplaceListing(listingId){
-    this.crumbTrail([{label:"Marketplace", onClick: ()=> this.go({name:"home", homeTab:"marketplace"})}]);
-    this.root.innerHTML = `<div class="emptyState">جارِ التحميل…</div>`;
+    this.crumbTrail([{label:"Marketplace", onClick: ()=> this.go({name:"home", homeTab:"marketplace"})}], {title:"Marketplace", back: ()=> this.go({name:"home", homeTab:"marketplace"})});
+    this.root.innerHTML = `${loadingHtml()}`;
 
     const [{ data: l, error }, { data: files }, { data: myReq }] = await Promise.all([
       db.from("marketplace_listings").select("*, marketplace_categories(name), owner:profiles!marketplace_listings_owner_id_fkey(id,full_name,avatar_url)").eq("id", listingId).single(),
@@ -2439,7 +2464,7 @@ const App = {
     const MATERIAL_ICON = {video:Icon("play"), telegram:Icon("paperclip"), link:Icon("link")};
 
     const showUniversities = async ()=>{
-      body.innerHTML = `<div class="emptyState">جارِ التحميل…</div>`;
+      body.innerHTML = `${loadingHtml()}`;
       const CACHE_TTL = 60000; // الجامعات تتغيّر نادرًا جدًا (إدارة فقط)
       let universities;
       if(this._universitiesCache && (Date.now() - this._universitiesCache.at) < CACHE_TTL){
@@ -2473,7 +2498,7 @@ const App = {
     };
 
     const showSemesters = async (university, isOnlyUniversity)=>{
-      body.innerHTML = `<div class="emptyState">جارِ التحميل…</div>`;
+      body.innerHTML = `${loadingHtml()}`;
       const CACHE_TTL = 60000; // نفس منطق كاش الكورسات — فصول الجامعة تتغيّر نادرًا (إدارة فقط)
       const cacheKey = "_universitySemestersCache_" + university.id;
       let semesters;
@@ -2506,7 +2531,7 @@ const App = {
     };
 
     const showSubjects = async (semester, university, isOnlyUniversity)=>{
-      body.innerHTML = `<div class="emptyState">جارِ التحميل…</div>`;
+      body.innerHTML = `${loadingHtml()}`;
       const {data: subjects} = await db.from("university_subjects").select("*").eq("semester_id", semester.id).order("order_index");
       const backRow = `<button class="btn" id="uniBackToSemesters" style="margin-bottom:10px"><span class="inlineBtnIcon">${Icon("arrow_right")}</span> رجوع للفصول</button>`;
       if(!subjects || !subjects.length){
@@ -2524,7 +2549,7 @@ const App = {
     };
 
     const showMaterials = async (subject, semester, university, isOnlyUniversity)=>{
-      body.innerHTML = `<div class="emptyState">جارِ التحميل…</div>`;
+      body.innerHTML = `${loadingHtml()}`;
       const {data: materials} = await db.from("university_materials").select("*").eq("subject_id", subject.id).order("order_index");
       const backRow = `<button class="btn" id="uniBackToSubjects" style="margin-bottom:10px"><span class="inlineBtnIcon">${Icon("arrow_right")}</span> رجوع لمواد ${CodeUp.escapeHtml(semester.title)}</button>`;
       if(!materials || !materials.length){
@@ -3041,7 +3066,7 @@ const App = {
 
     let myEnrollment = this.ctx.enrollments.find(e=>e.course_id===courseId);
 
-    this.crumbTrail([{label: course.name, onClick: ()=>this.go({name:"course",courseId,tab:"learning"})}]);
+    this.crumbTrail([{label: course.name, onClick: ()=>this.go({name:"course",courseId,tab:"learning"})}], {title: course.name, back: ()=>this.go({name:"home", homeTab:"courses"})});
 
     const isAdmin = this.ctx.courseAdminCourseIds.includes(courseId);
     const isLeader = this.ctx.leaderCourseIds.includes(courseId);
@@ -3111,7 +3136,7 @@ const App = {
     };
 
     const body = document.getElementById("tabBody");
-    body.innerHTML = `<div class="emptyState">جارِ التحميل…</div>`;
+    body.innerHTML = `${loadingHtml()}`;
 
     if(tab==="learning") return this.renderLearning(body, course);
     if(tab==="assignments") return this.renderAssignments(body, course, myEnrollment);
@@ -3122,7 +3147,6 @@ const App = {
   },
 
   async renderLessonPage(courseId, courseSlug, lessonId){
-    this.setLessonAppBar({courseId, courseSlug, title:"الدرس"});
     this.root.innerHTML = `<div class="lessonPageBody">
       <div class="lessonMain skeleton-row" aria-hidden="true">
         <div class="skeleton skeleton-line w40" style="height:14px;margin-bottom:10px"></div>
@@ -3212,7 +3236,7 @@ const App = {
     const ct = lessonContentType(lesson);
     const isDone = doneSet.has(lesson.id);
 
-    this.setLessonAppBar({courseId, courseSlug, title:`الدرس ${String(numberInUnit).padStart(2,"0")} — ${lesson.title}`});
+    this.setAppBar({title:`الدرس ${String(numberInUnit).padStart(2,"0")} — ${lesson.title}`, back: ()=>this.go({name:"course", courseId, courseSlug, tab:"learning"})});
 
     this.root.innerHTML = `
       <div class="lessonPageBody">
