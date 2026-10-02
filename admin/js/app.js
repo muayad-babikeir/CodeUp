@@ -226,7 +226,7 @@ const Admin = {
       return [{group:"الأسبوع التقني", items:["tech_week_settings","tech_week_events","tech_week_registrations","tech_week_announcements"]}];
     }
     if(this.role === "university_admin"){
-      const cfg = [{group:"الجامعة", items:["university"]}];
+      const cfg = [{group:"University", items:["university"]}];
       if(this.isTechWeekAdmin) cfg.push({group:"الأسبوع التقني", items:["tech_week_settings","tech_week_events","tech_week_registrations","tech_week_announcements"]});
       return cfg;
     }
@@ -239,7 +239,7 @@ const Admin = {
       return [
         {group:"لوحة التحكم", items:["dashboard"]},
         {group:"الكورسات", items:courseItems, coursePicker:true},
-        {group:"الجامعة", items:["universities","university"]},
+        {group:"University", items:["universities","university"]},
         {group:"الأسبوع التقني", items:["tech_week_settings","tech_week_events","tech_week_registrations","tech_week_announcements","tech_week_team"]},
         {group:"Marketplace", items:["marketplace_dashboard","marketplace_listings","marketplace_categories","marketplace_reports","marketplace_settings"]},
         {group:"الإعدادات", items:["users","home_announcements","home_posts","message_settings","moderation","audit_log"]}
@@ -385,7 +385,7 @@ const Admin = {
   }
 };
 
-function roleLabel(r){ return {super:"سوبر أدمن", course_admin:"أدمن كورس", leader:"قائد مجموعة", university_admin:"أدمن جامعة", tech_week_admin:"أدمن الأسبوع التقني"}[r]||r; }
+function roleLabel(r){ return {super:"سوبر أدمن", course_admin:"أدمن كورس", leader:"قائد مجموعة", university_admin:"أدمن University", tech_week_admin:"أدمن الأسبوع التقني"}[r]||r; }
 
 function leaderNavHtml(counts={}, opts={}){
   const items = [

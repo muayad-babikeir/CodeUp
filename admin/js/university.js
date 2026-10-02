@@ -1,14 +1,15 @@
 // admin/js/university.js
-// إدارة قسم "الجامعة" — مستقل تمامًا عن نظام الكورسات. صلاحية التعديل
+// إدارة قسم "University" — مستقل تمامًا عن نظام الكورسات. صلاحية التعديل
 // فعليًا مقصورة على سوبر أدمن عبر RLS (is_super_admin)، هذا الملف فقط
 // يبني الواجهة؛ أي محاولة تعديل من غير سوبر أدمن سترجع خطأ من القاعدة.
 
-const MATERIAL_TYPE_LABEL = {video:"فيديو", telegram:"تيليجرام", link:"رابط عام"};
+// أنواع الروابط المتاحة لمصادر المادة (القديمة video/telegram/link تبقى صالحة)
+const UNI_RESOURCE_TYPES = {video:"فيديو (يوتيوب وغيره)", telegram:"تيليجرام", link:"رابط عام", article:"مقال", pdf:"PDF", docs:"توثيق", github:"GitHub"};
 
 // إدارة قائمة الجامعات نفسها + تعيين أدمن لكل جامعة — سوبر أدمن فقط (نفس نمط
 // صفحة "أدمن الكورسات" بالحرف، لكن لجدول universities/university_admins الجديدين)
 Admin.sections.universities = {
-  label: "الجامعات",
+  label: "إدارة University",
   async render(body){
     body.innerHTML = `<div class="card">${Array(2).fill(`<div class="skeleton skeleton-line w80" style="height:34px;margin-bottom:10px"></div>`).join("")}</div>`;
     const [{data: universities, error}, {data: admins}, {data: profiles}] = await Promise.all([
@@ -33,7 +34,7 @@ Admin.sections.universities = {
       </tbody></table></div></div>
 
       <div class="card" style="margin-top:14px">
-        <div class="toolbar"><b>أدمن الجامعات</b><button class="btn dark" id="assignUnivAdminBtn">+ تعيين أدمن جامعة</button></div>
+        <div class="toolbar"><b>أدمن University</b><button class="btn dark" id="assignUnivAdminBtn">+ تعيين أدمن University</button></div>
         <div class="tableScroll"><table><thead><tr><th>المستخدم</th><th>الجامعة</th><th>الدور</th><th></th></tr></thead>
         <tbody>${(admins||[]).map(a=>`
           <tr>
@@ -59,7 +60,7 @@ Admin.sections.universities = {
     });
     body.querySelector("#assignUnivAdminBtn").onclick = ()=>{
       const m = Admin.modal(`
-        <h3>تعيين أدمن جامعة</h3>
+        <h3>تعيين أدمن University</h3>
         <label>الجامعة</label>
         <select id="uaUniv">${(universities||[]).map(u=>`<option value="${u.id}">${CodeUp.escapeHtml(u.name)}</option>`).join("")}</select>
         <label>المستخدم</label>
@@ -115,7 +116,7 @@ function openUniversityModal(university){
 // محتوى الجامعة (فصول/مواد/روابط) — الآن مقيّد بجامعة محدَّدة عبر Admin.currentUniversityId.
 // لو المستخدم يدير أكثر من جامعة (سوبر أدمن، أو أدمن أكثر من جامعة)، يظهر منتقي بالأعلى.
 Admin.sections.university = {
-  label: "الجامعة",
+  label: "محتوى University",
   async render(body){
     body.innerHTML = `<div class="card">${Array(2).fill(`<div class="skeleton skeleton-line w80" style="height:34px;margin-bottom:10px"></div>`).join("")}</div>`;
     let q = db.from("universities").select("*").order("order_index");
@@ -123,7 +124,7 @@ Admin.sections.university = {
     const { data: universities, error } = await q;
     if(error){ body.innerHTML = `<div class="alertBox error"><span>تعذّر تحميل الجامعات.</span><button class="btn alertRetry" id="uAdminRetry">إعادة المحاولة</button></div>`; body.querySelector("#uAdminRetry").onclick=()=>Admin.go("university"); return; }
     if(!universities || !universities.length){
-      body.innerHTML = `<div class="emptyStatePro"><h4>لا توجد جامعة مُدارة بعد</h4><p>${Admin.role==="super"?"أنشئ جامعة من صفحة \"الجامعات\" أولًا.":"لا تملك صلاحية إدارة أي جامعة حاليًا."}</p></div>`;
+      body.innerHTML = `<div class="emptyStatePro"><h4>لا توجد جامعة مُدارة بعد</h4><p>${Admin.role==="super"?"أنشئ جامعة من صفحة «إدارة University» أولًا.":"لا تملك صلاحية إدارة أي جامعة حاليًا."}</p></div>`;
       return;
     }
     if(!Admin.currentUniversityId || !universities.some(u=>u.id===Admin.currentUniversityId)){
@@ -161,7 +162,7 @@ async function renderSemesters(body){
             <button class="btn" data-edit="${s.id}">تعديل</button>
             <button class="btn danger" data-del="${s.id}">حذف</button>
           </td>
-        </tr>`).join("") || `<tr><td colspan="3"><div class="emptyStatePro"><h4>لا توجد فصول دراسية بعد</h4><p>أضف أول فصل لتنظيم مواد قسم الجامعة.</p></div></td></tr>`}
+        </tr>`).join("") || `<tr><td colspan="3"><div class="emptyStatePro"><h4>لا توجد فصول دراسية بعد</h4><p>أضف أول فصل لتنظيم مواد قسم University.</p></div></td></tr>`}
       </tbody></table></div></div>`;
 
   body.querySelector("#newSemesterBtn").onclick = ()=> openSemesterModal(null, body);
@@ -209,6 +210,13 @@ function openSemesterModal(semester, body){
 
 async function renderSubjects(body, semester){
   const { data: subjects } = await db.from("university_subjects").select("*").eq("semester_id", semester.id).order("order_index");
+  // عدد مصادر كل مادة (patch_58)
+  const resCount = {};
+  const subjectIds = (subjects||[]).map(x=>x.id);
+  if(subjectIds.length){
+    const rc = await db.from("university_materials").select("subject_id").in("subject_id", subjectIds);
+    (rc.data||[]).forEach(x=>{ resCount[x.subject_id] = (resCount[x.subject_id]||0)+1; });
+  }
   body.innerHTML = `
     <button class="btn" id="backToSemesters" style="margin-bottom:10px">← رجوع للفصول الدراسية</button>
     <div class="toolbar"><b>${CodeUp.escapeHtml(semester.title)}</b><button class="btn dark" id="newSubjectBtn">+ مادة جديدة</button></div>
@@ -219,7 +227,7 @@ async function renderSubjects(body, semester){
           <td>${CodeUp.escapeHtml(s.title)}</td>
           <td>${s.order_index}</td>
           <td>
-            <button class="btn" data-materials="${s.id}">الروابط/الفيديوهات</button>
+            <button class="btn dark" data-materials="${s.id}">المصادر${resCount[s.id]?` (${resCount[s.id]})`:""}</button>
             <button class="btn" data-edit="${s.id}">تعديل</button>
             <button class="btn danger" data-del="${s.id}">حذف</button>
           </td>
@@ -232,7 +240,7 @@ async function renderSubjects(body, semester){
     b.onclick = ()=> openSubjectModal(subjects.find(s=>s.id===b.dataset.edit), semester, body);
   });
   body.querySelectorAll("[data-materials]").forEach(b=>{
-    b.onclick = ()=> renderMaterials(body, subjects.find(s=>s.id===b.dataset.materials), semester);
+    b.onclick = ()=> openSubjectResourcesModal(subjects.find(s=>s.id===b.dataset.materials), semester, body);
   });
   body.querySelectorAll("[data-del]").forEach(b=>{
     b.onclick = async ()=>{
@@ -246,20 +254,34 @@ async function renderSubjects(body, semester){
 
 function openSubjectModal(subject, semester, body){
   const isEdit = !!subject;
+  const esc = CodeUp.escapeHtml;
   const m = Admin.modal(`
     <h3>${isEdit?"تعديل مادة":"مادة جديدة"}</h3>
-    <label>العنوان</label><input id="subjTitle" value="${subject?CodeUp.escapeHtml(subject.title):""}" placeholder="الرياضيات">
+    <label>العنوان</label><input id="subjTitle" value="${subject?esc(subject.title):""}" placeholder="الرياضيات">
+    <label>الشرح المكتوب (اختياري)</label><textarea id="subjText" rows="4">${esc(subject?.text_content||"")}</textarea>
+    <label>رابط ملف PDF للمراجعة (اختياري)</label><input id="subjPdf" dir="ltr" placeholder="https://..." value="${esc(subject?.pdf_url||"")}">
+    <label>رابط بطاقات Anki — العربية (اختياري)</label><input id="subjAnkiAr" dir="ltr" placeholder="https://..." value="${esc(subject?.anki_ar_url||"")}">
+    <label>رابط بطاقات Anki — English (اختياري)</label><input id="subjAnkiEn" dir="ltr" placeholder="https://..." value="${esc(subject?.anki_en_url||"")}">
     <label>الترتيب</label><input id="subjOrder" type="number" value="${subject?.order_index??0}">
+    <div class="small" style="margin-top:10px">المصدر الأساسي والبدائل والتعمّق تُضاف من زر «المصادر» في جدول المواد. PDF وAnki أعلاه تظهر للطالب في «للمذاكرة».</div>
     <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
       <button class="btn" id="subjCancel">إلغاء</button><button class="btn dark" id="subjSave">حفظ</button>
     </div>`);
   m.el.querySelector("#subjCancel").onclick = m.close;
   m.el.querySelector("#subjSave").onclick = async ()=>{
+    const v = id=>m.el.querySelector(id).value.trim();
     const payload = {
-      title: m.el.querySelector("#subjTitle").value.trim(),
-      order_index: Number(m.el.querySelector("#subjOrder").value) || 0
+      title: v("#subjTitle"),
+      text_content: v("#subjText") || null,
+      pdf_url: v("#subjPdf") || null,
+      anki_ar_url: v("#subjAnkiAr") || null,
+      anki_en_url: v("#subjAnkiEn") || null,
+      order_index: Number(v("#subjOrder")) || 0
     };
     if(!payload.title){ CodeUp.toast("العنوان مطلوب", "error"); return; }
+    for(const k of ["pdf_url","anki_ar_url","anki_en_url"]){
+      if(payload[k] && !/^https?:\/\/.+/i.test(payload[k])){ CodeUp.toast("الروابط لازم تبدأ بـ http:// أو https://", "error"); return; }
+    }
     const { error } = isEdit
       ? await db.from("university_subjects").update(payload).eq("id", subject.id)
       : await db.from("university_subjects").insert({...payload, semester_id: semester.id});
@@ -269,73 +291,43 @@ function openSubjectModal(subject, semester, body){
   };
 }
 
-async function renderMaterials(body, subject, semester){
-  const { data: materials } = await db.from("university_materials").select("*").eq("subject_id", subject.id).order("order_index");
-  body.innerHTML = `
-    <button class="btn" id="backToSubjects" style="margin-bottom:10px">← رجوع لمواد ${CodeUp.escapeHtml(semester.title)}</button>
-    <div class="toolbar"><b>${CodeUp.escapeHtml(subject.title)}</b><button class="btn dark" id="newMaterialBtn">+ رابط جديد</button></div>
-    <div class="card"><div class="tableScroll"><table>
-      <thead><tr><th>العنوان</th><th>النوع</th><th>الرابط</th><th>الترتيب</th><th></th></tr></thead>
-      <tbody>${(materials||[]).map(m=>`
-        <tr>
-          <td>${CodeUp.escapeHtml(m.title)}</td>
-          <td>${MATERIAL_TYPE_LABEL[m.material_type]||m.material_type}</td>
-          <td><a href="${CodeUp.escapeHtml(m.url)}" target="_blank" rel="noopener noreferrer">فتح ↗</a></td>
-          <td>${m.order_index}</td>
-          <td>
-            <button class="btn" data-edit="${m.id}">تعديل</button>
-            <button class="btn danger" data-del="${m.id}">حذف</button>
-          </td>
-        </tr>`).join("") || `<tr><td colspan="5"><div class="emptyStatePro"><p style="margin:0">لا توجد روابط بهذه المادة بعد.</p></div></td></tr>`}
-      </tbody></table></div></div>`;
-
-  body.querySelector("#backToSubjects").onclick = ()=> renderSubjects(body, semester);
-  body.querySelector("#newMaterialBtn").onclick = ()=> openMaterialModal(null, subject, body, semester);
-  body.querySelectorAll("[data-edit]").forEach(b=>{
-    b.onclick = ()=> openMaterialModal(materials.find(m=>m.id===b.dataset.edit), subject, body, semester);
-  });
-  body.querySelectorAll("[data-del]").forEach(b=>{
-    b.onclick = async ()=>{
-      if(!await Admin.confirmDialog({title:"حذف الرابط", confirmLabel:"حذف", danger:true})) return;
-      const { error } = await db.from("university_materials").delete().eq("id", b.dataset.del);
-      if(error){ CodeUp.toast(error.message, "error"); return; }
-      renderMaterials(body, subject, semester);
-    };
-  });
+// مصادر المادة: نفس لوحة مصادر الدروس (resource_panel.js) لكن على جدول university_materials
+function subjectResourceAdapter(subjectId){
+  const thr = q=>q.throwOnError();
+  const toRow = x=>({id:x.id, role:x.role||"alternative", order_index:x.order_index, title:x.title, url:x.url, type:x.material_type, publisher:x.publisher, language:x.language, duration_minutes:x.duration_minutes});
+  const toCols = p=>({material_type:p.type, title:p.title, url:p.url, publisher:p.publisher, language:p.language, duration_minutes:p.duration_minutes});
+  return {
+    pageName:"المادة", types:UNI_RESOURCE_TYPES, defaultType:"video", hasStart:false,
+    studyHelp:"ملخصات وبطاقات للمراجعة. ملف PDF وبطاقات Anki من «تعديل المادة» تظهر هنا تلقائيًا.",
+    setupHint:"تأكد من تشغيل patch_58 في Supabase.",
+    async load(){
+      const {data, error} = await db.from("university_materials").select("*").eq("subject_id", subjectId);
+      if(error) throw new Error(error.message);
+      return (data||[]).map(toRow);
+    },
+    async create(p, role, idx){
+      await thr(db.from("university_materials").insert({...toCols(p), role, order_index: idx, subject_id: subjectId, created_by: Admin.ctx?.user?.id || null}));
+    },
+    async update(row, p, role, newIdx){
+      const patch = toCols(p);
+      if(newIdx!==null){ patch.role = role; patch.order_index = newIdx; }
+      await thr(db.from("university_materials").update(patch).eq("id", row.id));
+    },
+    async remove(row){ await thr(db.from("university_materials").delete().eq("id", row.id)); },
+    async setOrder(row, idx){ await thr(db.from("university_materials").update({order_index: idx}).eq("id", row.id)); },
+    async demoteRecommended(exceptId){
+      let q = db.from("university_materials").update({role:"alternative"}).eq("subject_id", subjectId).eq("role","recommended");
+      if(exceptId) q = q.neq("id", exceptId);
+      await thr(q);
+    }
+  };
 }
 
-function openMaterialModal(material, subject, body, semester){
-  const isEdit = !!material;
+function openSubjectResourcesModal(subject, semester, body){
   const m = Admin.modal(`
-    <h3>${isEdit?"تعديل رابط":"رابط جديد"}</h3>
-    <label>العنوان</label><input id="matTitle" value="${material?CodeUp.escapeHtml(material.title):""}" placeholder="مثلاً: محاضرة 1 — المقدمة">
-    <label>الرابط</label><input id="matUrl" type="url" value="${material?CodeUp.escapeHtml(material.url):""}" placeholder="https://...">
-    <label>النوع</label>
-    <select id="matType">
-      <option value="video" ${material?.material_type==="video"?"selected":""}>فيديو (يوتيوب وغيره)</option>
-      <option value="telegram" ${material?.material_type==="telegram"?"selected":""}>تيليجرام</option>
-      <option value="link" ${!material||material.material_type==="link"?"selected":""}>رابط عام</option>
-    </select>
-    <label>الترتيب</label><input id="matOrder" type="number" value="${material?.order_index??0}">
-    <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
-      <button class="btn" id="matCancel">إلغاء</button><button class="btn dark" id="matSave">حفظ</button>
-    </div>`);
-  m.el.querySelector("#matCancel").onclick = m.close;
-  m.el.querySelector("#matSave").onclick = async ()=>{
-    const url = m.el.querySelector("#matUrl").value.trim();
-    const payload = {
-      title: m.el.querySelector("#matTitle").value.trim(),
-      url,
-      material_type: m.el.querySelector("#matType").value,
-      order_index: Number(m.el.querySelector("#matOrder").value) || 0
-    };
-    if(!payload.title || !url){ CodeUp.toast("العنوان والرابط مطلوبان", "error"); return; }
-    if(!/^https?:\/\/.+/i.test(url)){ CodeUp.toast("الرابط لازم يبدأ بـ http:// أو https://", "error"); return; }
-    const { error } = isEdit
-      ? await db.from("university_materials").update(payload).eq("id", material.id)
-      : await db.from("university_materials").insert({...payload, subject_id: subject.id, created_by: Admin.ctx.user.id});
-    if(error){ CodeUp.toast(error.message, "error"); return; }
-    m.close();
-    renderMaterials(body, subject, semester);
-  };
+    <h3>مصادر المادة: ${CodeUp.escapeHtml(subject.title)}</h3>
+    <div id="srBox"></div>
+    <div style="display:flex;justify-content:flex-end;margin-top:14px"><button class="btn dark" id="srDone">تم</button></div>`);
+  renderResourcePanel(m.el.querySelector("#srBox"), subjectResourceAdapter(subject.id));
+  m.el.querySelector("#srDone").onclick = ()=>{ m.close(); renderSubjects(body, semester); };
 }

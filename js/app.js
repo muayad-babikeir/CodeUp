@@ -223,7 +223,7 @@ function lessonContentType(l){
 
 // ===== مصادر التعلّم (patch_54) — بطاقات متساوية تُفتح خارج CodeUp، بدون مشغّل مضمَّن =====
 function lpTypeIcon(t){
-  return ({youtube_video:"play", youtube_course:"play", pdf:"file", article:"file", docs:"file", anki:"download"})[t] || "link";
+  return ({youtube_video:"play", youtube_course:"play", pdf:"file", article:"file", docs:"file", anki:"download", telegram:"paperclip"})[t] || "link";
 }
 function lpSafeUrl(r){
   let u = String(r.url||"");
@@ -233,7 +233,7 @@ function lpSafeUrl(r){
   }
   return u;
 }
-const LP_TYPE_LABEL = {youtube_video:"فيديو", youtube_course:"دورة", article:"مقال", docs:"توثيق", pdf:"PDF", website:"موقع", interactive:"تفاعلي", github:"GitHub", external_course:"دورة خارجية", anki:"بطاقات"};
+const LP_TYPE_LABEL = {youtube_video:"فيديو", youtube_course:"دورة", article:"مقال", docs:"توثيق", pdf:"PDF", website:"موقع", interactive:"تفاعلي", github:"GitHub", external_course:"دورة خارجية", anki:"بطاقات", telegram:"تيليجرام"};
 const LP_CHEV = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>';
 function lpLang(l){ return ({ar:"عربي", en:"English"})[l] || ""; }
 function lpDur(r){ return r.duration_minutes ? `${r.duration_minutes} د` : ""; }
@@ -258,6 +258,59 @@ function lpPrimary(r){
     <b class="lpPrimaryTitle">${esc(r.title)}</b>
     ${meta?`<span class="small">${esc(meta)}</span>`:""}
   </a>`;
+}
+
+// أقسام المصادر المشتركة بين صفحة الدرس وصفحة مادة University:
+// المصدر الأساسي، مصادر بديلة (+عرض المزيد)، الشرح المكتوب، تعمّق (قابل للطي)، للمذاكرة.
+// o = {rec, alts, text, deep, study, note, emptyText}
+function lpSectionsHtml(o){
+  const esc = CodeUp.escapeHtml;
+  const alts = o.alts || [], deep = o.deep || [], study = o.study || [];
+  const extra = Math.max(0, alts.length - 2);
+  const empty = !o.rec && !alts.length && !deep.length && !study.length && !o.text;
+  return `
+    ${o.rec ? `${lpPrimary(o.rec)}${o.note?`<div class="small lpNote">${esc(o.note)}</div>`:""}` : ""}
+
+    ${alts.length ? `
+    <div class="lpSecHead"><b>مصادر بديلة</b><span class="small">شرح بأسلوب مختلف</span></div>
+    <div class="card2 lpList">
+      ${alts.slice(0,2).map(lpRow).join("")}
+      ${extra ? `<div class="hidden" id="lpMoreBox">${alts.slice(2).map(lpRow).join("")}</div>
+      <button class="lpMoreBtn" id="lpMoreBtn" type="button" data-count="${extra}">${extra===1?"عرض مصدر إضافي":`عرض ${extra} مصادر إضافية`}</button>` : ""}
+    </div>` : ""}
+
+    ${o.text ? `<div class="card2"><b class="lessonSectionTitle">الشرح المكتوب</b><p class="small" style="white-space:pre-wrap;color:var(--ink);margin:8px 0 0">${esc(o.text)}</p></div>` : ""}
+
+    ${deep.length ? `
+    <div class="card2 lpList lpDeep" id="lpDeep">
+      <button class="lpDeepHead" id="lpDeepBtn" type="button" aria-expanded="false"><b>تعمّق</b><span class="lpChev lpDeepChev">${Icon("chevron_down")}</span></button>
+      <div class="hidden" id="lpDeepBody">${deep.map(lpRow).join("")}</div>
+    </div>` : ""}
+
+    ${study.length ? `
+    <div class="lpSecHead"><b>للمذاكرة</b></div>
+    <div class="card2 lpList">${study.map(lpRow).join("")}</div>` : ""}
+
+    ${empty ? `<div class="card2"><p class="small" style="margin:0">${esc(o.emptyText || "لا توجد مصادر بعد.")}</p></div>` : ""}`;
+}
+// ربط أزرار "عرض مصدر إضافي" و"تعمّق"
+function lpWireSections(root){
+  const moreBtn = root.querySelector("#lpMoreBtn");
+  if(moreBtn){
+    const n = Number(moreBtn.dataset.count) || 0;
+    moreBtn.onclick = ()=>{
+      const open = root.querySelector("#lpMoreBox").classList.toggle("hidden") === false;
+      moreBtn.textContent = open ? "إخفاء المصادر الإضافية" : (n===1 ? "عرض مصدر إضافي" : `عرض ${n} مصادر إضافية`);
+    };
+  }
+  const deepBtn = root.querySelector("#lpDeepBtn");
+  if(deepBtn){
+    deepBtn.onclick = ()=>{
+      const open = root.querySelector("#lpDeepBody").classList.toggle("hidden") === false;
+      root.querySelector("#lpDeep").classList.toggle("open", open);
+      deepBtn.setAttribute("aria-expanded", open ? "true" : "false");
+    };
+  }
 }
 
 const App = {
@@ -1188,7 +1241,7 @@ const App = {
       <div class="fbTabBar">
         <button data-hometab="feed" class="${tab==='feed'?'active':''}"><span class="tabIcon">${Icon('home')}</span>الرئيسية</button>
         <button data-hometab="courses" class="${tab==='courses'?'active':''}"><span class="tabIcon">${Icon('learning')}</span>الكورسات</button>
-        <button data-hometab="university" class="${tab==='university'?'active':''}"><span class="tabIcon">${Icon('university')}</span>الجامعة</button>
+        <button data-hometab="university" class="${tab==='university'?'active':''}"><span class="tabIcon">${Icon('university')}</span>University</button>
         ${this.ctx.techWeekEnabled?`<button data-hometab="tech_week" class="${tab==='tech_week'?'active':''}"><span class="tabIcon">${Icon('zap')}</span>الأسبوع التقني</button>`:""}
         ${this.ctx.marketplaceEnabled?`<button data-hometab="marketplace" class="${tab==='marketplace'?'active':''}"><span class="tabIcon">${Icon('shopping_bag')}</span>Marketplace</button>`:""}
       </div>`;
@@ -2473,8 +2526,6 @@ const App = {
   // قسم "الجامعة" — مستقل تمامًا عن نظام الكورسات البرمجية. تصفّح محلي
   // (جامعة → فصل → مادة → روابط) بدون تغيير الـ hash، مشابه لتصفح كورس عادي.
   async renderHomeUniversity(body){
-    const MATERIAL_ICON = {video:Icon("play"), telegram:Icon("paperclip"), link:Icon("link")};
-
     const showUniversities = async ()=>{
       body.innerHTML = `${loadingHtml()}`;
       const CACHE_TTL = 60000; // الجامعات تتغيّر نادرًا جدًا (إدارة فقط)
@@ -2501,7 +2552,7 @@ const App = {
         await showSemesters(universities[0], true);
         return;
       }
-      body.innerHTML = `<div class="sectionHead"><h3 class="eyebrow">الجامعات</h3></div><div class="grid">` +
+      body.innerHTML = `<div class="sectionHead"><h3 class="eyebrow">University</h3></div><div class="grid">` +
         universities.map(u=>`<div class="courseCard" data-university="${u.id}"><h3>${CodeUp.escapeHtml(u.name)}</h3></div>`).join("") +
         `</div>`;
       body.querySelectorAll("[data-university]").forEach(el=>{
@@ -2560,21 +2611,34 @@ const App = {
       document.getElementById("uniBackToSemesters").onclick = ()=> showSemesters(university, isOnlyUniversity);
     };
 
+    // صفحة المادة = نفس أقسام صفحة الدرس: المصدر الأساسي / بدائل / شرح مكتوب / تعمّق / للمذاكرة (PDF وAnki)
+    const UNI_TYPE = {video:"youtube_video", telegram:"telegram", link:"website"};
     const showMaterials = async (subject, semester, university, isOnlyUniversity)=>{
       body.innerHTML = `${loadingHtml()}`;
       const {data: materials} = await db.from("university_materials").select("*").eq("subject_id", subject.id).order("order_index");
       const backRow = `<button class="btn" id="uniBackToSubjects" style="margin-bottom:10px"><span class="inlineBtnIcon">${Icon("arrow_right")}</span> رجوع لمواد ${CodeUp.escapeHtml(semester.title)}</button>`;
-      if(!materials || !materials.length){
-        body.innerHTML = backRow + `<div class="emptyState">لا توجد روابط/فيديوهات مضافة لهذه المادة بعد.</div>`;
-      }else{
-        body.innerHTML = backRow +
-          `<div class="sectionHead"><h3 class="eyebrow">${CodeUp.escapeHtml(subject.title)}</h3></div>` +
-          materials.map(m=>`
-            <a href="${CodeUp.escapeHtml(m.url)}" target="_blank" rel="noopener noreferrer" class="card2" style="display:flex;align-items:center;gap:10px;margin-bottom:8px;text-decoration:none;color:inherit">
-              <span class="materialTypeIcon">${MATERIAL_ICON[m.material_type]||Icon("link")}</span>
-              <span>${CodeUp.escapeHtml(m.title)}</span>
-            </a>`).join("");
-      }
+      const rank = {recommended:0, alternative:1, deep_dive:2, study:3};
+      const rows = (materials||[]).slice().sort((a,b)=>((rank[a.role]??1)-(rank[b.role]??1)) || ((a.order_index||0)-(b.order_index||0)));
+      const norm = m=>({id:m.id, type:UNI_TYPE[m.material_type]||m.material_type, title:m.title, url:m.url, publisher:m.publisher, language:m.language, duration_minutes:m.duration_minutes});
+      const rec = rows.find(m=>m.role==="recommended");
+      const study = [
+        ...(subject.pdf_url ? [{legacy:true, type:"pdf", title:"ملف المادة PDF", url:subject.pdf_url, _sub:"ملخص للمراجعة"}] : []),
+        ...(subject.anki_ar_url ? [{legacy:true, type:"anki", title:"بطاقات Anki", url:subject.anki_ar_url, _sub:"العربية"}] : []),
+        ...(subject.anki_en_url ? [{legacy:true, type:"anki", title:"Anki Cards", url:subject.anki_en_url, _sub:"English"}] : []),
+        ...rows.filter(m=>m.role==="study").map(norm)
+      ];
+      body.innerHTML = backRow +
+        `<div class="sectionHead"><h3 class="eyebrow">${CodeUp.escapeHtml(subject.title)}</h3></div>` +
+        lpSectionsHtml({
+          rec: rec ? norm(rec) : null,
+          alts: rows.filter(m=>m.role==="alternative" || !m.role).map(norm),
+          text: subject.text_content,
+          deep: rows.filter(m=>m.role==="deep_dive").map(norm),
+          study,
+          note: "تُفتح المصادر في نافذة جديدة.",
+          emptyText: "لا توجد مصادر لهذه المادة بعد."
+        });
+      lpWireSections(body);
       document.getElementById("uniBackToSubjects").onclick = ()=> showSubjects(semester, university, isOnlyUniversity);
     };
 
@@ -3260,30 +3324,7 @@ const App = {
 
           <div class="lpPos" aria-hidden="true">${posHtml}</div>
 
-          ${recItem ? `${lpPrimary(recItem)}
-          <div class="small lpNote">تُفتح المصادر في نافذة جديدة، وإكمال الدرس يتم من الزر أسفل الصفحة.</div>` : ""}
-
-          ${altItems.length ? `
-          <div class="lpSecHead"><b>مصادر بديلة</b><span class="small">شرح بأسلوب مختلف</span></div>
-          <div class="card2 lpList">
-            ${altItems.slice(0,2).map(lpRow).join("")}
-            ${altItems.length>2 ? `<div class="hidden" id="lpMoreBox">${altItems.slice(2).map(lpRow).join("")}</div>
-            <button class="lpMoreBtn" id="lpMoreBtn" type="button" data-count="${altItems.length-2}">${altItems.length-2===1?"عرض مصدر إضافي":`عرض ${altItems.length-2} مصادر إضافية`}</button>` : ""}
-          </div>` : ""}
-
-          ${lesson.text_content ? `<div class="card2"><b class="lessonSectionTitle">الشرح المكتوب</b><p class="small" style="white-space:pre-wrap;color:var(--ink);margin:8px 0 0">${CodeUp.escapeHtml(lesson.text_content)}</p></div>` : ""}
-
-          ${deepItems.length ? `
-          <div class="card2 lpList lpDeep" id="lpDeep">
-            <button class="lpDeepHead" id="lpDeepBtn" type="button" aria-expanded="false"><b>تعمّق</b><span class="lpChev lpDeepChev">${Icon("chevron_down")}</span></button>
-            <div class="hidden" id="lpDeepBody">${deepItems.map(lpRow).join("")}</div>
-          </div>` : ""}
-
-          ${studyItems.length ? `
-          <div class="lpSecHead"><b>للمذاكرة</b></div>
-          <div class="card2 lpList">${studyItems.map(lpRow).join("")}</div>` : ""}
-
-          ${(!recItem && !altItems.length && !deepItems.length && !studyItems.length && !lesson.text_content) ? `<div class="card2"><p class="small" style="margin:0">لا توجد مصادر لهذا الدرس بعد.</p></div>` : ""}
+          ${lpSectionsHtml({rec:recItem, alts:altItems, text:lesson.text_content, deep:deepItems, study:studyItems, note:"تُفتح المصادر في نافذة جديدة، وإكمال الدرس يتم من الزر أسفل الصفحة.", emptyText:"لا توجد مصادر لهذا الدرس بعد."})}
 
           ${(linkedAssignments||[]).length ? `
           <div class="lpSecHead"><b>التطبيق العملي</b></div>
@@ -3321,22 +3362,7 @@ const App = {
       <div class="lessonDrawer" id="lessonDrawer">${sidebarHtml}</div>
     `;
 
-    const moreBtn = document.getElementById("lpMoreBtn");
-    if(moreBtn){
-      const n = Number(moreBtn.dataset.count)||0;
-      moreBtn.onclick = ()=>{
-        const open = document.getElementById("lpMoreBox").classList.toggle("hidden") === false;
-        moreBtn.textContent = open ? "إخفاء المصادر الإضافية" : (n===1 ? "عرض مصدر إضافي" : `عرض ${n} مصادر إضافية`);
-      };
-    }
-    const deepBtn = document.getElementById("lpDeepBtn");
-    if(deepBtn){
-      deepBtn.onclick = ()=>{
-        const open = document.getElementById("lpDeepBody").classList.toggle("hidden") === false;
-        document.getElementById("lpDeep").classList.toggle("open", open);
-        deepBtn.setAttribute("aria-expanded", open ? "true" : "false");
-      };
-    }
+    lpWireSections(this.root);
     const reportBtn = document.getElementById("lpReportBtn");
     if(reportBtn){
       reportBtn.onclick = ()=>{
