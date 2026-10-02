@@ -1,7 +1,7 @@
 // admin/js/tracks.js — مسارات التعلّم (patch_54). للسوبر أدمن فقط
 
 Admin.sections.tracks = {
-  label: "المسارات",
+  label: "مسارات التعلّم",
   async render(body){
     const esc = CodeUp.escapeHtml;
     if(Admin.role !== "super"){ body.innerHTML = `<div class="emptyState">هذا القسم للسوبر أدمن فقط.</div>`; return; }
@@ -12,6 +12,16 @@ Admin.sections.tracks = {
       return;
     }
     body.innerHTML = `
+      <div class="card" style="margin-bottom:12px">
+        <b>ما هو المسار؟</b>
+        <p class="small" style="margin:6px 0">المسار هو <b>ترتيب لعدة كورسات في مراحل</b>، ليعرف الطالب ماذا يتعلّم أولًا وماذا بعده. الكورسات نفسها لا تتغير، والمسار يرتّبها فقط.</p>
+        <p class="small" style="margin:6px 0">مثال: مسار «المبرمج» ← المرحلة 1: أساسيات الخوارزميات ← المرحلة 2: التطبيق بلغة برمجة ← المرحلة 3: قواعد البيانات.</p>
+        <ol class="small" style="margin:6px 0 0;padding-inline-start:18px;line-height:1.9">
+          <li>اضغط «+ مسار جديد» وسمِّه.</li>
+          <li>اضغط «إدارة الكورسات» وأضف كورساتك مع <b>رقم المرحلة</b> (الكورسات ذات الرقم نفسه تظهر معًا في مرحلة واحدة).</li>
+          <li>يظهر المسار للطالب أعلى صفحة «الكورسات» بتقدّمه، والكورسات غير المنشورة لا تظهر فيه. الشرط المسبق مجرّد تنبيه ولا يقفل الكورس.</li>
+        </ol>
+      </div>
       <div class="toolbar"><button class="btn dark" id="newTrackBtn">+ مسار جديد</button></div>
       <div class="card"><div class="tableScroll"><table>
         <thead><tr><th>المسار</th><th>الكورسات</th><th>الحالة</th><th></th></tr></thead>
@@ -21,7 +31,7 @@ Admin.sections.tracks = {
             <td>${(t.track_courses||[]).length}</td>
             <td><span class="pill ${t.is_active?"approved":"pending"}">${t.is_active?"فعّال":"متوقف"}</span></td>
             <td><button class="btn" data-manage="${t.id}">إدارة الكورسات</button> <button class="btn" data-edit="${t.id}">تعديل</button></td>
-          </tr>`).join("") || `<tr><td colspan="4"><div class="emptyStatePro"><h4>لا توجد مسارات بعد</h4><p>أنشئ مسارًا ثم أضف إليه الكورسات بمراحلها.</p></div></td></tr>`}
+          </tr>`).join("") || `<tr><td colspan="4"><div class="emptyStatePro"><h4>لا توجد مسارات بعد</h4><p>اضغط «+ مسار جديد» أعلاه لتبدأ، ثم أضف إليه كورساتك بمراحلها.</p></div></td></tr>`}
         </tbody></table></div></div>`;
     const byId = Object.fromEntries((tracks||[]).map(t=>[t.id,t]));
     body.querySelector("#newTrackBtn").onclick = ()=>openTrackModal(null);
@@ -79,9 +89,9 @@ async function openTrackCoursesModal(track){
       <h3 style="margin-top:18px">إضافة كورس</h3>
       ${free.length ? `
       <label>الكورس</label><select id="tcCourse">${free.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join("")}</select>
-      <label>رقم المرحلة</label><input id="tcStage" type="number" min="1" value="1">
+      <label>رقم المرحلة (1 تُدرس أولًا، ثم 2…)</label><input id="tcStage" type="number" min="1" value="1">
       <label>اسم المرحلة (اختياري)</label><input id="tcStageTitle">
-      <label>الترتيب داخل المرحلة</label><input id="tcOrder" type="number" value="0">
+      <label>الترتيب داخل المرحلة (إن كان فيها أكثر من كورس)</label><input id="tcOrder" type="number" value="0">
       <label>ملاحظة الشرط المسبق (اختياري، تنبيه فقط بلا قفل)</label><input id="tcNote">
       <label style="display:flex;gap:8px;align-items:center;margin-top:10px"><input type="checkbox" id="tcOpt"> كورس اختياري</label>
       <div style="display:flex;gap:8px;margin-top:14px;justify-content:flex-end"><button class="btn" id="tcClose">إغلاق</button><button class="btn dark" id="tcAdd">إضافة</button></div>`

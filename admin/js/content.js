@@ -9,6 +9,14 @@ Admin.sections.content = {
     const { data: units, error } = await db.from("units").select("*, lessons(*)").eq("course_id", cid).order("order_index");
     if(error){ body.innerHTML = `<div class="alertBox error"><span>تعذّر تحميل المحتوى.</span><button class="btn alertRetry" id="ctRetry">إعادة المحاولة</button></div>`; body.querySelector("#ctRetry").onclick=()=>Admin.go("content"); return; }
 
+    // عدد مصادر كل درس (patch_54) — لو الجدول غير موجود نتجاهل بصمت
+    const resCount = {};
+    const lessonIds = (units||[]).flatMap(u=>(u.lessons||[]).map(l=>l.id));
+    if(lessonIds.length){
+      const rc = await db.from("lesson_resources").select("lesson_id").in("lesson_id", lessonIds);
+      if(!rc.error) (rc.data||[]).forEach(x=>{ resCount[x.lesson_id] = (resCount[x.lesson_id]||0)+1; });
+    }
+
     body.innerHTML = `
       <div class="toolbar"><button class="btn dark" id="newUnitBtn">+ وحدة جديدة</button></div>
       ${(units||[]).map(u=>`
@@ -20,18 +28,19 @@ Admin.sections.content = {
               <button class="btn danger" data-delunit="${u.id}">حذف الوحدة</button>
             </div>
           </div>
-          <div class="tableScroll"><table style="margin-top:10px"><thead><tr><th></th><th>الدرس</th><th>رابط الفيديو</th><th>ترتيب</th><th></th></tr></thead>
+          <div class="tableScroll"><table style="margin-top:10px"><thead><tr><th></th><th>الدرس</th><th>رابط الفيديو</th><th>مصادر التعلّم</th><th>ترتيب</th><th></th></tr></thead>
           <tbody data-lessonsof="${u.id}">${(u.lessons||[]).sort((a,b)=>a.order_index-b.order_index).map(l=>`
             <tr data-lessonrow="${l.id}" draggable="true">
               <td class="dragHandle" title="اسحب لإعادة الترتيب">${Icon("grip")}</td>
               <td>${CodeUp.escapeHtml(l.title)}</td>
               <td>${l.video_url?`<a href="${l.video_url}" target="_blank">رابط ↗</a>`:"—"}</td>
+              <td><button class="btn dark" data-reslesson="${l.id}" data-unit="${u.id}">المصادر${resCount[l.id]?` (${resCount[l.id]})`:""}</button></td>
               <td>${l.order_index}</td>
               <td>
                 <button class="btn" data-editlesson="${l.id}" data-unit="${u.id}">تعديل</button>
                 <button class="btn danger" data-dellesson="${l.id}">حذف</button>
               </td>
-            </tr>`).join("") || `<tr><td colspan="5"><div class="emptyStatePro" style="padding:20px 8px"><p style="margin:0">لا توجد دروس في هذه الوحدة بعد.</p></div></td></tr>`}
+            </tr>`).join("") || `<tr><td colspan="6"><div class="emptyStatePro" style="padding:20px 8px"><p style="margin:0">لا توجد دروس في هذه الوحدة بعد.</p></div></td></tr>`}
           </tbody></table></div>
           ${(u.lessons||[]).length>1?`<p class="small" style="margin-top:6px">اسحب أي درس من المقبض لإعادة ترتيبه.</p>`:""}
           <button class="btn" style="margin-top:10px" data-addlesson="${u.id}">+ إضافة درس</button>
@@ -58,6 +67,11 @@ Admin.sections.content = {
       const unit = units.find(u=>u.id===b.dataset.unit);
       const lesson = unit?.lessons?.find(l=>l.id===b.dataset.editlesson);
       b.onclick = ()=> openLessonModal(b.dataset.unit, lesson);
+    });
+    body.querySelectorAll("[data-reslesson]").forEach(b=>{
+      const unit = units.find(u=>u.id===b.dataset.unit);
+      const lesson = unit?.lessons?.find(l=>l.id===b.dataset.reslesson);
+      b.onclick = ()=> openLessonResourcesModal(lesson);
     });
     body.querySelectorAll("[data-dellesson]").forEach(b=>{
       b.onclick = async ()=>{
@@ -99,6 +113,16 @@ function wireLessonDragDrop(tbody){
       Admin.go("content");
     });
   });
+}
+
+// نافذة مخصّصة لمصادر درس واحد (نفس لوحة المصادر الموجودة داخل نافذة تعديل الدرس)
+function openLessonResourcesModal(lesson){
+  const m = Admin.modal(`
+    <h3>مصادر الدرس: ${CodeUp.escapeHtml(lesson.title)}</h3>
+    <div id="lrBox"></div>
+    <div style="display:flex;justify-content:flex-end;margin-top:14px"><button class="btn dark" id="lrDone">تم</button></div>`);
+  renderLessonResources(m.el.querySelector("#lrBox"), lesson.id);
+  m.el.querySelector("#lrDone").onclick = ()=>{ m.close(); Admin.go("content"); };
 }
 
 function openUnitModal(courseId, unit, onDone){
@@ -195,23 +219,34 @@ async function renderLessonResources(box, lessonId){
   }
   const meta = x=>[LP_TYPE_LABEL[x.resources?.type], x.resources?.publisher, LP_LANG_LABEL[x.resources?.language], x.resources?.duration_minutes?`${x.resources.duration_minutes} د`:""].filter(Boolean).join(" · ");
   const group = role=>rows.filter(x=>x.role===role);
+  const ROLE_HELP = {
+    recommended:"أفضل مصدر واحد يبدأ به الطالب (بطاقة كبيرة بنجمة). إضافة مصدر جديد هنا تحوّل الحالي إلى «بديل».",
+    alternative:"شروحات أخرى بأسلوب مختلف. يظهر أول اثنين، والباقي خلف «عرض مصدر إضافي».",
+    deep_dive:"للمتقدمين ومن يريد التوسّع. يظهر في قسم «تعمّق» القابل للطي.",
+    study:"ملخصات وبطاقات للمراجعة. ملف PDF وبطاقات Anki من حقول الدرس تظهر هنا تلقائيًا."
+  };
   const sectionHtml = role=>{
-    const g = group(role); if(!g.length) return "";
-    return `<div class="small" style="margin:12px 0 4px;font-weight:700">${LP_ROLE_LABEL[role]}${role==="recommended"?" (واحد فقط)":""}</div>` + g.map((x,i)=>`
-      <div style="display:flex;gap:6px;align-items:center;padding:8px 0;border-top:1px solid var(--line)">
-        <div style="flex:1;min-width:0"><b style="font-size:13px">${esc(x.resources?.title||"")}</b>
-          <div class="small">${esc(meta(x))}${reports[x.resource_id]?` · <span style="color:#F2555F">بلاغات: ${reports[x.resource_id]}</span>`:""}</div></div>
-        <button class="btn" data-rup="${x.id}" ${i===0?"disabled":""} aria-label="تحريك للأعلى">↑</button>
-        <button class="btn" data-rdown="${x.id}" ${i===g.length-1?"disabled":""} aria-label="تحريك للأسفل">↓</button>
-        <button class="btn" data-redit="${x.id}">تعديل</button>
-        <button class="btn danger" data-rdel="${x.id}">إزالة</button>
-      </div>`).join("");
+    const g = group(role);
+    return `<div style="border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-top:10px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+        <div style="min-width:0"><b style="font-size:13.5px">${LP_ROLE_LABEL[role]}</b><div class="small">${ROLE_HELP[role]}</div></div>
+        <button class="btn dark" data-addrole="${role}" style="flex:none">${role==="recommended"&&g.length?"+ استبدال":"+ إضافة"}</button>
+      </div>
+      ${g.map((x,i)=>`
+        <div style="display:flex;gap:6px;align-items:center;padding:8px 0;border-top:1px solid var(--line);margin-top:8px">
+          <div style="flex:1;min-width:0"><b style="font-size:13px">${esc(x.resources?.title||"")}</b>
+            <div class="small">${esc(meta(x))}${reports[x.resource_id]?` · <span style="color:#F2555F">بلاغات: ${reports[x.resource_id]}</span>`:""}</div></div>
+          <button class="btn" data-rup="${x.id}" ${i===0?"disabled":""} aria-label="تحريك للأعلى">↑</button>
+          <button class="btn" data-rdown="${x.id}" ${i===g.length-1?"disabled":""} aria-label="تحريك للأسفل">↓</button>
+          <button class="btn" data-redit="${x.id}">تعديل</button>
+          <button class="btn danger" data-rdel="${x.id}">إزالة</button>
+        </div>`).join("") || `<div class="small" style="margin-top:8px;opacity:.7">لا شيء هنا بعد.</div>`}
+    </div>`;
   };
   box.innerHTML = `
-    <label style="margin-top:14px;display:block">مصادر التعلّم (المصدر الأساسي، البدائل، التعمّق، للمذاكرة)</label>
-    <div class="small" style="margin-bottom:4px">رابط الفيديو وPDF وAnki في الحقول أعلاه تظهر للطالب تلقائيًا (الفيديو كمصدر أساسي إن لم تضف مصدرًا أساسيًا هنا، وPDF وAnki ضمن «للمذاكرة»).</div>
-    ${["recommended","alternative","deep_dive","study"].map(sectionHtml).join("") || `<div class="small">لا توجد مصادر مضافة بعد.</div>`}
-    <button class="btn" id="addResBtn" style="margin-top:10px">+ إضافة مصدر</button>`;
+    <label style="margin-top:14px;display:block">مصادر التعلّم</label>
+    <div class="small">كل قسم أدناه يقابل قسمًا في صفحة الدرس عند الطالب. اضغط «+ إضافة» في القسم الذي تريده.</div>
+    ${["recommended","alternative","deep_dive","study"].map(sectionHtml).join("")}`;
 
   const byId = Object.fromEntries(rows.map(x=>[x.id,x]));
   const reload = ()=>renderLessonResources(box, lessonId);
@@ -240,15 +275,15 @@ async function renderLessonResources(box, lessonId){
     };
   });
   box.querySelectorAll("[data-redit]").forEach(b=>b.onclick=()=>openResourceModal(byId[b.dataset.redit]));
-  box.querySelector("#addResBtn").onclick = ()=>openResourceModal(null);
+  box.querySelectorAll("[data-addrole]").forEach(b=>b.onclick=()=>openResourceModal(null, b.dataset.addrole));
 
   // نافذة إضافة/تعديل مصدر (نفس النموذج للحالتين)
-  function openResourceModal(row){
+  function openResourceModal(row, presetRole){
     const edit = !!row, r = row?.resources || {};
     const opt = (map, cur)=>Object.keys(map).map(k=>`<option value="${k}" ${k===cur?"selected":""}>${map[k]}</option>`).join("");
     const m2 = Admin.modal(`
       <h3>${edit?"تعديل المصدر":"مصدر تعلّم جديد"}</h3>
-      <label>القسم في صفحة الدرس</label><select id="rRole">${opt(LP_ROLE_LABEL, row?.role||"alternative")}</select>
+      <label>القسم في صفحة الدرس</label><select id="rRole">${opt(LP_ROLE_LABEL, row?.role||presetRole||"alternative")}</select>
       <label>النوع</label><select id="rType">${opt(LP_TYPE_LABEL, r.type||"youtube_video")}</select>
       <label>العنوان</label><input id="rTitle" value="${esc(r.title||"")}">
       <label>الرابط</label><input id="rUrl" dir="ltr" placeholder="https://..." value="${esc(r.url||"")}">
