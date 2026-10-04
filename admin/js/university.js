@@ -29,7 +29,7 @@ Admin.sections.universities = {
         <tr>
           <td>${CodeUp.escapeHtml(u.name)}</td>
           <td>${u.order_index}</td>
-          <td><button class="btn" data-edit="${u.id}">تعديل</button></td>
+          <td><button class="btn" data-edit="${u.id}">تعديل</button> <button class="btn danger" data-deluniv="${u.id}">حذف</button></td>
         </tr>`).join("") || `<tr><td colspan="3"><div class="emptyStatePro"><p style="margin:0">لا توجد جامعات بعد.</p></div></td></tr>`}
       </tbody></table></div></div>
 
@@ -49,6 +49,23 @@ Admin.sections.universities = {
     body.querySelector("#newUnivBtn").onclick = ()=> openUniversityModal();
     body.querySelectorAll("[data-edit]").forEach(b=>{
       b.onclick = ()=> openUniversityModal(universities.find(u=>u.id===b.dataset.edit));
+    });
+    body.querySelectorAll("[data-deluniv]").forEach(b=>{
+      b.onclick = async ()=>{
+        const u = universities.find(x=>x.id===b.dataset.deluniv);
+        if(!u) return;
+        // وجهة أرشفة تيليجرام خاصة بهذه الجامعة تُحذف بحذفها (حذف متسلسل)، فنمنع الحذف بدل أن تضيع إعدادات الأرشفة بصمت
+        const { data: dests } = await db.from("archive_destinations").select("id").eq("university_id", u.id).limit(1);
+        if(dests && dests.length){ CodeUp.toast("لهذه الجامعة وجهة أرشفة تيليجرام خاصة بها. أزِلها أولًا قبل الحذف.", "error"); return; }
+        const typed = await Admin.promptDialog({title:`حذف الجامعة "${u.name}"`, message:"سيُحذف معها كل فصولها ومواد المقررات ومصادرها وأدمنها، وملفات تيليجرام التي رُفعت عبر الموقع. لا يمكن التراجع.\nاكتب اسم الجامعة بالضبط للتأكيد:", placeholder:u.name, confirmLabel:"حذف نهائيًا", danger:true});
+        if(typed===null) return;
+        if(typed.trim()!==u.name.trim()){ CodeUp.toast("الاسم غير مطابق، لم يُحذف شيء","error"); return; }
+        const { error } = await db.from("universities").delete().eq("id", u.id);
+        if(error){ CodeUp.toast(error.message, "error"); return; }
+        Admin.kickTelegramCleanup();
+        CodeUp.toast("تم حذف الجامعة","success");
+        Admin.go("universities");
+      };
     });
     body.querySelectorAll("[data-removeadmin]").forEach(b=>{
       b.onclick = async ()=>{

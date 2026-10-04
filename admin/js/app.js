@@ -377,6 +377,30 @@ const Admin = {
     }catch(_){}
   },
 
+  // نافذة إدخال نص (كانت مفقودة وتكسر زر "تأجيل الحذف" في صفحة الملفات). ترجع النص أو null عند الإلغاء.
+  promptDialog({title, message, defaultValue="", placeholder="", confirmLabel="تأكيد", danger=false}){
+    return new Promise(resolve=>{
+      const esc = CodeUp.escapeHtml;
+      const bg=document.createElement("div");bg.className="modalBg";
+      bg.innerHTML=`<div class="modal confirmDialog">
+        <h3>${esc(title||"")}</h3>
+        ${message?`<p style="white-space:pre-line">${esc(message)}</p>`:""}
+        <input id="pdInput" style="margin-top:10px" value="${esc(defaultValue)}" placeholder="${esc(placeholder)}">
+        <div class="confirmActions">
+          <button class="btn" id="pdCancel">إلغاء</button>
+          <button class="btn ${danger?"danger":"dark"}" id="pdConfirm">${esc(confirmLabel)}</button>
+        </div>
+      </div>`;
+      document.body.appendChild(bg);
+      const input = bg.querySelector("#pdInput"); input.focus();
+      const finish = r=>{ bg.remove(); resolve(r); };
+      bg.addEventListener("click", e=>{ if(e.target===bg) finish(null); });
+      bg.querySelector("#pdCancel").onclick = ()=>finish(null);
+      bg.querySelector("#pdConfirm").onclick = ()=>finish(input.value);
+      input.onkeydown = e=>{ if(e.key==="Enter") finish(input.value); };
+    });
+  },
+
   // نافذة تأكيد (كانت مفقودة من لوحة الإدارة، فكانت كل أزرار الحذف تفشل بصمت). ترجع Promise<boolean>.
   confirmDialog({title, message, confirmLabel="تأكيد", cancelLabel="إلغاء", danger=false}){
     return new Promise(resolve=>{
