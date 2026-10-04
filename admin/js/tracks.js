@@ -30,13 +30,19 @@ Admin.sections.tracks = {
             <td><b>${esc(t.name)}</b><div class="small mono">${esc(t.slug)}</div></td>
             <td>${(t.track_courses||[]).length}</td>
             <td><span class="pill ${t.is_active?"approved":"pending"}">${t.is_active?"فعّال":"متوقف"}</span></td>
-            <td><button class="btn" data-manage="${t.id}">إدارة الكورسات</button> <button class="btn" data-edit="${t.id}">تعديل</button></td>
+            <td><button class="btn" data-manage="${t.id}">إدارة الكورسات</button> <button class="btn" data-edit="${t.id}">تعديل</button> <button class="btn danger" data-deltrack="${t.id}">حذف</button></td>
           </tr>`).join("") || `<tr><td colspan="4"><div class="emptyStatePro"><h4>لا توجد مسارات بعد</h4><p>اضغط «+ مسار جديد» أعلاه لتبدأ، ثم أضف إليه كورساتك بمراحلها.</p></div></td></tr>`}
         </tbody></table></div></div>`;
     const byId = Object.fromEntries((tracks||[]).map(t=>[t.id,t]));
     body.querySelector("#newTrackBtn").onclick = ()=>openTrackModal(null);
     body.querySelectorAll("[data-edit]").forEach(b=>b.onclick=()=>openTrackModal(byId[b.dataset.edit]));
     body.querySelectorAll("[data-manage]").forEach(b=>b.onclick=()=>openTrackCoursesModal(byId[b.dataset.manage]));
+    body.querySelectorAll("[data-deltrack]").forEach(b=>b.onclick=async ()=>{
+      const t = byId[b.dataset.deltrack];
+      if(!await Admin.confirmDialog({title:`حذف المسار "${t.name}"`, message:"سيُحذف المسار وترتيب كورساته فقط. الكورسات نفسها لا تُحذف. لا يمكن التراجع.", confirmLabel:"حذف المسار", danger:true})) return;
+      try{ await db.from("tracks").delete().eq("id", t.id).throwOnError(); CodeUp.toast("تم حذف المسار","success"); Admin.go("tracks"); }
+      catch(e){ CodeUp.toast(e.message,"error"); }
+    });
   }
 };
 

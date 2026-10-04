@@ -297,7 +297,7 @@ function subjectResourceAdapter(subjectId){
   const toRow = x=>({id:x.id, role:x.role||"alternative", order_index:x.order_index, title:x.title, url:x.url, type:x.material_type, publisher:x.publisher, language:x.language, duration_minutes:x.duration_minutes});
   const toCols = p=>({material_type:p.type, title:p.title, url:p.url, publisher:p.publisher, language:p.language, duration_minutes:p.duration_minutes});
   return {
-    pageName:"المادة", types:UNI_RESOURCE_TYPES, defaultType:"video", hasStart:false,
+    pageName:"المادة", fileCtx:{kind:"subject", id:subjectId}, types:UNI_RESOURCE_TYPES, defaultType:"video", hasStart:false,
     studyHelp:"ملخصات وبطاقات للمراجعة. ملف PDF وبطاقات Anki من «تعديل المادة» تظهر هنا تلقائيًا.",
     setupHint:"تأكد من تشغيل patch_58 في Supabase.",
     async load(){

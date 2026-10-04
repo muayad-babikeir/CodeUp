@@ -202,7 +202,7 @@ const LESSON_RESOURCE_TYPES = {youtube_video:"فيديو يوتيوب", youtube_
 function lessonResourceAdapter(lessonId){
   const thr = q=>q.throwOnError();
   return {
-    pageName:"الدرس", types:LESSON_RESOURCE_TYPES, defaultType:"youtube_video", hasStart:true,
+    pageName:"الدرس", fileCtx:{kind:"lesson", id:lessonId}, types:LESSON_RESOURCE_TYPES, defaultType:"youtube_video", hasStart:true,
     studyHelp:"ملخصات وبطاقات للمراجعة. ملف PDF وبطاقات Anki من حقول الدرس تظهر هنا تلقائيًا.",
     setupHint:"تأكد من تشغيل patch_54 وpatch_57 في Supabase.",
     async load(){

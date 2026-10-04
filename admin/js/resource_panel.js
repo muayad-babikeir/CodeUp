@@ -10,6 +10,7 @@
 //   load(): Promise<rows>   rows = [{id, role, order_index, title, url, type, publisher, language, duration_minutes, start_at, reports}]
 //   create(payload, role, orderIndex), update(row, payload, role, newOrderIndexOrNull),
 //   remove(row), setOrder(row, idx), demoteRecommended(exceptRowId|null)
+//   fileCtx (اختياري): {kind:"lesson"|"subject", id} — يفعّل خيار «رفع ملف» (يُرسل إلى تيليجرام عبر telegram-upload-resource ويُحذف من Storage)
 // }
 
 const RP_ROLE_LABEL = {recommended:"المصدر الأساسي", alternative:"مصدر بديل", deep_dive:"تعمّق", study:"للمذاكرة"};
@@ -89,7 +90,10 @@ async function renderResourcePanel(box, ad){
       <label>القسم في صفحة ${ad.pageName}</label><select id="rRole">${opt(RP_ROLE_LABEL, row?.role||presetRole||"alternative")}</select>
       <label>النوع</label><select id="rType">${opt(ad.types, row?.type||ad.defaultType)}</select>
       <label>العنوان</label><input id="rTitle" value="${esc(row?.title||"")}">
-      <label>الرابط</label><input id="rUrl" dir="ltr" placeholder="https://..." value="${esc(row?.url||"")}">
+      ${ad.fileCtx?`<label>طريقة الإضافة</label><select id="rMode"><option value="link">رابط</option><option value="file">رفع ملف (يُرسل إلى تيليجرام)</option></select>`:""}
+      <div id="rLinkBox"><label>الرابط</label><input id="rUrl" dir="ltr" placeholder="https://..." value="${esc(row?.url||"")}"></div>
+      <div id="rFileBox" style="display:none"><label>الملف</label><input id="rFile" type="file">
+        <div class="small" style="margin-top:6px">يُرسل تلقائيًا إلى موضوع MATERIALS في مجموعة CodeUp Archive بوسوم (الكورس/الوحدة/الدرس/القسم) ثم يُحذف من تخزين الموقع، ويُحفظ رابط الرسالة كرابط للمصدر. الحد الأقصى 50MB.</div></div>
       <label>الناشر / القناة (اختياري)</label><input id="rPub" value="${esc(row?.publisher||"")}">
       <label>اللغة</label><select id="rLang">${opt(RP_LANG_LABEL, row?.language||"ar")}</select>
       <label>المدة بالدقائق (اختياري)</label><input id="rDur" type="number" min="1" max="1000" value="${row?.duration_minutes??""}">
@@ -97,16 +101,60 @@ async function renderResourcePanel(box, ad){
       <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end"><button class="btn" id="rCancel">إلغاء</button><button class="btn dark" id="rSave">حفظ</button></div>
       <div id="rMsg" class="emptyState" style="display:none;padding:8px;color:#F2555F"></div>`);
     m2.el.querySelector("#rCancel").onclick = m2.close;
+    const modeSel = m2.el.querySelector("#rMode");
+    const isFileMode = ()=>!!modeSel && modeSel.value==="file";
+    if(modeSel) modeSel.onchange = ()=>{
+      m2.el.querySelector("#rLinkBox").style.display = isFileMode() ? "none" : "";
+      m2.el.querySelector("#rFileBox").style.display = isFileMode() ? "" : "none";
+      const tSel = m2.el.querySelector("#rType");
+      if(isFileMode() && tSel.querySelector('option[value="pdf"]')) tSel.value = "pdf"; // الغالب أن الملف PDF، ويمكن تغييره
+    };
+    // رفع مؤقت إلى Storage ثم نقل إلى تيليجرام (الدالة تحذف المؤقت). يرجع رابط رسالة تيليجرام.
+    const uploadToTelegram = async (file, meta)=>{
+      const { data: sd } = await db.auth.getSession();
+      const token = sd?.session?.access_token, uid = sd?.session?.user?.id;
+      if(!token || !uid) throw new Error("انتهت الجلسة، أعد تسجيل الدخول");
+      const clean = (file.name.replace(/[^\w.\-]+/g,"_") || "file");
+      const path = `${uid}/resource-uploads/${Date.now()}_${clean}`;
+      const up = await db.storage.from("submissions").upload(path, file, {upsert:false});
+      if(up.error) throw new Error("تعذّر رفع الملف: " + up.error.message);
+      const call = body=>fetch(`${SUPABASE_URL}/functions/v1/telegram-upload-resource`, {
+        method:"POST", headers:{"Content-Type":"application/json","Authorization":`Bearer ${token}`}, body: JSON.stringify(body)
+      }).then(r=>r.json().catch(()=>({error:"رد غير صالح من الخادم"})));
+      let j;
+      try{ j = await call({action:"send", storage_path:path, file_name:file.name, mime_type:file.type, ...meta}); }
+      catch(e){ j = {error:e.message}; }
+      if(!j.ok){
+        try{ await call({action:"discard", storage_path:path}); }catch(_){}  // لا نترك نسخة في التخزين عند الفشل
+        throw new Error("تعذّر الإرسال إلى تيليجرام: " + (j.error||"خطأ غير معروف") + " — لم يُحفظ شيء، حاول مرة أخرى.");
+      }
+      return j.url;
+    };
     m2.el.querySelector("#rSave").onclick = async ()=>{
       const g = id=>m2.el.querySelector(id).value.trim();
       const msg = m2.el.querySelector("#rMsg");
       const fail = t=>{ msg.style.display="block"; msg.textContent=t; };
+      const saveBtn = m2.el.querySelector("#rSave");
+      msg.style.display="none";
       if(!g("#rTitle")) return fail("العنوان إلزامي");
-      if(!/^https?:\/\//i.test(g("#rUrl"))) return fail("الرابط يجب أن يبدأ بـ https://");
+      const fileMode = isFileMode();
+      const pickedFile = fileMode ? m2.el.querySelector("#rFile").files[0] : null;
+      if(fileMode){
+        if(!pickedFile) return fail("اختر ملفًا للرفع");
+        if(pickedFile.size > 50*1024*1024) return fail("حجم الملف أكبر من 50MB (حد تيليجرام). استخدم رابطًا بدلًا منه.");
+      }else if(!/^https?:\/\//i.test(g("#rUrl"))) return fail("الرابط يجب أن يبدأ بـ https://");
       const dur = g("#rDur") ? Number(g("#rDur")) : null;
       if(dur!==null && !(dur>=1 && dur<=1000)) return fail("المدة بين 1 و1000 دقيقة");
+      let finalUrl = fileMode ? "" : g("#rUrl");
+      if(fileMode){
+        saveBtn.disabled = true; const oldLabel = saveBtn.textContent; saveBtn.textContent = "جارِ الرفع إلى تيليجرام…";
+        try{
+          finalUrl = await uploadToTelegram(pickedFile, {kind: ad.fileCtx.kind, ref_id: ad.fileCtx.id, role: g("#rRole"), title: g("#rTitle"), publisher: g("#rPub"), language: RP_LANG_LABEL[g("#rLang")]||""});
+        }catch(e){ saveBtn.disabled = false; saveBtn.textContent = oldLabel; return fail(e.message); }
+        saveBtn.disabled = false; saveBtn.textContent = oldLabel;
+      }
       const payload = {
-        type: g("#rType"), title: g("#rTitle"), url: g("#rUrl"), publisher: g("#rPub")||null,
+        type: g("#rType"), title: g("#rTitle"), url: finalUrl, publisher: g("#rPub")||null,
         language: g("#rLang"), duration_minutes: dur,
         start_at: ad.hasStart && g("#rStart") ? Number(g("#rStart")) : null
       };

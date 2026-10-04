@@ -287,3 +287,9 @@ th,td{overflow-wrap:anywhere}
 .fcError{padding:20px;text-align:center;font-size:13px;color:var(--ink60)}
 @keyframes fcShimmer{from{background-position:200% 0}to{background-position:-200% 0}}
 @media (prefers-reduced-motion:reduce){.fcPreviewWrap,.fcPreviewWrap.open{transition:none}.fcPreview.loading{animation:none}}
+
+/* نافذة التأكيد (Admin.confirmDialog) */
+.confirmDialog{max-width:360px;text-align:start}
+.confirmDialog p{color:var(--ink60);font-size:13.5px;line-height:1.6;margin:8px 0 0}
+.confirmDialog .confirmActions{display:flex;gap:8px;margin-top:20px}
+.confirmDialog .confirmActions .btn{flex:1;padding:11px 13px}

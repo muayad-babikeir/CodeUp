@@ -366,6 +366,27 @@ const Admin = {
     }
   },
 
+  // نافذة تأكيد (كانت مفقودة من لوحة الإدارة، فكانت كل أزرار الحذف تفشل بصمت). ترجع Promise<boolean>.
+  confirmDialog({title, message, confirmLabel="تأكيد", cancelLabel="إلغاء", danger=false}){
+    return new Promise(resolve=>{
+      const esc = CodeUp.escapeHtml;
+      const bg=document.createElement("div");bg.className="modalBg";
+      bg.innerHTML=`<div class="modal confirmDialog">
+        <h3>${esc(title||"")}</h3>
+        ${message?`<p style="white-space:pre-line">${esc(message)}</p>`:""}
+        <div class="confirmActions">
+          <button class="btn" id="cdCancel">${esc(cancelLabel)}</button>
+          <button class="btn ${danger?"danger":"dark"}" id="cdConfirm">${esc(confirmLabel)}</button>
+        </div>
+      </div>`;
+      document.body.appendChild(bg);
+      const finish = r=>{ bg.remove(); resolve(r); };
+      bg.addEventListener("click", e=>{ if(e.target===bg) finish(false); });
+      bg.querySelector("#cdCancel").onclick = ()=>finish(false);
+      bg.querySelector("#cdConfirm").onclick = ()=>finish(true);
+    });
+  },
+
   modal(innerHtml){
     const bg=document.createElement("div");bg.className="modalBg";
     bg.innerHTML=`<div class="modal">${innerHtml}</div>`;
