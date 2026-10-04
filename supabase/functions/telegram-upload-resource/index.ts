@@ -90,7 +90,10 @@ Deno.serve(async (req: Request) => {
     const { data: dests } = await db.from("archive_destinations").select("id, telegram_chat_id, university_id").eq("is_active", true);
     const dest = (dests || []).find((d) => universityId && d.university_id === universityId) || (dests || []).find((d) => d.university_id === null);
     if (!dest) return json({ error: "no active archive destination" }, 500);
-    const { data: topic } = await db.from("archive_topics").select("telegram_thread_id").eq("destination_id", dest.id).eq("topic_key", "materials").maybeSingle();
+    // مواد الجامعة => موضوع UNIVERSITY، مصادر الدروس => MATERIALS (وإن لم يوجد UNIVERSITY نرجع لـ MATERIALS)
+    const wantedKey = kind === "subject" ? "university" : "materials";
+    const { data: topics } = await db.from("archive_topics").select("topic_key, telegram_thread_id").eq("destination_id", dest.id).in("topic_key", [wantedKey, "materials"]);
+    const topic = (topics || []).find((t) => t.topic_key === wantedKey) || (topics || []).find((t) => t.topic_key === "materials");
     const threadId: number | null = topic?.telegram_thread_id ?? null;
 
     // ---------- تنزيل الملف المؤقت وإرساله ----------
@@ -129,7 +132,11 @@ Deno.serve(async (req: Request) => {
     const link = threadId
       ? `https://t.me/c/${chatPart}/${threadId}/${messageId}`
       : `https://t.me/c/${chatPart}/${messageId}`;
-    return json({ ok: true, url: link, message_id: messageId });
+    // تسجيل الرسالة لتُحذف تلقائيًا من تيليجرام عند حذف المصدر من الموقع (لا يُحذف إلا ما رفعناه هنا)
+    const { error: trackErr } = await db.from("telegram_resource_files").upsert({
+      url: link, chat_id: Number(dest.telegram_chat_id), thread_id: threadId, message_id: messageId, created_by: uid,
+    });
+    return json({ ok: true, url: link, message_id: messageId, tracked: !trackErr });
   } catch (e) {
     return json({ error: String((e as Error)?.message || e) }, 500);
   }

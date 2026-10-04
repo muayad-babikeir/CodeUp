@@ -366,6 +366,17 @@ const Admin = {
     }
   },
 
+  // يطلب من الخادم حذف رسائل تيليجرام لمصادر حُذفت للتو (القاعدة سجّلتها بقائمة انتظار). فاشل = لا مشكلة، pg_cron يعيدها كل 5 دقائق.
+  async kickTelegramCleanup(){
+    try{
+      const { data } = await db.auth.getSession();
+      const token = data?.session?.access_token; if(!token) return;
+      const c = new AbortController(); const t = setTimeout(()=>c.abort(), 8000);
+      await fetch(`${SUPABASE_URL}/functions/v1/telegram-resource-cleanup`, {method:"POST", headers:{"Content-Type":"application/json","Authorization":`Bearer ${token}`}, body:"{}", signal:c.signal}).catch(()=>{});
+      clearTimeout(t);
+    }catch(_){}
+  },
+
   // نافذة تأكيد (كانت مفقودة من لوحة الإدارة، فكانت كل أزرار الحذف تفشل بصمت). ترجع Promise<boolean>.
   confirmDialog({title, message, confirmLabel="تأكيد", cancelLabel="إلغاء", danger=false}){
     return new Promise(resolve=>{

@@ -74,7 +74,7 @@ async function renderResourcePanel(box, ad){
   box.querySelectorAll("[data-rdel]").forEach(b=>{
     b.onclick = async ()=>{
       if(!confirm("إزالة هذا المصدر؟")) return;
-      try{ await ad.remove(byId[b.dataset.rdel]); reload(); }
+      try{ await ad.remove(byId[b.dataset.rdel]); Admin.kickTelegramCleanup(); reload(); }
       catch(e){ CodeUp.toast(e.message,"error"); }
     };
   });
@@ -167,7 +167,7 @@ async function renderResourcePanel(box, ad){
           if(role==="recommended") await ad.demoteRecommended(null);
           await ad.create(payload, role, rows.filter(y=>y.role===role).length);
         }
-        CodeUp.toast(edit?"تم حفظ التعديل":"تمت إضافة المصدر","success"); m2.close(); reload();
+        CodeUp.toast(edit?"تم حفظ التعديل":"تمت إضافة المصدر","success"); if(edit) Admin.kickTelegramCleanup(); m2.close(); reload();
       }catch(e){ fail(e.message); }
     };
   }

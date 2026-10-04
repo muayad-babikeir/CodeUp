@@ -177,6 +177,7 @@ async function renderSemesters(body){
       if(!await Admin.confirmDialog({title:"حذف الفصل الدراسي", message:"سيُحذف بكل مواده وروابطه. لا يمكن التراجع.", confirmLabel:"حذف نهائيًا", danger:true})) return;
       const { error } = await db.from("university_semesters").delete().eq("id", b.dataset.del);
       if(error){ CodeUp.toast(error.message, "error"); return; }
+      Admin.kickTelegramCleanup();
       renderSemesters(body);
     };
   });
@@ -247,6 +248,7 @@ async function renderSubjects(body, semester){
       if(!await Admin.confirmDialog({title:"حذف المادة", message:"سيُحذف بكل روابطه. لا يمكن التراجع.", confirmLabel:"حذف نهائيًا", danger:true})) return;
       const { error } = await db.from("university_subjects").delete().eq("id", b.dataset.del);
       if(error){ CodeUp.toast(error.message, "error"); return; }
+      Admin.kickTelegramCleanup();
       renderSubjects(body, semester);
     };
   });

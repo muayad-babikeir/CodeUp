@@ -220,6 +220,7 @@ Admin.sections.settings = {
 
           await db.rpc("delete_course_permanently", {p_course_id: course.id, p_confirm_name: typed}).throwOnError();
           CodeUp.toast("تم حذف الكورس نهائيًا", "success");
+          await Admin.kickTelegramCleanup();
           m.close();
           location.reload();
         }catch(e){ CodeUp.toast(e.message||"فشل الحذف — تأكد من الاسم", "error"); btn.disabled = false; }
