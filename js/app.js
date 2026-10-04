@@ -2647,48 +2647,109 @@ const App = {
       }
       // جامعة واحدة فقط حاليًا → تخطَّ قائمة الاختيار مباشرة لمحتواها (خطوة أقل بدون فائدة)
       if(universities.length === 1){
-        await showSemesters(universities[0], true);
+        await showPrograms(universities[0], true);
         return;
       }
       body.innerHTML = `<div class="sectionHead"><h3 class="eyebrow">University</h3></div><div class="grid">` +
         universities.map(u=>`<div class="courseCard" data-university="${u.id}"><h3>${CodeUp.escapeHtml(u.name)}</h3></div>`).join("") +
         `</div>`;
       body.querySelectorAll("[data-university]").forEach(el=>{
-        el.onclick = ()=> showSemesters(universities.find(u=>u.id===el.dataset.university), universities.length===1);
+        el.onclick = ()=> showPrograms(universities.find(u=>u.id===el.dataset.university), universities.length===1);
       });
+    };
+
+    // الجامعة ← البرنامج ← السنة ← السمستر ← المادة. أي مستوى فيه عنصر واحد فقط يُتخطّى تلقائيًا (كما تفعل الجامعة).
+    const ctx = { program: null, year: null, onlyProgram: false, onlyYear: false };
+    const esc = CodeUp.escapeHtml;
+    const yearTitle = y => y.title || `Year ${y.year_number}`;
+    const backBtn = (label, id)=> `<button class="btn" id="${id}" style="margin-bottom:10px"><span class="inlineBtnIcon">${Icon("arrow_right")}</span> ${label}</button>`;
+    const loadErr = (msg, retry)=>{
+      body.innerHTML = `<div class="emptyState">${msg} <button class="btn" id="uniRetryBtn">إعادة المحاولة</button></div>`;
+      const r = document.getElementById("uniRetryBtn"); if(r) r.onclick = retry;
+    };
+    // أين يرجع المستخدم من قائمة السنوات / السمسترات
+    const backFromYears = (university, isOnlyUniversity)=> ctx.onlyProgram
+      ? (isOnlyUniversity ? null : {label:"رجوع للجامعات", fn: showUniversities})
+      : {label:"رجوع للبرامج", fn: ()=>showPrograms(university, isOnlyUniversity)};
+    const backFromSemesters = (university, isOnlyUniversity)=> ctx.onlyYear
+      ? backFromYears(university, isOnlyUniversity)
+      : {label:"رجوع للسنوات", fn: ()=>showYears(university, ctx.program, isOnlyUniversity)};
+    const renderBack = (target)=>{
+      if(!target) return "";
+      return backBtn(target.label, "uniBackBtn");
+    };
+    const wireBack = (target)=>{ if(target){ const el = document.getElementById("uniBackBtn"); if(el) el.onclick = target.fn; } };
+
+    const showPrograms = async (university, isOnlyUniversity)=>{
+      body.innerHTML = `${loadingHtml()}`;
+      const res = await db.from("university_programs").select("*").eq("university_id", university.id).order("order_index").order("created_at");
+      if(res.error) return loadErr("تعذّر تحميل البرامج الدراسية.", ()=>showPrograms(university, isOnlyUniversity));
+      const programs = res.data || [];
+      const back = isOnlyUniversity ? null : {label:"رجوع للجامعات", fn: showUniversities};
+      if(!programs.length){
+        body.innerHTML = renderBack(back) + `<div class="emptyState">لا توجد برامج دراسية مضافة بعد.</div>`;
+        wireBack(back); return;
+      }
+      if(programs.length === 1){ ctx.program = programs[0]; ctx.onlyProgram = true; return showYears(university, programs[0], isOnlyUniversity); }
+      ctx.onlyProgram = false;
+      body.innerHTML = renderBack(back) +
+        `<div class="sectionHead"><h3 class="eyebrow">${isOnlyUniversity?"البرامج الدراسية":esc(university.name)}</h3></div><div class="grid">` +
+        programs.map(pr=>`<div class="courseCard" data-program="${pr.id}"><h3>${esc(pr.name)}</h3></div>`).join("") + `</div>`;
+      body.querySelectorAll("[data-program]").forEach(el=>{
+        el.onclick = ()=>{ ctx.program = programs.find(x=>x.id===el.dataset.program); showYears(university, ctx.program, isOnlyUniversity); };
+      });
+      wireBack(back);
+    };
+
+    const showYears = async (university, program, isOnlyUniversity)=>{
+      ctx.program = program;
+      body.innerHTML = `${loadingHtml()}`;
+      const res = await db.from("university_years").select("*").eq("program_id", program.id).order("year_number");
+      if(res.error) return loadErr("تعذّر تحميل السنوات الدراسية.", ()=>showYears(university, program, isOnlyUniversity));
+      const years = res.data || [];
+      const back = backFromYears(university, isOnlyUniversity);
+      if(!years.length){
+        body.innerHTML = renderBack(back) + `<div class="emptyState">لا توجد سنوات دراسية مضافة بعد.</div>`;
+        wireBack(back); return;
+      }
+      if(years.length === 1){ ctx.year = years[0]; ctx.onlyYear = true; return showSemesters(university, isOnlyUniversity); }
+      ctx.onlyYear = false;
+      body.innerHTML = renderBack(back) +
+        `<div class="sectionHead"><h3 class="eyebrow">${esc(program.name)}</h3></div><div class="grid">` +
+        years.map(y=>`<div class="courseCard" data-year="${y.id}"><h3>${esc(yearTitle(y))}</h3></div>`).join("") + `</div>`;
+      body.querySelectorAll("[data-year]").forEach(el=>{
+        el.onclick = ()=>{ ctx.year = years.find(x=>x.id===el.dataset.year); showSemesters(university, isOnlyUniversity); };
+      });
+      wireBack(back);
     };
 
     const showSemesters = async (university, isOnlyUniversity)=>{
       body.innerHTML = `${loadingHtml()}`;
-      const CACHE_TTL = 60000; // نفس منطق كاش الكورسات — فصول الجامعة تتغيّر نادرًا (إدارة فقط)
-      const cacheKey = "_universitySemestersCache_" + university.id;
+      const CACHE_TTL = 60000; // فصول الجامعة تتغيّر نادرًا (إدارة فقط)
+      const cacheKey = "_universitySemestersCache_" + ctx.year.id;
       let semesters;
       if(this[cacheKey] && (Date.now() - this[cacheKey].at) < CACHE_TTL){
         semesters = this[cacheKey].data;
       }else{
-        const res = await db.from("university_semesters").select("*").eq("university_id", university.id).order("order_index");
-        if(res.error){
-          body.innerHTML = `<div class="emptyState">تعذّر تحميل الفصول الدراسية. <button class="btn" id="semRetryBtn">إعادة المحاولة</button></div>`;
-          const retryBtn = document.getElementById("semRetryBtn");
-          if(retryBtn) retryBtn.onclick = ()=> showSemesters(university, isOnlyUniversity);
-          return;
-        }
+        const res = await db.from("university_semesters").select("*").eq("year_id", ctx.year.id).order("semester_number");
+        if(res.error) return loadErr("تعذّر تحميل الفصول الدراسية.", ()=>showSemesters(university, isOnlyUniversity));
         semesters = res.data;
         this[cacheKey] = {data: semesters, at: Date.now()};
       }
-      const backRow = isOnlyUniversity ? "" : `<button class="btn" id="uniBackToUniversities" style="margin-bottom:10px"><span class="inlineBtnIcon">${Icon("arrow_right")}</span> رجوع للجامعات</button>`;
+      const back = backFromSemesters(university, isOnlyUniversity);
       if(!semesters || !semesters.length){
-        body.innerHTML = backRow + `<div class="emptyState">لا توجد فصول دراسية مضافة بعد.</div>`;
+        body.innerHTML = renderBack(back) + `<div class="emptyState">لا توجد فصول دراسية مضافة بعد.</div>`;
       }else{
-        body.innerHTML = backRow +
-          `<div class="sectionHead"><h3 class="eyebrow">${isOnlyUniversity?"الفصول الدراسية":CodeUp.escapeHtml(university.name)}</h3></div><div class="grid">` +
-          semesters.map(s=>`<div class="courseCard" data-semester="${s.id}"><h3>${CodeUp.escapeHtml(s.title)}</h3></div>`).join("") +
+        const heading = [ctx.onlyProgram ? "" : ctx.program.name, ctx.onlyYear ? "" : yearTitle(ctx.year)].filter(Boolean).join(" › ") || "الفصول الدراسية";
+        body.innerHTML = renderBack(back) +
+          `<div class="sectionHead"><h3 class="eyebrow">${esc(heading)}</h3></div><div class="grid">` +
+          semesters.map(s=>`<div class="courseCard" data-semester="${s.id}"><h3>${esc(s.title)}</h3></div>`).join("") +
           `</div>`;
         body.querySelectorAll("[data-semester]").forEach(el=>{
           el.onclick = ()=> showSubjects(semesters.find(s=>s.id===el.dataset.semester), university, isOnlyUniversity);
         });
       }
-      if(!isOnlyUniversity) document.getElementById("uniBackToUniversities").onclick = showUniversities;
+      wireBack(back);
     };
 
     const showSubjects = async (semester, university, isOnlyUniversity)=>{

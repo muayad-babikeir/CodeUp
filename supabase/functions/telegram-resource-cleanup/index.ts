@@ -33,19 +33,21 @@ Deno.serve(async (req: Request) => {
     const db = createClient(url, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
     const { data: rows } = await db.from("telegram_message_cleanup")
-      .select("id, chat_id, message_id, attempts").is("processed_at", null).lt("attempts", 5).order("id").limit(30);
+      .select("id, chat_id, message_id, thread_id, attempts").is("processed_at", null).lt("attempts", 5).order("id").limit(30);
     let deleted = 0, failed = 0;
     for (const r of rows || []) {
-      const res = await fetch(`https://api.telegram.org/bot${BOT}/deleteMessage`, {
+      // message_id فارغ + thread_id => حذف موضوع Forum كامل (مادة حُذفت)، وإلا حذف رسالة واحدة
+      const isTopic = r.message_id == null;
+      const res = await fetch(`https://api.telegram.org/bot${BOT}/${isTopic ? "deleteForumTopic" : "deleteMessage"}`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chat_id: r.chat_id, message_id: r.message_id }),
+        body: JSON.stringify(isTopic ? { chat_id: r.chat_id, message_thread_id: r.thread_id } : { chat_id: r.chat_id, message_id: r.message_id }),
       });
       const j = await res.json().catch(() => ({}));
       const desc = String(j.description || res.status);
       if (j.ok) {
         await db.from("telegram_message_cleanup").update({ processed_at: new Date().toISOString(), last_error: null }).eq("id", r.id);
         deleted++;
-      } else if (/message to delete not found/i.test(desc)) {
+      } else if (/message to delete not found|topic_id_invalid|message thread not found|topic not found/i.test(desc)) {
         // محذوفة أصلًا (يدويًا) = منتهية
         await db.from("telegram_message_cleanup").update({ processed_at: new Date().toISOString(), last_error: desc }).eq("id", r.id);
         deleted++;

@@ -22,6 +22,27 @@ const ROLE_TAG: Record<string, string> = { recommended: "#مصدر_أساسي", 
 const ROLE_LABEL: Record<string, string> = { recommended: "المصدر الأساسي", alternative: "مصدر بديل", deep_dive: "تعمّق", study: "للمذاكرة" };
 const MAX_BYTES = 50 * 1024 * 1024; // حد البوت لإرسال المستندات
 
+// إنشاء (أو إيجاد) موضوع Forum للمادة داخل مجموعة السنة. أي فشل يظهر للأدمن برسالة واضحة ولا يُرسَل شيء.
+// deno-lint-ignore no-explicit-any
+async function ensureSubjectTopic(db: any, BOT: string, dest: any, subjectId: string, title: string): Promise<number> {
+  const find = async () => (await db.from("archive_topics").select("telegram_thread_id").eq("destination_id", dest.id).eq("subject_id", subjectId).maybeSingle()).data;
+  const ex = await find();
+  if (ex) return ex.telegram_thread_id;
+  const tg = (m: string, b: unknown) => fetch(`https://api.telegram.org/bot${BOT}/${m}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(b) }).then((r) => r.json());
+  const j = await tg("createForumTopic", { chat_id: String(dest.telegram_chat_id), name: (title || "Subject").slice(0, 128) });
+  if (!j.ok) throw new Error(`تعذّر إنشاء موضوع المادة في تيليجرام (${j.description || "خطأ"}). تأكد أن المجموعة مفعّل فيها «المواضيع» (Forum) وأن البوت مشرف بصلاحية إدارة المواضيع.`);
+  const thread = j.result.message_thread_id as number;
+  const { error } = await db.from("archive_topics").insert({ destination_id: dest.id, topic_key: `subject:${subjectId}`, telegram_thread_id: thread, title, subject_id: subjectId });
+  if (error) {
+    // سباق: رفعان متزامنان لنفس المادة — نحذف موضوعنا ونستخدم الذي سُجّل أولًا
+    await tg("deleteForumTopic", { chat_id: String(dest.telegram_chat_id), message_thread_id: thread });
+    const again = await find();
+    if (again) return again.telegram_thread_id;
+    throw new Error("تعذّر حفظ موضوع المادة: " + error.message);
+  }
+  return thread;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   try {
@@ -53,6 +74,8 @@ Deno.serve(async (req: Request) => {
 
     // ---------- سياق + صلاحية ----------
     let universityId: string | null = null;
+    let yearId: string | null = null;
+    let subjectTitle = "";
     const crumbs: string[] = [];   // للوسوم
     const lines: string[] = [];    // لسطور الوصف
     if (kind === "lesson") {
@@ -70,33 +93,48 @@ Deno.serve(async (req: Request) => {
       crumbs.push(lx.units?.courses?.name, lx.units?.title, lx.title);
       lines.push(`الكورس: ${lx.units?.courses?.name || ""}`, `الوحدة: ${lx.units?.title || ""}`, `الدرس: ${lx.title || ""}`);
     } else {
-      const { data: s } = await db.from("university_subjects").select("title, university_semesters(title, university_id, universities(name))").eq("id", ref_id).single();
+      const { data: s } = await db.from("university_subjects").select("title, university_semesters(title, university_id, year_id, universities(name), university_years(year_number, title, university_programs(name)))").eq("id", ref_id).single();
       // deno-lint-ignore no-explicit-any
       const sx = s as any;
       if (!sx) return json({ error: "subject not found" }, 404);
-      universityId = sx.university_semesters?.university_id ?? null;
+      const sem = sx.university_semesters;
+      universityId = sem?.university_id ?? null;
+      yearId = sem?.year_id ?? null;
+      subjectTitle = sx.title || "";
       const [{ data: sa }, { data: ua }] = await Promise.all([
         db.rpc("is_super_admin", { uid }),
         universityId ? db.rpc("is_university_admin", { uid, univ_id: universityId }) : Promise.resolve({ data: false }),
       ]);
       if (!(sa || ua)) return json({ error: "forbidden" }, 403);
-      crumbs.push(sx.university_semesters?.universities?.name, sx.university_semesters?.title, sx.title);
-      lines.push(`الجامعة: ${sx.university_semesters?.universities?.name || ""}`, `الفصل: ${sx.university_semesters?.title || ""}`, `المادة: ${sx.title || ""}`);
+      const yr = sem?.university_years;
+      const progName = yr?.university_programs?.name;
+      const yearLabel = yr ? (yr.title || `Year ${yr.year_number}`) : "";
+      crumbs.push(sem?.universities?.name, progName, yearLabel, sem?.title, sx.title);
+      lines.push(`الجامعة: ${sem?.universities?.name || ""}`, `البرنامج: ${progName || ""}`, `السنة: ${yearLabel}`, `الفصل: ${sem?.title || ""}`, `المادة: ${sx.title || ""}`);
     }
 
-    // ---------- الوجهة: مجموعة الأرشفة + موضوع MATERIALS ----------
     const BOT = Deno.env.get("TELEGRAM_BOT_TOKEN");
     if (!BOT) return json({ error: "telegram not configured" }, 500);
-    const { data: dests } = await db.from("archive_destinations").select("id, telegram_chat_id, university_id").eq("is_active", true);
-    const dest = (dests || []).find((d) => universityId && d.university_id === universityId) || (dests || []).find((d) => d.university_id === null);
+    const { data: dests } = await db.from("archive_destinations").select("id, telegram_chat_id, university_id, year_id").eq("is_active", true);
+    // الأولوية: مجموعة سنة المادة ← مجموعة الجامعة ← المجموعة العامة (كلها بيانات في القاعدة تُدار من لوحة التحكم)
+    const yearDest = kind === "subject" && yearId ? (dests || []).find((d) => d.year_id === yearId) : null;
+    const dest = yearDest
+      || (dests || []).find((d) => universityId && d.university_id === universityId && !d.year_id)
+      || (dests || []).find((d) => d.university_id === null && !d.year_id);
     if (!dest) return json({ error: "no active archive destination" }, 500);
-    // مواد الجامعة => موضوع UNIVERSITY، مصادر الدروس => MATERIALS (وإن لم يوجد UNIVERSITY نرجع لـ MATERIALS)
-    const wantedKey = kind === "subject" ? "university" : "materials";
-    const { data: topics } = await db.from("archive_topics").select("topic_key, telegram_thread_id").eq("destination_id", dest.id).in("topic_key", [wantedKey, "materials"]);
-    const topic = (topics || []).find((t) => t.topic_key === wantedKey) || (topics || []).find((t) => t.topic_key === "materials");
-    const threadId: number | null = topic?.telegram_thread_id ?? null;
 
-    // ---------- تنزيل الملف المؤقت وإرساله ----------
+    let threadId: number | null = null;
+    if (yearDest) {
+      // موضوع تلقائي لكل مادة داخل مجموعة سنتها (يُنشأ عند أول رفع ثم يُعاد استخدامه)
+      threadId = await ensureSubjectTopic(db, BOT, dest, ref_id, subjectTitle);
+    } else {
+      // بلا مجموعة سنة: مواد الجامعة => موضوع UNIVERSITY، مصادر الدروس => MATERIALS (احتياطي إلى MATERIALS)
+      const wantedKey = kind === "subject" ? "university" : "materials";
+      const { data: topics } = await db.from("archive_topics").select("topic_key, telegram_thread_id").eq("destination_id", dest.id).in("topic_key", [wantedKey, "materials"]);
+      const topic = (topics || []).find((t) => t.topic_key === wantedKey) || (topics || []).find((t) => t.topic_key === "materials");
+      threadId = topic?.telegram_thread_id ?? null;
+    }
+
     const { data: blob, error: dlErr } = await db.storage.from("submissions").download(storage_path);
     if (dlErr || !blob) return json({ error: "temp file not found: " + (dlErr?.message || "") }, 404);
     if (blob.size > MAX_BYTES) return json({ error: "file larger than 50MB" }, 413);
