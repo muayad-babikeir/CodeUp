@@ -93,7 +93,8 @@ async function renderResourcePanel(box, ad){
       ${ad.fileCtx?`<label>طريقة الإضافة</label><select id="rMode"><option value="link">رابط</option><option value="file">رفع ملف (يُرسل إلى تيليجرام)</option></select>`:""}
       <div id="rLinkBox"><label>الرابط</label><input id="rUrl" dir="ltr" placeholder="https://..." value="${esc(row?.url||"")}"></div>
       <div id="rFileBox" style="display:none"><label>الملف</label><input id="rFile" type="file">
-        <div class="small" style="margin-top:6px">يُرسل تلقائيًا إلى موضوع MATERIALS في مجموعة CodeUp Archive بوسوم (الكورس/الوحدة/الدرس/القسم) ثم يُحذف من تخزين الموقع، ويُحفظ رابط الرسالة كرابط للمصدر. الحد الأقصى 50MB.</div></div>
+        ${ad.fileCtx?.kind==="subject"?`<label>القسم داخل تيليجرام (اختياري)</label><input id="rSection" placeholder="مثال: Functions — يُرقَّم تلقائيًا E01, E02… داخل كل قسم (الافتراضي: عنوان المصدر)">`:""}
+        <div class="small" style="margin-top:6px">يُرسل تلقائيًا إلى تيليجرام ثم يُحذف من تخزين الموقع، ويُحفظ رابط رسالته كرابط للمصدر. لمواد الجامعة بمجموعة سنة: يُرسل كفاصل ثم «القسم | رقم» ثم الملف (فيديو/صورة/ملف) ويتحدّث الفهرس المثبّت تلقائيًا. الحد الأقصى 50MB.</div></div>
       <label>الناشر / القناة (اختياري)</label><input id="rPub" value="${esc(row?.publisher||"")}">
       <label>اللغة</label><select id="rLang">${opt(RP_LANG_LABEL, row?.language||"ar")}</select>
       <label>المدة بالدقائق (اختياري)</label><input id="rDur" type="number" min="1" max="1000" value="${row?.duration_minutes??""}">
@@ -149,7 +150,7 @@ async function renderResourcePanel(box, ad){
       if(fileMode){
         saveBtn.disabled = true; const oldLabel = saveBtn.textContent; saveBtn.textContent = "جارِ الرفع إلى تيليجرام…";
         try{
-          finalUrl = await uploadToTelegram(pickedFile, {kind: ad.fileCtx.kind, ref_id: ad.fileCtx.id, role: g("#rRole"), title: g("#rTitle"), publisher: g("#rPub"), language: RP_LANG_LABEL[g("#rLang")]||""});
+          finalUrl = await uploadToTelegram(pickedFile, {kind: ad.fileCtx.kind, ref_id: ad.fileCtx.id, role: g("#rRole"), title: g("#rTitle"), publisher: g("#rPub"), language: RP_LANG_LABEL[g("#rLang")]||"", section: m2.el.querySelector("#rSection")?.value.trim()||""});
         }catch(e){ saveBtn.disabled = false; saveBtn.textContent = oldLabel; return fail(e.message); }
         saveBtn.disabled = false; saveBtn.textContent = oldLabel;
       }
