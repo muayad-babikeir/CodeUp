@@ -681,6 +681,102 @@ body:has(.modalBg){overflow:hidden}
   .sectionHead{margin:22px 0 10px}
 }
 </style>
+<style id="profilePolishV1">
+/* ===== نص طويل: حل عام — يلتف أو يُقتطع داخل الـCard ولا يخرج منه (لا Horizontal Overflow) ===== */
+html{overflow-x:clip}
+body{overflow-wrap:anywhere}
+img,video,iframe,canvas,svg{max-width:100%}
+input,select,textarea{max-width:100%;min-width:0}
+pre,code{white-space:pre-wrap;overflow-wrap:anywhere}
+.grid>*,.row>*,.card2,.courseCard,.timelinePost,.box,.fileCard,.lessonMain,.apSection{min-width:0}
+.btn,.tag,.pill,.apBadge,.chip{overflow-wrap:normal}
+.apBadge,.tag{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ellipsis{display:block;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.clamp2,.clamp3{display:-webkit-box;-webkit-box-orient:vertical;overflow:hidden;min-width:0}
+.clamp2{-webkit-line-clamp:2;line-clamp:2}.clamp3{-webkit-line-clamp:3;line-clamp:3}
+.isTruncated{cursor:pointer}
+.ellipsis.expanded,.fileCardInfo b.expanded,.metaTextCol b.expanded,.clamp2.expanded,.clamp3.expanded{white-space:normal;overflow:visible;text-overflow:clip;display:block;-webkit-line-clamp:unset;line-clamp:unset}
+.apStat b{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* ===== أفاتار دائري في كل مكان ===== */
+.metaAvatar{border-radius:50%;object-fit:cover;flex-shrink:0;aspect-ratio:1/1}
+div.metaAvatar{background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700}
+
+/* ===== معاينة الملف: زر أيقونة داخل صف الرأس + منطقة تنطوي بسلاسة (بدون تغطية المحتوى) ===== */
+.fileCard.previewable{display:block;padding:0;overflow:hidden}
+.fileCardRow{display:flex;align-items:center;gap:10px;padding:10px 12px}
+.fcToggle{flex:none;width:36px;height:36px;display:inline-grid;place-items:center;border:1px solid var(--line);background:rgba(255,255,255,.03);color:var(--ink60);border-radius:10px;cursor:pointer;transition:background .15s,color .15s,border-color .15s}
+.fcToggle svg{width:18px;height:18px}
+.fcToggle:hover{color:var(--ink);border-color:var(--line-strong)}
+.fcToggle[aria-expanded="true"]{color:var(--accent);background:rgba(29,155,240,.12);border-color:rgba(29,155,240,.4)}
+.fcToggle:disabled{opacity:.6;cursor:progress}
+.fcPreviewWrap{display:grid;grid-template-rows:0fr;visibility:hidden;transition:grid-template-rows .22s ease,visibility 0s .22s}
+.fcPreviewWrap.open{grid-template-rows:1fr;visibility:visible;transition:grid-template-rows .22s ease,visibility 0s 0s}
+.fcPreviewInner{min-height:0;overflow:hidden}
+.fcPreview{margin:0 12px 12px;border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.03);overflow:hidden}
+.fcPreview.loading{min-height:160px;background:linear-gradient(90deg,rgba(255,255,255,.03),rgba(255,255,255,.08),rgba(255,255,255,.03));background-size:200% 100%;animation:fcShimmer 1.2s linear infinite}
+.fcPreview img{display:block;width:100%;max-height:min(70vh,460px);object-fit:contain}
+.fcPreview iframe{display:block;width:100%;height:min(70vh,440px);border:0}
+.fcError{padding:20px;text-align:center;font-size:13px;color:var(--ink60)}
+@keyframes fcShimmer{from{background-position:200% 0}to{background-position:-200% 0}}
+@media (prefers-reduced-motion:reduce){.fcPreviewWrap,.fcPreviewWrap.open{transition:none}.fcPreview.loading{animation:none}}
+
+/* ===== الملف الشخصي ===== */
+.profHero{display:flex;align-items:center;gap:16px;margin-bottom:12px}
+.profHero .metaAvatar{width:84px;height:84px;font-size:30px;border:2px solid var(--line-strong)}
+.profId{flex:1;min-width:0}
+.profName{margin:0;font-size:20px;line-height:1.4}
+.profActions{flex:none;align-self:flex-start}
+.profChips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.chip{display:inline-flex;align-items:center;max-width:100%;padding:3px 10px;border-radius:99px;border:1px solid var(--line-strong);background:rgba(255,255,255,.04);font-size:12px;color:var(--ink)}
+.profLinks{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 12px}
+.profSection{margin-bottom:12px}
+.profSection h4{margin:0 0 10px;font-size:13.5px;color:var(--ink)}
+.profInfoRow{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:9px 0;border-top:1px solid var(--line)}
+.profInfoRow:first-of-type{border-top:0;padding-top:0}
+.profInfoRow b{font-weight:500;font-size:14px;text-align:end;min-width:0}
+.profCourses{display:flex;flex-direction:column}
+.profCourse{display:flex;align-items:center;gap:10px;width:100%;padding:11px 0;border:0;border-top:1px solid var(--line);background:none;color:inherit;font-family:inherit;text-align:start;cursor:pointer}
+.profCourse:first-child{border-top:0;padding-top:0}
+.profCourseIc{flex:none;color:var(--green);display:inline-flex}.profCourseIc svg{width:18px;height:18px}
+.profCourseName{flex:1;min-width:0;font-size:14px}
+.profAch{list-style:none;margin:0;padding:0}
+.profAch li{display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--line);font-size:14px;line-height:1.6}
+.profAch li:first-child{border-top:0;padding-top:0}
+.profAchIc{flex:none;margin-top:3px;color:var(--accent);display:inline-flex}.profAchIc svg{width:16px;height:16px}
+.profEmpty{text-align:center}
+.subCard{display:flex;flex-direction:column;gap:8px;width:100%;text-align:start;font-family:inherit;color:inherit;cursor:pointer}
+.subCard:disabled{cursor:default;opacity:.7}
+.subTop,.subBottom{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.subTop .ellipsis{flex:1}
+.subTitle{font-size:14.5px;font-weight:600;line-height:1.5}
+.subGo{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--accent)}
+.subCard .lpChev svg{width:14px;height:14px}
+@media (max-width:480px){
+  .profHero{flex-direction:column;text-align:center;gap:12px}
+  .profId .apBadges,.profId .profChips{justify-content:center}
+  .profActions{align-self:stretch}.profActions .btn{width:100%}
+}
+
+/* ===== إعدادات الحساب: نفس باليت CodeUp (أزرق/أخضر على Dark) بدل الألوان المنفصلة ===== */
+.accountPro{--ap-cosmic:var(--surface);--ap-vanilla:var(--ink);--ap-lime:var(--accent);--ap-candy:var(--ink60)}
+.apBadge{font-family:inherit}
+.apBadge.role{background:rgba(29,155,240,.12);color:var(--accent);border:1px solid rgba(29,155,240,.3)}
+.apBadge.mid{background:rgba(255,255,255,.05);color:var(--ink60);border:1px solid var(--line-strong);font-family:'IBM Plex Mono',monospace}
+.apStat{background:var(--surface);border:1px solid var(--line);border-radius:14px}
+.apSecTitle{font-family:inherit;text-transform:none;letter-spacing:0;font-size:14px;font-weight:700;color:var(--ink)}
+.apSection{padding:16px 2px}
+.apSection label{display:block;margin:12px 0 6px;font-size:12.5px;color:var(--ink60)}
+.apSection input,.apSection textarea{width:100%}
+.apAvatarRow{display:flex;align-items:center;gap:14px;margin-top:12px}
+.apAvatarBig{width:64px;height:64px;flex:none;border-radius:50%;overflow:hidden;background:var(--accent);color:#fff;display:grid;place-items:center;font-size:24px;font-weight:700;border:2px solid var(--line-strong)}
+.apAvatarBig img{width:100%;height:100%;object-fit:cover}
+.apFull{display:flex;width:100%;margin-top:10px}
+.apSaveBtn{width:100%;margin-top:16px}
+.apDanger{border-bottom:0}
+.apDanger .apSecTitle{color:var(--red)}
+.apRow span:last-child{min-width:0;text-align:end}
+</style>
 </head>
 <body>
 <div id="bootScreen" class="bootScreen">
@@ -823,7 +919,7 @@ body:has(.modalBg){overflow:hidden}
   }catch(e){ /* أي خطأ هنا — نسيب المسار الكامل تحت يتكفّل بالفallback */ }
 })();
 </script>
-<script src="js/shared.js?v=4"></script>
-<script src="js/app.js?v=10"></script>
+<script src="js/shared.js?v=5"></script>
+<script src="js/app.js?v=11"></script>
 </body>
 </html>

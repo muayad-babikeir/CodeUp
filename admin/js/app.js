@@ -29,6 +29,7 @@ const Admin = {
 
     // 2/3/4/5) Check is_platform_admin, Course Admin, Leader relationships
     this.ctx = await CodeUp.loadMyContext();
+    initOverflowHints(); // تلميح النص المقتطع (title + ضغط للفرد) على مستوى لوحة التحكم
     const isSuper = this.ctx.isPlatformAdmin;
     const courseAdminIds = this.ctx.courseAdminCourseIds;
     const leaderCourseIds = this.ctx.leaderCourseIds;

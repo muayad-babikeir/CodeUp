@@ -46,7 +46,7 @@ Admin.sections.files = {
         <div class="tableScroll"><table style="margin-top:10px"><thead><tr><th>الملف</th><th>رفعه</th><th>الحالة</th><th>موعد الحذف</th><th></th></tr></thead>
         <tbody>${(files||[]).map(f=>`
           <tr data-filerow="${f.id}">
-            <td>${CodeUp.escapeHtml(f.file_name||"—")}</td>
+            <td class="cellName"><span class="clamp2" title="${CodeUp.escapeHtml(f.file_name||"")}">${CodeUp.escapeHtml(f.file_name||"—")}</span></td>
             <td>${CodeUp.escapeHtml(f.profiles?.full_name||"")}</td>
             <td><span class="pill ${statusPillClass[f.archive_status]||''}">${statusLabelAr[f.archive_status]||f.archive_status}</span>${f.archive_error?`<div class="small" style="color:var(--red);margin-top:4px">${CodeUp.escapeHtml(f.archive_error)}</div>`:""}</td>
             <td class="mono small">${f.archive_status==='archived'?"—":(f.scheduled_delete_at?CodeUp.formatDate(f.scheduled_delete_at):"—")}</td>

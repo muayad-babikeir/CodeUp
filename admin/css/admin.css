@@ -256,3 +256,34 @@ th.sortable.sorted .sortArrow{opacity:1;color:var(--indigo)}
   .statGrid{grid-template-columns:repeat(auto-fit,minmax(140px,1fr))}
 }
 .mobileMenuBtn{display:none;margin-inline-end:8px}
+
+/* ===== نص طويل + معاينة الملف (نفس سلوك التطبيق) ===== */
+html{overflow-x:clip}
+body{overflow-wrap:anywhere}
+img,video,iframe,canvas,svg{max-width:100%}
+input,select,textarea{max-width:100%;min-width:0}
+th,td{overflow-wrap:anywhere}
+.cellName{max-width:280px}
+.btn,.pill,.tag{overflow-wrap:normal}
+.ellipsis{display:block;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.clamp2,.clamp3{display:-webkit-box;-webkit-box-orient:vertical;overflow:hidden;min-width:0}
+.clamp2{-webkit-line-clamp:2;line-clamp:2}.clamp3{-webkit-line-clamp:3;line-clamp:3}
+.isTruncated{cursor:pointer}
+.ellipsis.expanded,.fileCardInfo b.expanded,.clamp2.expanded,.clamp3.expanded{white-space:normal;overflow:visible;text-overflow:clip;display:block;-webkit-line-clamp:unset;line-clamp:unset}
+.fileCard.previewable{display:block;padding:0;overflow:hidden}
+.fileCardRow{display:flex;align-items:center;gap:10px;padding:10px 12px}
+.fcToggle{flex:none;width:34px;height:34px;display:inline-grid;place-items:center;border:1px solid var(--line);background:rgba(255,255,255,.03);color:var(--ink60);border-radius:9px;cursor:pointer;transition:background .15s,color .15s,border-color .15s}
+.fcToggle svg{width:17px;height:17px}
+.fcToggle:hover{color:var(--ink);border-color:var(--line-strong)}
+.fcToggle[aria-expanded="true"]{color:var(--indigo);background:rgba(29,155,240,.12);border-color:rgba(29,155,240,.4)}
+.fcToggle:disabled{opacity:.6;cursor:progress}
+.fcPreviewWrap{display:grid;grid-template-rows:0fr;visibility:hidden;transition:grid-template-rows .22s ease,visibility 0s .22s}
+.fcPreviewWrap.open{grid-template-rows:1fr;visibility:visible;transition:grid-template-rows .22s ease,visibility 0s 0s}
+.fcPreviewInner{min-height:0;overflow:hidden}
+.fcPreview{margin:0 12px 12px;border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.03);overflow:hidden}
+.fcPreview.loading{min-height:160px;background:linear-gradient(90deg,rgba(255,255,255,.03),rgba(255,255,255,.08),rgba(255,255,255,.03));background-size:200% 100%;animation:fcShimmer 1.2s linear infinite}
+.fcPreview img{display:block;width:100%;max-height:min(70vh,460px);object-fit:contain}
+.fcPreview iframe{display:block;width:100%;height:min(70vh,440px);border:0}
+.fcError{padding:20px;text-align:center;font-size:13px;color:var(--ink60)}
+@keyframes fcShimmer{from{background-position:200% 0}to{background-position:-200% 0}}
+@media (prefers-reduced-motion:reduce){.fcPreviewWrap,.fcPreviewWrap.open{transition:none}.fcPreview.loading{animation:none}}

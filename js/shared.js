@@ -45,7 +45,11 @@ function Icon(name){
     shopping_bag: '<path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/>',
     search: '<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
     whatsapp: '<path d="M3 21l1.65-4.95A8.5 8.5 0 1 1 8.5 19.5L3 21z" fill="none"/><path d="M8.2 8.6c.2-.5.4-.5.6-.5h.5c.17 0 .4 0 .58.44.2.5.7 1.7.75 1.85.06.14.1.3 0 .5-.1.2-.15.3-.3.46l-.4.47c-.13.14-.27.3-.12.56.15.26.68 1.13 1.47 1.83 1 .9 1.85 1.18 2.1 1.3.26.14.4.12.56-.07.16-.2.7-.8.9-1.08.2-.27.4-.22.65-.13.27.1 1.7.8 1.98.94.28.14.47.2.53.32.07.13.07.72-.17 1.4-.24.68-1.4 1.3-1.95 1.38-.5.08-1.13.11-1.83-.12-.42-.13-.96-.3-1.65-.6-2.9-1.25-4.8-4.16-4.94-4.35-.14-.2-1.17-1.56-1.17-2.98 0-1.42.75-2.1 1-2.4z"/>',
-    telegram: '<path d="M22 2L2 10l7 2.5M22 2l-4 18-8-5.5M22 2L9.5 14.5M9 12.5V18l3-3"/>'
+    telegram: '<path d="M22 2L2 10l7 2.5M22 2l-4 18-8-5.5M22 2L9.5 14.5M9 12.5V18l3-3"/>',
+    eye_off: '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>',
+    image: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>',
+    github: '<path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/>',
+    linkedin: '<path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect x="2" y="9" width="4" height="12"/><circle cx="4" cy="4" r="2"/>'
   };
   return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${paths[name]||''}</svg>`;
 }
@@ -77,10 +81,17 @@ function renderFileCard(f, bucket){
       </div>
     </div>`;
   }
-  return `<div class="fileCard" data-filecard="${f.id}">
-    <span class="tabIcon">${Icon(isImage?"eye":"file")}</span>
-    <div class="fileCardInfo"><b>${CodeUp.escapeHtml(f.file_name||"ملف")}</b><span class="small">${isImage?"صورة":isPdf?"PDF":"ملف"}${sizeLabel?" — "+sizeLabel:""}</span></div>
-    <button class="btn" data-previewfile="${f.id}" data-bucket="${bucket}" data-path="${CodeUp.escapeHtml(f.storage_path)}" data-kind="${isImage?"image":isPdf?"pdf":"other"}">معاينة</button>
+  // معاينة داخل نفس البطاقة: زر أيقونة ثابت في صف الرأس (لا يغطي المحتوى)، ومنطقة معاينة تنطوي/تنفتح تحته
+  const kind = isImage ? "image" : isPdf ? "pdf" : "other";
+  const name = CodeUp.escapeHtml(f.file_name||"ملف");
+  const inline = kind !== "other";
+  return `<div class="fileCard previewable" data-filecard="${f.id}">
+    <div class="fileCardRow">
+      <span class="tabIcon">${Icon(isImage?"image":"file")}</span>
+      <div class="fileCardInfo"><b class="fcName" title="${name}">${name}</b><span class="small">${isImage?"صورة":isPdf?"PDF":"ملف"}${sizeLabel?" — "+sizeLabel:""}</span></div>
+      <button type="button" class="fcToggle" data-previewfile="${f.id}" data-bucket="${bucket}" data-path="${CodeUp.escapeHtml(f.storage_path)}" data-kind="${kind}" aria-expanded="false" aria-label="${inline?"معاينة":"فتح الملف"}" title="${inline?"معاينة":"فتح الملف"}">${Icon(inline?"eye":"link")}</button>
+    </div>
+    ${inline?`<div class="fcPreviewWrap" aria-hidden="true"><div class="fcPreviewInner"><div class="fcPreview"></div></div></div>`:""}
   </div>`;
 }
 function wireFileCardPreviews(container){
@@ -94,30 +105,77 @@ function wireFileCardPreviews(container){
   });
 
   container.querySelectorAll("[data-previewfile]").forEach(btn=>{
+    const card = btn.closest(".fileCard");
+    const wrap = card.querySelector(".fcPreviewWrap");
+    const box = card.querySelector(".fcPreview");
+    const setOpen = open=>{
+      wrap.classList.toggle("open", open);
+      wrap.setAttribute("aria-hidden", open ? "false" : "true");
+      btn.setAttribute("aria-expanded", open ? "true" : "false");
+      const label = open ? "إخفاء المعاينة" : "معاينة";
+      btn.setAttribute("aria-label", label); btn.title = label;
+      btn.innerHTML = Icon(open ? "eye_off" : "eye");
+    };
     btn.onclick = async ()=>{
-      const card = btn.closest(".fileCard");
-      const kind = btn.dataset.kind;
-      // Toggle: لو المعاينة ظاهرة أصلًا، اخفيها بدل ما نطلب الرابط من جديد
-      const existingPreview = card.querySelector(".inlinePreview");
-      if(existingPreview){ existingPreview.remove(); btn.textContent = "معاينة"; return; }
-
-      btn.disabled = true; btn.textContent = "جارِ التحميل…";
+      // ملفات لا تُعرض داخل البطاقة (غير صورة/PDF): تُفتح في تبويب جديد
+      if(!wrap){
+        btn.disabled = true;
+        try{ window.open(await CodeUp.getSignedUrl(btn.dataset.bucket, btn.dataset.path, 3600), "_blank"); }
+        catch(e){ CodeUp.toast("تعذّر فتح الملف", "error"); }
+        btn.disabled = false; return;
+      }
+      // إخفاء/إظهار بنفس المكان: المحتوى المحمَّل يبقى في الصفحة فلا نطلب الرابط من جديد
+      if(box.dataset.loaded){ setOpen(!wrap.classList.contains("open")); return; }
+      btn.disabled = true;
+      box.classList.add("loading"); setOpen(true);
       try{
         const url = await CodeUp.getSignedUrl(btn.dataset.bucket, btn.dataset.path, 3600);
-        if(kind === "image"){
-          card.insertAdjacentHTML("beforeend", `<img class="inlinePreview" src="${url}" style="max-width:100%;border-radius:10px;margin-top:8px;display:block">`);
-          btn.textContent = "إخفاء المعاينة";
-        }else if(kind === "pdf"){
-          card.insertAdjacentHTML("beforeend", `<iframe class="inlinePreview" src="${url}" style="width:100%;height:420px;border:1px solid var(--line);border-radius:10px;margin-top:8px"></iframe>`);
-          btn.textContent = "إخفاء المعاينة";
+        if(btn.dataset.kind === "image"){
+          const img = new Image();
+          img.className = "inlinePreview"; img.alt = ""; img.decoding = "async";
+          img.onload = ()=>{ box.classList.remove("loading"); };
+          img.onerror = ()=>{ box.classList.remove("loading"); box.innerHTML = `<div class="fcError">تعذّر عرض الصورة</div>`; };
+          img.src = url; box.appendChild(img);
         }else{
-          window.open(url, "_blank");
-          btn.textContent = "معاينة";
+          const fr = document.createElement("iframe");
+          fr.className = "inlinePreview"; fr.title = "معاينة الملف";
+          fr.onload = ()=>{ box.classList.remove("loading"); };
+          fr.src = url; box.appendChild(fr);
         }
-        btn.disabled = false;
-      }catch(e){ CodeUp.toast("تعذّر تحميل الملف", "error"); btn.disabled = false; btn.textContent = "معاينة"; }
+        box.dataset.loaded = "1";
+      }catch(e){
+        box.classList.remove("loading"); setOpen(false);
+        CodeUp.toast("تعذّر تحميل الملف", "error");
+      }
+      btn.disabled = false;
     };
   });
+}
+
+// ===== تلميح النص المقتطع (حل عام لكل المنصة) =====
+// أي عنصر مقتطع بـ"…" (صنف .ellipsis لسطر واحد، أو .clamp2/.clamp3 لعدة أسطر، أو اسم ملف/اسم مستخدم)
+// يحصل تلقائيًا على title بالنص الكامل (Hover/Tooltip)، والضغط عليه في الهاتف يفرده ويطويه.
+const OVERFLOW_SELECTOR = ".ellipsis, .clamp2, .clamp3, .fileCardInfo b, .metaTextCol b";
+function markTruncated(root){
+  (root || document).querySelectorAll(OVERFLOW_SELECTOR).forEach(el=>{
+    if(el.classList.contains("expanded")) return;
+    const cut = el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1;
+    if(cut){ if(!el.title) el.title = (el.textContent || "").trim(); el.classList.add("isTruncated"); }
+    else el.classList.remove("isTruncated");
+  });
+}
+function initOverflowHints(){
+  if(window.__ovfHintsInit) return; window.__ovfHintsInit = true;
+  let raf = 0;
+  const schedule = ()=>{ cancelAnimationFrame(raf); raf = requestAnimationFrame(()=>markTruncated(document)); };
+  new MutationObserver(schedule).observe(document.body, {childList:true, subtree:true});
+  window.addEventListener("resize", schedule, {passive:true});
+  document.addEventListener("click", e=>{
+    const el = e.target.closest(OVERFLOW_SELECTOR);
+    if(!el || e.target.closest("a,button")) return;
+    if(el.classList.contains("isTruncated") || el.classList.contains("expanded")) el.classList.toggle("expanded");
+  });
+  schedule();
 }
 
 function commentComposerHtml(targetId, targetType = "submission"){
@@ -277,7 +335,7 @@ const CodeUp = (() => {
     if (!user) return null;
 
     const [{ data: profile }, { data: courseAdmins }, { data: squadLeaders }, { data: enrollments }, { data: universityAdmins }, { data: techWeekAdminRow }, { data: marketplaceSetting }, { data: techWeekSettings }] = await Promise.all([
-      db.from("profiles").select("id,full_name,avatar_url,is_super_admin,created_at").eq("id", user.id).single(),
+      db.from("profiles").select("id,full_name,avatar_url,is_super_admin,created_at,university,major,study_level,skills,achievements,github_url,linkedin_url").eq("id", user.id).single(),
       db.from("course_admins").select("course_id, role").eq("profile_id", user.id),
       db.from("squad_leaders").select("squad_id, permissions, squads(course_id, name)").eq("profile_id", user.id),
       db.from("enrollments").select("*, courses(name, slug), squads(name, emoji)").eq("profile_id", user.id),

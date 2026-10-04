@@ -344,6 +344,7 @@ const App = {
     });
     window.addEventListener("popstate", ()=> this.routeFromHash(false));
     this.initHeaderScroll();
+    initOverflowHints();
     await this.routeFromHash(false, true);
   },
 
@@ -789,15 +790,18 @@ const App = {
   async renderProfile(profileId){
     this.crumbTrail([], {title: profileId===this.ctx.user.id ? "حسابي" : "الملف الشخصي", back: ()=>this.go({name:"home", homeTab:"feed"})});
     const isMe = profileId === this.ctx.user.id;
-    const {data: profile} = await db.from("profiles").select("id,full_name,avatar_url,created_at").eq("id", profileId).single();
+    const esc = CodeUp.escapeHtml;
+    const {data: profile} = await db.from("profiles").select("id,full_name,avatar_url,created_at,university,major,study_level,skills,achievements,github_url,linkedin_url").eq("id", profileId).single();
     if(!profile){ this.root.innerHTML = `<div class="emptyState">المستخدم غير موجود.</div>`; return; }
 
-    const [{data: posts}, {data: subs}] = await Promise.all([
+    const [{data: posts}, {data: subs}, completedRes] = await Promise.all([
       db.from("posts").select("*").eq("profile_id", profileId).eq("status","published").order("created_at",{ascending:false}).limit(30),
-      db.from("submissions").select("*, assignments(title)").eq("profile_id", profileId).order("created_at",{ascending:false}).limit(30)
+      db.from("submissions").select("id,status,grade,content,created_at,assignment_id,assignments(id,title,course_id,courses(name,slug))").eq("profile_id", profileId).order("created_at",{ascending:false}).limit(30),
+      db.rpc("profile_completed_courses", {p_profile_id: profileId})
     ]);
+    const completed = completedRes && !completedRes.error ? (completedRes.data || []) : [];
 
-    // إحصائيات وdور المستخدم لصفحته الشخصية فقط — كلها من this.ctx المحمّل
+    // إحصائيات ودور المستخدم لصفحته الشخصية فقط — كلها من this.ctx المحمّل
     // مسبقًا (loadMyContext) بدون أي استعلام إضافي حساس، ومن memberships
     // (RLS بتسمح لصاحبها بس يشوفه).
     let statsHtml = "", badgesHtml = "";
@@ -817,8 +821,8 @@ const App = {
       }catch(_e){}
 
       badgesHtml = `<div class="apBadges">
-        <span class="apBadge role">${CodeUp.escapeHtml(roleLabel)}</span>
-        ${memberId?`<span class="apBadge mid">${CodeUp.escapeHtml(memberId)}</span>`:""}
+        <span class="apBadge role">${esc(roleLabel)}</span>
+        ${memberId?`<span class="apBadge mid">${esc(memberId)}</span>`:""}
       </div>`;
 
       statsHtml = `<div class="apStats">
@@ -829,19 +833,46 @@ const App = {
       </div>`;
     }
 
+    // ---- بيانات الملف الشخصي (كلها اختيارية؛ لا يظهر إلا ما هو مُدخَل) ----
+    const skills = (profile.skills||[]).filter(Boolean);
+    const achievements = (profile.achievements||[]).filter(Boolean);
+    const info = [["الجامعة", profile.university], ["التخصص", profile.major], ["المستوى الدراسي", profile.study_level]].filter(r=>r[1]);
+    const ghOk = profile.github_url && /^https:\/\/(www\.)?github\.com\/.+/i.test(profile.github_url);
+    const liOk = profile.linkedin_url && /^https:\/\/([a-z0-9-]+\.)?linkedin\.com\/.+/i.test(profile.linkedin_url);
+    const hasAny = info.length || skills.length || achievements.length || completed.length || ghOk || liOk;
+
+    const linksHtml = (ghOk || liOk) ? `<div class="profLinks">
+      ${ghOk?`<a class="btn" href="${esc(profile.github_url)}" target="_blank" rel="noopener noreferrer"><span class="inlineBtnIcon">${Icon("github")}</span>GitHub</a>`:""}
+      ${liOk?`<a class="btn" href="${esc(profile.linkedin_url)}" target="_blank" rel="noopener noreferrer"><span class="inlineBtnIcon">${Icon("linkedin")}</span>LinkedIn</a>`:""}
+    </div>` : "";
+
+    const section = (title, inner)=>`<div class="card2 profSection"><h4>${title}</h4>${inner}</div>`;
+    const sectionsHtml = [
+      info.length ? section("المعلومات الأكاديمية", info.map(([k,v])=>`<div class="profInfoRow"><span class="small">${k}</span><b>${esc(v)}</b></div>`).join("")) : "",
+      skills.length ? section("المهارات", `<div class="profChips">${skills.map(x=>`<span class="chip">${esc(x)}</span>`).join("")}</div>`) : "",
+      completed.length ? section("الكورسات المكتملة", `<div class="profCourses">${completed.map(c=>`<button type="button" class="profCourse" data-pcourse="${esc(c.course_id)}" data-pslug="${esc(c.slug||"")}"><span class="profCourseIc">${Icon("check_circle")}</span><span class="profCourseName">${esc(c.name)}</span><span class="lpChev">${LP_CHEV}</span></button>`).join("")}</div>`) : "",
+      achievements.length ? section("الشهادات والإنجازات", `<ul class="profAch">${achievements.map(x=>`<li><span class="profAchIc">${Icon("check")}</span><span>${esc(x)}</span></li>`).join("")}</ul>`) : "",
+      (isMe && !hasAny) ? `<div class="card2 profSection profEmpty"><b>أكمل ملفك الشخصي</b><p class="small" style="margin:6px 0 12px">أضف جامعتك وتخصصك ومهاراتك وروابطك ليظهر ملفك للآخرين بشكل أفضل.</p><button class="btn dark" id="profileCompleteBtn">إكمال الملف الشخصي</button></div>` : ""
+    ].join("");
+
     this.root.innerHTML = `
-      <div class="accountPro">
-        <div class="apHead">
-          ${CodeUp.avatarHtml(profile.full_name, profile.avatar_url, 64)}
-          <div>
-            <h2>${CodeUp.escapeHtml(profile.full_name||"")}</h2>
-            ${isMe?`<p class="small mono" style="margin:2px 0 0">${CodeUp.escapeHtml(this.ctx.user.email||"")}</p>`:""}
+      <div class="accountPro profilePage">
+        <div class="card2 profHero">
+          ${CodeUp.avatarHtml(profile.full_name, profile.avatar_url, 84)}
+          <div class="profId">
+            <h2 class="profName">${esc(profile.full_name||"")}</h2>
+            ${isMe?`<p class="small mono ellipsis" style="margin:2px 0 0">${esc(this.ctx.user.email||"")}</p>`:""}
             ${badgesHtml}
+            ${info.length?`<div class="profChips">${info.map(([k,v])=>`<span class="chip">${esc(v)}</span>`).join("")}</div>`:""}
           </div>
-          ${isMe?`<button class="btn" id="profileSettingsBtn" style="margin-inline-start:auto">الإعدادات</button>`
-                :`<button class="btn dark" id="profileMsgBtn" style="margin-inline-start:auto">مراسلة</button>`}
+          <div class="profActions">
+            ${isMe?`<button class="btn" id="profileSettingsBtn">الإعدادات</button>`
+                  :`<button class="btn dark" id="profileMsgBtn">مراسلة</button>`}
+          </div>
         </div>
+        ${linksHtml}
         ${statsHtml}
+        ${sectionsHtml}
         <div class="fbTabBar apTabBar">
           <button data-ptab="posts" class="active">المنشورات</button>
           <button data-ptab="submissions">التسليمات</button>
@@ -854,13 +885,18 @@ const App = {
       try{ const {data: conv} = await db.rpc("get_or_create_conversation", {p_other_user: profileId}).single(); this.go({name:"messages", conversationId: conv.id}); }
       catch(e){ CodeUp.toast(e.message,"error"); }
     };
+    const completeBtn = document.getElementById("profileCompleteBtn");
+    if(completeBtn) completeBtn.onclick = ()=> this.openAccountSettings();
+    this.root.querySelectorAll("[data-pcourse]").forEach(b=>{
+      b.onclick = ()=> this.go({name:"course", courseId:b.dataset.pcourse, courseSlug:b.dataset.pslug, tab:"learning"});
+    });
 
     const body = document.getElementById("profileBody");
     const showPosts = ()=>{
       body.innerHTML = (posts||[]).map(p=>`
         <div class="card2" data-postid="${p.id}" style="position:relative">
           ${isMe?`<button class="btn iconBtn" data-postmenu="${p.id}" aria-label="خيارات المنشور" style="position:absolute;inset-inline-end:8px;top:8px">${Icon("more_vertical")}</button>`:""}
-          <div class="body" style="padding-inline-end:${isMe?'34px':'0'}">${CodeUp.escapeHtml(p.content||"")}</div>
+          <div class="body" style="padding-inline-end:${isMe?'34px':'0'}">${esc(p.content||"")}</div>
           <span class="small mono">${CodeUp.timeAgo(p.created_at)}</span>
         </div>`).join("") || `<div class="emptyState">لا توجد منشورات بعد.</div>`;
       if(isMe){
@@ -888,13 +924,28 @@ const App = {
         });
       }
     };
+    // التسليمات: البطاقة كلها قابلة للضغط وتنقلك إلى الكورس ← تبويب الواجبات ← نفس الواجب (route موجود أصلًا)
+    const SUB_LABEL = {submitted:"مُسلَّم", late:"متأخر", reviewed:"تمت المراجعة", missing:"غير مُسلَّم"};
+    const SUB_TAG = {submitted:"pending", late:"late", reviewed:"reviewed", missing:"missing"};
     const showSubs = ()=>{
-      body.innerHTML = (subs||[]).map(s=>`
-        <div class="card2">
-          <div class="small mono">${CodeUp.escapeHtml(s.assignments?.title||"")}</div>
-          <div class="body">${CodeUp.escapeHtml(s.content||"")}</div>
-          <span class="small mono">${CodeUp.timeAgo(s.created_at)}</span>
-        </div>`).join("") || `<div class="emptyState">لا توجد تسليمات بعد.</div>`;
+      body.innerHTML = (subs||[]).map(s=>{
+        const a = s.assignments, c = a?.courses;
+        const grade = s.status==="reviewed" && s.grade!=null ? ` · ${s.grade}` : "";
+        const snippet = (s.content||"").trim();
+        return `<button type="button" class="card2 subCard" data-subnav="${s.id}" ${a?"":"disabled"}>
+          <div class="subTop"><span class="small ellipsis">${esc(c?.name||"")}</span><span class="tag ${SUB_TAG[s.status]||""}">${esc((SUB_LABEL[s.status]||s.status||"")+grade)}</span></div>
+          <b class="subTitle clamp2">${esc(a?.title||"واجب")}</b>
+          ${snippet?`<div class="small clamp2">${esc(snippet)}</div>`:""}
+          <div class="subBottom"><span class="small mono">${CodeUp.timeAgo(s.created_at)}</span>${a?`<span class="subGo">عرض في الواجب <span class="lpChev">${LP_CHEV}</span></span>`:""}</div>
+        </button>`;
+      }).join("") || `<div class="emptyState">لا توجد تسليمات بعد.</div>`;
+      body.querySelectorAll("[data-subnav]").forEach(b=>{
+        b.onclick = ()=>{
+          const s = (subs||[]).find(x=>x.id===b.dataset.subnav); const a = s?.assignments;
+          if(!a) return;
+          this.go({name:"course", courseId:a.course_id, courseSlug:a.courses?.slug, tab:"assignments", assignmentId:a.id});
+        };
+      });
     };
     showPosts();
     this.root.querySelectorAll("[data-ptab]").forEach(b=>{
@@ -906,6 +957,7 @@ const App = {
   },
 
   openAccountSettings(){
+    const prof = this.ctx.profile || {};
     const enr = this.ctx.enrollments || [];
     const roleLabel = this.ctx.isPlatformAdmin ? "سوبر أدمن"
       : (this.ctx.courseAdmins||[]).length ? "مشرف كورس"
@@ -918,32 +970,59 @@ const App = {
 
       <div class="apSection">
         <div class="apSecTitle">الملف الشخصي</div>
-        <div class="row" style="align-items:center;gap:12px;margin-top:10px">
-          <div class="topAvatarBtn" id="editAvatarPreview" style="width:56px;height:56px;font-size:20px;flex-shrink:0">
-            ${this.ctx.profile.avatar_url?`<img src="${this.ctx.profile.avatar_url}" alt="">`:`<span>${CodeUp.escapeHtml((this.ctx.profile.full_name||"؟")[0])}</span>`}
+        <div class="apAvatarRow">
+          <div class="apAvatarBig" id="editAvatarPreview">
+            ${this.ctx.profile.avatar_url?`<img src="${CodeUp.escapeHtml(this.ctx.profile.avatar_url)}" alt="">`:`<span>${CodeUp.escapeHtml((this.ctx.profile.full_name||"؟")[0])}</span>`}
           </div>
-          <div style="flex:1">
+          <div style="flex:1;min-width:0">
             <input type="file" id="avatarFileInput" accept="image/*" style="display:none">
             <button class="btn" id="changeAvatarBtn">تغيير الصورة</button>
           </div>
         </div>
-        <label style="margin-top:12px">الاسم الكامل</label>
-        <input id="editFullName" value="${CodeUp.escapeHtml(this.ctx.profile.full_name||"")}">
-        <button class="btn dark" id="saveProfileBtn" style="margin-top:10px">حفظ التعديلات</button>
+        <label>الاسم الكامل</label>
+        <input id="editFullName" maxlength="80" value="${CodeUp.escapeHtml(this.ctx.profile.full_name||"")}">
+      </div>
+
+      <div class="apSection">
+        <div class="apSecTitle">المعلومات الأكاديمية</div>
+        <label>الجامعة</label>
+        <input id="editUniversity" maxlength="120" value="${CodeUp.escapeHtml(prof.university||"")}" placeholder="مثال: جامعة أم درمان الإسلامية">
+        <label>التخصص</label>
+        <input id="editMajor" maxlength="120" value="${CodeUp.escapeHtml(prof.major||"")}" placeholder="مثال: علوم الحاسوب وتقنية المعلومات">
+        <label>المستوى الدراسي</label>
+        <input id="editStudyLevel" maxlength="40" list="studyLevelList" value="${CodeUp.escapeHtml(prof.study_level||"")}" placeholder="مثال: المستوى الأول">
+        <datalist id="studyLevelList"><option value="المستوى الأول"><option value="المستوى الثاني"><option value="المستوى الثالث"><option value="المستوى الرابع"><option value="المستوى الخامس"><option value="خريج"></datalist>
+      </div>
+
+      <div class="apSection">
+        <div class="apSecTitle">المهارات والإنجازات</div>
+        <label>المهارات <span class="small">(افصل بينها بفاصلة، حتى 20)</span></label>
+        <textarea id="editSkills" rows="2" placeholder="مثال: Python، HTML، SQL">${CodeUp.escapeHtml((prof.skills||[]).join("، "))}</textarea>
+        <label>الشهادات والإنجازات <span class="small">(كل سطر إنجاز، حتى 20)</span></label>
+        <textarea id="editAchievements" rows="4" placeholder="مثال: شهادة إتمام كورس الخوارزميات — CodeUp">${CodeUp.escapeHtml((prof.achievements||[]).join("\n"))}</textarea>
+      </div>
+
+      <div class="apSection">
+        <div class="apSecTitle">الروابط <span class="small">(اختياري)</span></div>
+        <label>GitHub</label>
+        <input id="editGithub" dir="ltr" maxlength="200" value="${CodeUp.escapeHtml(prof.github_url||"")}" placeholder="https://github.com/username">
+        <label>LinkedIn</label>
+        <input id="editLinkedin" dir="ltr" maxlength="200" value="${CodeUp.escapeHtml(prof.linkedin_url||"")}" placeholder="https://www.linkedin.com/in/username">
+        <button class="btn dark apSaveBtn" id="saveProfileBtn">حفظ التعديلات</button>
       </div>
 
       <div class="apSection">
         <div class="apSecTitle">الأمان والحساب</div>
         <div class="apRow"><span>البريد الإلكتروني</span><span class="mono small">${CodeUp.escapeHtml(this.ctx.user.email||"")}</span></div>
-        <button class="btn" id="resetPasswordBtn" style="width:100%;margin-top:10px">إعادة تعيين كلمة المرور عبر البريد</button>
-        <button class="btn" id="accountLogoutBtn" style="width:100%;margin-top:8px">تسجيل الخروج</button>
+        <button class="btn apFull" id="resetPasswordBtn">إعادة تعيين كلمة المرور عبر البريد</button>
+        <button class="btn apFull" id="accountLogoutBtn">تسجيل الخروج</button>
       </div>
 
       <div class="apSection">
         <div class="apSecTitle">عضوية CodeUp</div>
         <div class="apRow"><span>الحالة</span><span class="apBadge role">${CodeUp.escapeHtml(roleLabel)}</span></div>
         <p class="small" style="margin-top:8px">أضف بطاقة عضويتك إلى Google Wallet للوصول السريع إليها من هاتفك.</p>
-        <button class="btn dark" id="googleWalletBtn" style="width:100%;margin-top:6px;display:flex;align-items:center;justify-content:center;gap:8px">
+        <button class="btn dark apFull" id="googleWalletBtn">
           <svg id="googleWalletBtnIcon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="14" rx="3"></rect><path d="M2 10h20"></path><path d="M6 15h4"></path></svg>
           <span id="googleWalletBtnLabel">إضافة إلى Google Wallet</span>
         </button>
@@ -960,10 +1039,10 @@ const App = {
         <div class="apRow"><span>الإصدار</span><span class="mono small">1.0.0</span></div>
       </div>
 
-      <div class="apSection" style="border-color:rgba(224,49,49,.35)">
-        <div class="apSecTitle" style="color:#E03131">منطقة خطرة</div>
+      <div class="apSection apDanger">
+        <div class="apSecTitle">منطقة خطرة</div>
         <p class="small" style="margin-top:6px">حذف الحساب إجراء نهائي لا يمكن التراجع عنه — سيُحذف حسابك وكل بياناتك المرتبطة به.</p>
-        <button class="btn danger" id="deleteAccountStep1" style="margin-top:10px">حذف حسابي نهائيًا</button>
+        <button class="btn danger apFull" id="deleteAccountStep1">حذف حسابي نهائيًا</button>
       </div>
       </div>`);
     m.el.querySelector("#accountLogoutBtn").onclick = ()=>{ m.close(); App.logout(); };
@@ -996,7 +1075,7 @@ const App = {
           const { data: pub } = db.storage.from("avatars").getPublicUrl(path);
           await db.from("profiles").update({avatar_url: pub.publicUrl}).eq("id", this.ctx.user.id).throwOnError();
           this.ctx.profile.avatar_url = pub.publicUrl;
-          m.el.querySelector("#editAvatarPreview").innerHTML = `<img src="${pub.publicUrl}" alt="">`;
+          m.el.querySelector("#editAvatarPreview").innerHTML = `<img src="${CodeUp.escapeHtml(pub.publicUrl)}" alt="">`;
           this.refreshTopAvatar();
           CodeUp.toast("تم تحديث الصورة", "success");
         });
@@ -1004,15 +1083,34 @@ const App = {
     };
 
     m.el.querySelector("#saveProfileBtn").onclick = async (e)=>{
-      const newName = m.el.querySelector("#editFullName").value.trim();
+      const v = id=>m.el.querySelector(id).value.trim();
+      const newName = v("#editFullName");
       if(!newName){ CodeUp.toast("الاسم لا يمكن أن يكون فارغًا","error"); return; }
+      // المهارات: فواصل عربية/إنجليزية/أسطر، بلا تكرار، حتى 20 مهارة
+      const skills = [...new Set(v("#editSkills").split(/[,،\n]+/).map(x=>x.trim()).filter(Boolean))];
+      if(skills.length > 20){ CodeUp.toast("الحد الأقصى 20 مهارة","error"); return; }
+      if(skills.some(x=>x.length > 40)){ CodeUp.toast("اسم المهارة الواحدة حتى 40 حرفًا","error"); return; }
+      if(skills.join(",").length > 600){ CodeUp.toast("قائمة المهارات طويلة جدًا","error"); return; }
+      const achievements = v("#editAchievements").split("\n").map(x=>x.trim()).filter(Boolean);
+      if(achievements.length > 20){ CodeUp.toast("الحد الأقصى 20 إنجازًا","error"); return; }
+      if(achievements.join("\n").length > 4000){ CodeUp.toast("قائمة الإنجازات طويلة جدًا","error"); return; }
+      // الروابط اختيارية؛ نضيف https:// تلقائيًا ونتحقق من النطاق (نفس قيد القاعدة)
+      const fixUrl = x=> x && !/^https?:\/\//i.test(x) ? "https://"+x : x;
+      const github = fixUrl(v("#editGithub")), linkedin = fixUrl(v("#editLinkedin"));
+      if(github && !/^https:\/\/(www\.)?github\.com\/.+/i.test(github)){ CodeUp.toast("رابط GitHub يجب أن يكون من github.com","error"); return; }
+      if(linkedin && !/^https:\/\/([a-z0-9-]+\.)?linkedin\.com\/.+/i.test(linkedin)){ CodeUp.toast("رابط LinkedIn يجب أن يكون من linkedin.com","error"); return; }
+      const payload = {
+        full_name: newName, university: v("#editUniversity")||null, major: v("#editMajor")||null, study_level: v("#editStudyLevel")||null,
+        skills, achievements, github_url: github||null, linkedin_url: linkedin||null
+      };
       try{
         await CodeUp.withBtnLoading(e.target, async ()=>{
-          await db.from("profiles").update({full_name:newName}).eq("id", this.ctx.user.id).throwOnError();
-          this.ctx.profile.full_name = newName;
+          await db.from("profiles").update(payload).eq("id", this.ctx.user.id).throwOnError();
+          Object.assign(this.ctx.profile, payload);
           this.refreshTopAvatar();
           CodeUp.toast("تم حفظ التعديلات", "success");
         });
+        if(this.view.name==="profile") this.renderProfile(this.view.profileId);
       }catch(err){ CodeUp.toast(err.message||"تعذّر الحفظ", "error"); }
     };
 
