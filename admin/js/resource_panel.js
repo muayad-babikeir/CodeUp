@@ -90,7 +90,7 @@ async function renderResourcePanel(box, ad){
       <label>القسم في صفحة ${ad.pageName}</label><select id="rRole">${opt(RP_ROLE_LABEL, row?.role||presetRole||"alternative")}</select>
       <label>النوع</label><select id="rType">${opt(ad.types, row?.type||ad.defaultType)}</select>
       <label>العنوان</label><input id="rTitle" value="${esc(row?.title||"")}">
-      ${ad.fileCtx?`<label>طريقة الإضافة</label><select id="rMode"><option value="link">رابط</option><option value="file">رفع ملف (يُرسل إلى تيليجرام)</option></select>`:""}
+      ${ad.fileCtx?`<label>طريقة الإضافة</label><select id="rMode"><option value="link">رابط</option><option value="file">رفع ملف (يُرسل إلى تيليجرام)</option>${ad.fileCtx.kind==="subject"&&!row?`<option value="import">استيراد من تيليجرام (نسخ من مجموعة مصدر)</option>`:""}</select>`:""}
       <div id="rLinkBox"><label>الرابط</label><input id="rUrl" dir="ltr" placeholder="https://..." value="${esc(row?.url||"")}"></div>
       <div id="rFileBox" style="display:none"><label>الملف</label><input id="rFile" type="file">
         ${ad.fileCtx?.kind==="subject"?`<label>القسم داخل تيليجرام (اختياري)</label><input id="rSection" placeholder="مثال: Functions — يُرقَّم تلقائيًا E01, E02… داخل كل قسم (الافتراضي: عنوان المصدر)">`:""}
@@ -105,6 +105,7 @@ async function renderResourcePanel(box, ad){
     const modeSel = m2.el.querySelector("#rMode");
     const isFileMode = ()=>!!modeSel && modeSel.value==="file";
     if(modeSel) modeSel.onchange = ()=>{
+      if(modeSel.value==="import"){ m2.close(); openImportModal(ad.fileCtx.id, reload); return; }
       m2.el.querySelector("#rLinkBox").style.display = isFileMode() ? "none" : "";
       m2.el.querySelector("#rFileBox").style.display = isFileMode() ? "" : "none";
       const tSel = m2.el.querySelector("#rType");
@@ -171,5 +172,139 @@ async function renderResourcePanel(box, ad){
         CodeUp.toast(edit?"تم حفظ التعديل":"تمت إضافة المصدر","success"); if(edit) Admin.kickTelegramCleanup(); m2.close(); reload();
       }catch(e){ fail(e.message); }
     };
+  }
+}
+
+
+// ======================= استيراد من تيليجرام (مواد الجامعة) =======================
+// الفكرة: الصق رابط الرسالة الأولى (والأخيرة اختياريًا) من مجموعة مصدر، فينسخها الخادم إلى موضوع المادة بنفس الترتيب
+// (فاصل ← "القسم | رقم" ← الملف) ويُنشئ لكل رسالة مصدرًا مستقلًا. عند خطأ مؤقت يتوقف عند العنصر ويُستكمل من نفس المكان.
+async function importEdge(action, body){
+  const { data } = await db.auth.getSession();
+  const token = data?.session?.access_token;
+  if(!token) throw new Error("انتهت الجلسة، أعد تسجيل الدخول");
+  const r = await fetch(`${SUPABASE_URL}/functions/v1/telegram-import`, { method:"POST", headers:{"Content-Type":"application/json","Authorization":`Bearer ${token}`}, body: JSON.stringify({action, ...body}) });
+  const j = await r.json().catch(()=>({error:"رد غير صالح من الخادم"}));
+  return { ok: r.ok, status: r.status, ...j };
+}
+
+async function openImportModal(subjectId, onDone){
+  const esc = CodeUp.escapeHtml;
+  const m = Admin.modal(`<h3>استيراد من تيليجرام</h3><div id="impBody"><div class="small">جارِ التحميل…</div></div>`);
+  const box = m.el.querySelector("#impBody");
+  let pollTimer = null, closed = false;
+  const origClose = m.close;
+  m.close = ()=>{ closed = true; if(pollTimer) clearInterval(pollTimer); origClose(); };
+
+  // عملية غير مكتملة لنفس المادة؟ نعرض تقدّمها بدل النموذج
+  const { data: openJobs } = await db.from("telegram_import_jobs").select("*").eq("subject_id", subjectId).in("status", ["pending","running","paused"]).order("created_at",{ascending:false}).limit(1);
+  if(openJobs && openJobs.length) return showProgress(openJobs[0].id);
+  showForm();
+
+  function showForm(){
+    box.innerHTML = `
+      <p class="small" style="margin:0 0 10px">يعرف CodeUp الوجهة من المادة الحالية. الصق رابط رسالة (أو رابطين لنطاق) من مجموعة مصدر يكون البوت عضوًا فيها. تُنسخ الرسائل بالترتيب ولا تُحذف من المصدر.</p>
+      <label>رابط الرسالة الأولى</label><input id="impFrom" dir="ltr" placeholder="https://t.me/c/1234567890/123">
+      <label>رابط الرسالة الأخيرة (اختياري — لاستيراد نطاق)</label><input id="impTo" dir="ltr" placeholder="https://t.me/c/1234567890/140">
+      <label>القسم داخل تيليجرام (اختياري — يُرقَّم تلقائيًا E01, E02…)</label><input id="impSection" placeholder="افتراضيًا: اسم المادة">
+      <label>قسم المصدر</label>
+      <select id="impRole"><option value="alternative">مصدر بديل</option><option value="deep_dive">تعمّق</option><option value="study">للمذاكرة</option></select>
+      <label>اللغة</label>
+      <select id="impLang"><option value="">—</option><option value="ar">العربية</option><option value="en">English</option><option value="other">أخرى</option></select>
+      <div id="impMsg" class="emptyState" style="display:none;padding:8px;color:#F2555F"></div>
+      <div id="impAnalysis"></div>
+      <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
+        <button class="btn" id="impCancel">إغلاق</button><button class="btn dark" id="impAnalyze">تحليل</button>
+      </div>`;
+    box.querySelector("#impCancel").onclick = m.close;
+    box.querySelector("#impAnalyze").onclick = analyzeNow;
+  }
+  const formVals = ()=>({
+    subject_id: subjectId,
+    from_url: box.querySelector("#impFrom").value.trim(),
+    to_url: box.querySelector("#impTo").value.trim() || undefined,
+    section: box.querySelector("#impSection").value.trim(),
+    role: box.querySelector("#impRole").value,
+    language: box.querySelector("#impLang").value || undefined,
+  });
+  async function analyzeNow(){
+    const msg = box.querySelector("#impMsg"), out = box.querySelector("#impAnalysis"), btn = box.querySelector("#impAnalyze");
+    msg.style.display = "none"; out.innerHTML = "";
+    const v = formVals();
+    if(!v.from_url){ msg.style.display="block"; msg.textContent="أدخل رابط الرسالة الأولى"; return; }
+    btn.disabled = true; btn.textContent = "جارِ الفحص…";
+    let r;
+    try{ r = await importEdge("analyze", v); }catch(e){ r = {ok:false, error:e.message}; }
+    btn.disabled = false; btn.textContent = "تحليل";
+    if(!r.ok){ msg.style.display="block"; msg.textContent = r.error || "تعذّر التحليل"; return; }
+    const checks = (r.checks||[]).map(c=>`<div style="margin:3px 0">${c.ok?"✅":"❌"} ${esc(c.label)}</div>`).join("");
+    const blockers = (r.blockers||[]).map(b=>`<div style="margin:3px 0;color:#F2555F">⚠️ ${esc(b)}</div>`).join("");
+    out.innerHTML = `
+      <div class="card" style="margin-top:12px;padding:12px">
+        <div><b>المصدر:</b> ${esc(r.source.title)} <span class="small">(${esc(r.source.type)})</span></div>
+        <div><b>الرسائل:</b> ${r.range.from} → ${r.range.to} (${r.range.count} رقم)</div>
+        <div><b>الوجهة:</b> ${esc(r.destination.path)}<div class="small">مجموعة: ${esc(r.destination.group||"—")} · ${r.destination.topic_exists?"الموضوع موجود":"يُنشأ الموضوع عند البدء"}</div></div>
+        <div style="margin-top:8px">${checks}${blockers}</div>
+        <div class="small" style="margin-top:8px">لن يظهر نوع/حجم الرسائل القديمة قبل النسخ (قيد في Bot API). الرسائل التي لا تُنسخ (خدمة/محذوفة) تُتخطى تلقائيًا.</div>
+        ${r.already_imported>0?`<label style="display:flex;gap:8px;align-items:center;margin-top:10px;color:#F0B429"><input type="checkbox" id="impForce" style="width:auto"> ${r.already_imported} رسالة مستوردة بالفعل في هذه المادة. أعد استيرادها (تُنشأ نسخ جديدة)</label>`:""}
+      </div>
+      <div style="display:flex;justify-content:flex-end;margin-top:12px"><button class="btn dark" id="impStart" ${r.ok?"":"disabled"}>بدء الاستيراد (${r.range.count} رقم)</button></div>`;
+    const startBtn = out.querySelector("#impStart");
+    if(startBtn) startBtn.onclick = async ()=>{
+      const force = !!out.querySelector("#impForce")?.checked;
+      if(r.already_imported>0 && !force){ msg.style.display="block"; msg.textContent="هذه الرسائل مستوردة بالفعل. فعّل خيار إعادة الاستيراد أو غيّر النطاق."; return; }
+      startBtn.disabled = true; startBtn.textContent = "جارِ البدء…";
+      let s;
+      try{ s = await importEdge("start", {...v, force}); }catch(e){ s = {ok:false, error:e.message}; }
+      if(!s.ok){ startBtn.disabled=false; startBtn.textContent=`بدء الاستيراد (${r.range.count} رقم)`; msg.style.display="block"; msg.textContent = s.error==="already_imported" ? "هذه الرسائل مستوردة بالفعل." : (s.error||"تعذّر البدء"); return; }
+      showProgress(s.job_id);
+    };
+  }
+
+  // ---- التقدّم: نقرأ صف العملية كل ثانيتين؛ ونُبقي استدعاء run متسلسلًا ما دامت الصفحة مفتوحة (cron شبكة أمان) ----
+  async function showProgress(jobId){
+    let running = false;
+    const drive = async (action)=>{
+      if(running || closed) return; running = true;
+      try{ await importEdge(action, {job_id: jobId}); }catch(_){} finally{ running = false; }
+    };
+    const render = (job)=>{
+      const total = job.to_message_id - job.from_message_id + 1;
+      const done = Math.min(total, job.cursor_message_id - job.from_message_id);
+      const pct = total ? Math.round(done/total*100) : 0;
+      const label = {pending:"في الانتظار", running:"جارٍ النسخ…", paused:"متوقّف عند خطأ", done:"اكتمل", cancelled:"أُلغي"}[job.status] || job.status;
+      box.innerHTML = `
+        <div><b>${esc(label)}</b></div>
+        <div style="height:8px;background:var(--line);border-radius:6px;margin:10px 0;overflow:hidden"><div style="height:100%;width:${pct}%;background:var(--lime,#00BA7C)"></div></div>
+        <div class="small">تمت معالجة ${done} من ${total} · منسوخ ${job.copied} · متخطّى ${job.skipped}${job.status==="paused"?` · توقّف عند الرسالة ${job.cursor_message_id}`:""}</div>
+        ${job.last_error?`<div style="margin-top:10px;color:${job.status==="done"?"#F0B429":"#F2555F"}">${esc(job.last_error)}</div>`:""}
+        <div class="small" style="margin-top:8px">يمكنك إغلاق هذه النافذة؛ تستمر العملية في الخلفية وتعود إليها من «استيراد من تيليجرام».</div>
+        <div style="display:flex;gap:8px;margin-top:14px;justify-content:flex-end">
+          ${job.status==="paused"?`<button class="btn dark" id="impResume">استكمال</button>`:""}
+          ${["pending","running","paused"].includes(job.status)?`<button class="btn danger" id="impStop">إلغاء</button>`:""}
+          <button class="btn" id="impClose">إغلاق</button>
+        </div>`;
+      box.querySelector("#impClose").onclick = ()=>{ m.close(); if(typeof onDone==="function") onDone(); };
+      const rs = box.querySelector("#impResume"); if(rs) rs.onclick = ()=>{ rs.disabled = true; drive("resume"); };
+      const st = box.querySelector("#impStop"); if(st) st.onclick = async ()=>{
+        if(!await Admin.confirmDialog({title:"إلغاء الاستيراد", message:"يتوقف النسخ هنا. ما نُسخ يبقى في الأرشيف وفي مصادر المادة.", confirmLabel:"إلغاء الاستيراد", danger:true})) return;
+        await importEdge("cancel", {job_id: jobId});
+      };
+    };
+    let lastStatus = null;
+    const tick = async ()=>{
+      if(!document.body.contains(box)){ closed = true; if(pollTimer){ clearInterval(pollTimer); pollTimer = null; } return; }  // أُغلقت النافذة (حتى بالنقر خارجها)
+      if(closed) return;
+      const { data: job } = await db.from("telegram_import_jobs").select("*").eq("id", jobId).maybeSingle();
+      if(!job) return;
+      render(job);
+      if(job.status==="pending") drive("run");            // يستكمل الدفعة التالية ما دامت الصفحة مفتوحة
+      if(job.status==="done" && lastStatus!=="done"){ CodeUp.toast("اكتمل الاستيراد","success"); if(typeof onDone==="function") onDone(); }
+      lastStatus = job.status;
+      if(["done","cancelled"].includes(job.status) && pollTimer){ clearInterval(pollTimer); pollTimer = null; }
+    };
+    await tick();
+    drive("run");
+    pollTimer = setInterval(tick, 2000);
   }
 }

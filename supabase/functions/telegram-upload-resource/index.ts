@@ -226,6 +226,12 @@ Deno.serve(async (req: Request) => {
       || (dests || []).find((d) => d.university_id === null && !d.year_id);
     if (!dest) return json({ error: "no active archive destination" }, 500);
 
+    // استيراد غير مكتمل لنفس المادة (يعمل/متوقف) يمنع الرفع اليدوي حتى لا يتداخل مع ترتيب الموضوع
+    if (yearDest) {
+      const { count: openJobs } = await db.from("telegram_import_jobs").select("id", { count: "exact", head: true }).eq("subject_id", ref_id).in("status", ["pending", "running", "paused"]);
+      if (openJobs) return json({ error: "يوجد استيراد من تيليجرام غير مكتمل لهذه المادة. أكمله أو ألغه أولًا حتى لا يختل ترتيب الموضوع." }, 409);
+    }
+
     let threadId: number | null = null;
     let topicRow: { id: string; thread: number } | null = null;
     if (yearDest) {
