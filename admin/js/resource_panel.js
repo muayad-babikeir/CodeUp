@@ -79,7 +79,7 @@ async function renderResourcePanel(box, ad){
     };
   });
   box.querySelectorAll("[data-redit]").forEach(b=>b.onclick=()=>openResourceModal(byId[b.dataset.redit]));
-  box.querySelectorAll("[data-addrole]").forEach(b=>b.onclick=()=>openResourceModal(null, b.dataset.addrole));
+  box.querySelectorAll("[data-addrole]").forEach(b=>b.onclick=async ()=>{ if(ad.beforeAdd){ const go = await ad.beforeAdd(b.dataset.addrole); if(go===false) return; } openResourceModal(null, b.dataset.addrole); });
 
   // نافذة إضافة/تعديل مصدر (نفس النموذج للحالتين)
   function openResourceModal(row, presetRole){

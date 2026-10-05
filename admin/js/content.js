@@ -175,25 +175,62 @@ async function openLessonModal(unitId, lesson, onDone){
   `);
   m.el.querySelector("#lCancel").onclick = m.close;
   const resBox = m.el.querySelector("#lResBox");
-  if(isEdit) renderLessonResources(resBox, lesson.id);
-  else resBox.innerHTML = `<div class="small" style="margin-top:14px">احفظ الدرس أولًا ثم أضف مصادر التعلّم.</div>`;
-  m.el.querySelector("#lSave").onclick = async ()=>{
-    const msgEl = m.el.querySelector("#lMsg");
-    const payload = {
-      title: m.el.querySelector("#lTitle").value.trim(),
-      video_url: m.el.querySelector("#lVideo").value.trim() || null,
-      text_content: m.el.querySelector("#lText").value.trim() || null,
-      pdf_url: m.el.querySelector("#lPdf").value.trim() || null,
-      anki_ar_url: m.el.querySelector("#lAnkiAr").value.trim() || null,
-      anki_en_url: m.el.querySelector("#lAnkiEn").value.trim() || null,
-      order_index: Number(m.el.querySelector("#lOrder").value)||0
+  const msgEl = m.el.querySelector("#lMsg");
+  let saved = lesson || null;          // الدرس المحفوظ (يصير موجودًا فور أول إضافة مصدر)
+  let created = false, refreshed = false;
+  const readPayload = ()=>({
+    title: m.el.querySelector("#lTitle").value.trim(),
+    video_url: m.el.querySelector("#lVideo").value.trim() || null,
+    text_content: m.el.querySelector("#lText").value.trim() || null,
+    pdf_url: m.el.querySelector("#lPdf").value.trim() || null,
+    anki_ar_url: m.el.querySelector("#lAnkiAr").value.trim() || null,
+    anki_en_url: m.el.querySelector("#lAnkiEn").value.trim() || null,
+    order_index: Number(m.el.querySelector("#lOrder").value)||0
+  });
+  const showErr = t=>{ msgEl.style.display="block"; msgEl.textContent = t; };
+
+  // إن أُغلقت النافذة (بأي طريقة) بعد إنشاء درس داخلها، نحدّث قائمة المحتوى
+  const obs = new MutationObserver(()=>{
+    if(!document.body.contains(m.el)){ obs.disconnect(); if(created && !refreshed){ refreshed = true; onDone(); } }
+  });
+  obs.observe(document.body, {childList:true});
+
+  if(saved){
+    renderLessonResources(resBox, saved.id);
+  }else{
+    // درس جديد: نفس قسم المصادر ظاهر الآن. الضغط على أي «+ إضافة» يحفظ الدرس تلقائيًا (العنوان مطلوب) ثم يفتح نافذة المصدر.
+    const draft = {
+      ...lessonResourceAdapter(null),
+      load: async ()=>[],
+      beforeAdd: async (role)=>{
+        msgEl.style.display = "none";
+        const payload = readPayload();
+        if(!payload.title){ showErr("اكتب عنوان الدرس أولًا ثم أضف المصادر"); m.el.querySelector("#lTitle").focus(); return false; }
+        try{
+          const { data: row } = await db.from("lessons").insert({...payload, unit_id: unitId}).select().single().throwOnError();
+          saved = row; created = true;
+          m.el.querySelector("h3").textContent = "تعديل الدرس";
+          CodeUp.toast("تم حفظ الدرس — أضف مصادره الآن", "success");
+          await renderLessonResources(resBox, row.id);
+          const btn = resBox.querySelector(`[data-addrole="${role}"]`);
+          if(btn) btn.click();
+        }catch(e){ showErr(e.message); }
+        return false;
+      }
     };
-    if(!payload.title){ msgEl.style.display="block"; msgEl.textContent="العنوان إلزامي"; return; }
+    renderResourcePanel(resBox, draft).then(()=>{
+      resBox.insertAdjacentHTML("afterbegin", `<div class="small" style="margin-top:14px">سيُحفظ الدرس تلقائيًا عند إضافة أول مصدر.</div>`);
+    });
+  }
+
+  m.el.querySelector("#lSave").onclick = async ()=>{
+    const payload = readPayload();
+    if(!payload.title){ showErr("العنوان إلزامي"); return; }
     try{
-      if(isEdit) await db.from("lessons").update(payload).eq("id", lesson.id).throwOnError();
+      if(saved) await db.from("lessons").update(payload).eq("id", saved.id).throwOnError();
       else await db.from("lessons").insert({...payload, unit_id: unitId}).throwOnError();
-      CodeUp.toast("تم الحفظ", "success"); m.close(); onDone();
-    }catch(e){ msgEl.style.display="block"; msgEl.textContent = e.message; }
+      CodeUp.toast("تم الحفظ", "success"); refreshed = true; m.close(); onDone();
+    }catch(e){ showErr(e.message); }
   };
 }
 
