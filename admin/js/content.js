@@ -199,7 +199,7 @@ async function openLessonModal(unitId, lesson, onDone){
 
 
 // ===== مصادر التعلّم للدرس (patch_54/57) — اللوحة نفسها في resource_panel.js، وهنا فقط ربطها بجدولي resources / lesson_resources =====
-const LESSON_RESOURCE_TYPES = {youtube_video:"فيديو يوتيوب", youtube_course:"دورة يوتيوب", article:"مقال", docs:"توثيق", pdf:"PDF", website:"موقع", interactive:"تفاعلي", github:"GitHub", external_course:"دورة خارجية"};
+const LESSON_RESOURCE_TYPES = {youtube_video:"فيديو يوتيوب", youtube_course:"دورة يوتيوب", article:"مقال", docs:"توثيق", pdf:"PDF", website:"موقع", interactive:"تفاعلي", github:"GitHub", external_course:"دورة خارجية", telegram:"تيليجرام"};
 
 function lessonResourceAdapter(lessonId){
   const thr = q=>q.throwOnError();

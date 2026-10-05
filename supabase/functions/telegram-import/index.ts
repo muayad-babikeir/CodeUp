@@ -117,10 +117,10 @@ const tgCall = (BOT: string) => (m: string, b: unknown) =>
 // إنشاء (أو إيجاد) موضوع Forum للمادة داخل مجموعة السنة، مع رسالة الفهرس المثبّتة كأول رسالة فيه.
 // أي فشل يظهر للأدمن برسالة واضحة ولا يُرسَل شيء.
 // deno-lint-ignore no-explicit-any
-async function ensureSubjectTopic(db: any, BOT: string, dest: any, subjectId: string, title: string): Promise<{ id: string; thread: number }> {
+async function ensureTopic(db: any, BOT: string, dest: any, col: "subject_id" | "course_id", ownerId: string, title: string): Promise<{ id: string; thread: number }> {
   const tg = tgCall(BOT);
   const sel = "id, telegram_thread_id, index_message_id";
-  const find = async () => (await db.from("archive_topics").select(sel).eq("destination_id", dest.id).eq("subject_id", subjectId).maybeSingle()).data;
+  const find = async () => (await db.from("archive_topics").select(sel).eq("destination_id", dest.id).eq(col, ownerId).maybeSingle()).data;
   const makeIndex = async (row: { id: string; telegram_thread_id: number }) => {
     const m = await tg("sendMessage", { chat_id: String(dest.telegram_chat_id), message_thread_id: row.telegram_thread_id, text: buildIndexText([]), parse_mode: "HTML", disable_web_page_preview: true });
     if (!m.ok) return;
@@ -135,7 +135,7 @@ async function ensureSubjectTopic(db: any, BOT: string, dest: any, subjectId: st
   const j = await tg("createForumTopic", { chat_id: String(dest.telegram_chat_id), name: (title || "Subject").slice(0, 128) });
   if (!j.ok) throw new Error(`تعذّر إنشاء موضوع المادة في تيليجرام (${j.description || "خطأ"}). تأكد أن المجموعة مفعّل فيها «المواضيع» (Forum) وأن البوت مشرف بصلاحية إدارة المواضيع.`);
   const thread = j.result.message_thread_id as number;
-  const ins = await db.from("archive_topics").insert({ destination_id: dest.id, topic_key: `subject:${subjectId}`, telegram_thread_id: thread, title, subject_id: subjectId }).select(sel).single();
+  const ins = await db.from("archive_topics").insert({ destination_id: dest.id, topic_key: `${col === "subject_id" ? "subject" : "course"}:${ownerId}`, telegram_thread_id: thread, title, [col]: ownerId }).select(sel).single();
   if (ins.error) {
     // سباق: رفعان متزامنان لنفس المادة — نحذف موضوعنا ونستخدم الذي سُجّل أولًا
     await tg("deleteForumTopic", { chat_id: String(dest.telegram_chat_id), message_thread_id: thread });
@@ -159,7 +159,7 @@ function friendlyCopyError(desc: string): string {
 }
 
 type ImportJob = {
-  id: string; subject_id: string; created_by: string; source_chat_id: number; from_message_id: number; to_message_id: number;
+  id: string; subject_id: string | null; lesson_id: string | null; course_id: string | null; created_by: string; source_chat_id: number; from_message_id: number; to_message_id: number;
   section: string; role: string; language: string | null; publisher: string | null; force_reimport: boolean;
   cursor_message_id: number; copied: number; skipped: number;
 };
@@ -239,6 +239,9 @@ async function runItems(job: ImportJob, ctx: ImportCtx, io: ImportIO, budgetMs: 
 
 // ---- سياق المادة: المسار + الوجهة (مجموعة السنة النشطة) ----
 // deno-lint-ignore no-explicit-any
+function subject_missing_msg(b: { lesson_id?: string }) { return b.lesson_id ? "الدرس غير موجود" : "المادة غير موجودة"; }
+
+// deno-lint-ignore no-explicit-any
 async function loadSubject(db: any, subjectId: string) {
   const { data: s } = await db.from("university_subjects").select("id, title, university_semesters(title, university_id, year_id, universities(name), university_years(year_number, title, university_programs(name)))").eq("id", subjectId).maybeSingle();
   // deno-lint-ignore no-explicit-any
@@ -248,6 +251,7 @@ async function loadSubject(db: any, subjectId: string) {
   const yearLabel = yr ? (yr.title || `Year ${yr.year_number}`) : "";
   const { data: dests } = sem?.year_id ? await db.from("archive_destinations").select("id, title, telegram_chat_id").eq("year_id", sem.year_id).eq("is_active", true) : { data: [] };
   return {
+    kind: "subject" as const, courseId: null as string | null, topicTitle: sx.title as string,
     id: sx.id as string, title: sx.title as string, universityId: sem?.university_id as string | null, yearId: sem?.year_id as string | null,
     path: [sem?.universities?.name, yr?.university_programs?.name, yearLabel, sem?.title, sx.title].filter(Boolean).join(" › "),
     dest: (dests && dests[0]) || null,
@@ -264,12 +268,46 @@ async function canManage(db: any, uid: string, universityId: string | null) {
 }
 
 // ---- فحص الرابط/الصلاحيات/الوجهة (لا ينسخ شيئًا) ----
+
+// الدرس: الوجهة = المجموعة العامة (بلا جامعة/سنة)، وموضوع Forum واحد لكل كورس
+// deno-lint-ignore no-explicit-any
+async function loadLesson(db: any, lessonId: string) {
+  const { data: l } = await db.from("lessons").select("id, title, units(title, course_id, courses(name))").eq("id", lessonId).maybeSingle();
+  // deno-lint-ignore no-explicit-any
+  const lx = l as any;
+  if (!lx) return null;
+  const { data: dests } = await db.from("archive_destinations").select("id, title, telegram_chat_id").eq("is_active", true).is("university_id", null).is("year_id", null).limit(1);
+  const courseName = lx.units?.courses?.name || "";
+  return {
+    kind: "lesson" as const, courseId: (lx.units?.course_id ?? null) as string | null, topicTitle: courseName || "Course",
+    id: lx.id as string, title: lx.title as string, universityId: null as string | null, yearId: null as string | null,
+    path: [courseName, lx.units?.title, lx.title].filter(Boolean).join(" › "),
+    dest: (dests && dests[0]) || null,
+  };
+}
+// deno-lint-ignore no-explicit-any
+function loadTarget(db: any, ref: { subject_id?: string | null; lesson_id?: string | null }) {
+  return ref.lesson_id ? loadLesson(db, ref.lesson_id) : loadSubject(db, ref.subject_id as string);
+}
+// deno-lint-ignore no-explicit-any
+async function canManageTarget(db: any, uid: string, t: { kind: string; universityId: string | null; courseId: string | null }) {
+  if (t.kind === "subject") return canManage(db, uid, t.universityId);
+  const { data: sa } = await db.rpc("is_super_admin", { uid });
+  if (sa) return true;
+  if (!t.courseId) return false;
+  const [{ data: ca }, { data: ld }] = await Promise.all([
+    db.rpc("is_course_admin", { uid, cid: t.courseId }),
+    db.rpc("leader_has_permission", { uid, cid: t.courseId, perm: "can_add_content" }),
+  ]);
+  return !!(ca || ld);
+}
+
 // deno-lint-ignore no-explicit-any
 async function analyze(db: any, tg: (m: string, b: unknown) => Promise<any>, body: any) {
   const blockers: string[] = [];
   const checks: { ok: boolean; label: string }[] = [];
-  const subject = await loadSubject(db, body.subject_id);
-  if (!subject) return { error: "المادة غير موجودة" };
+  const subject = await loadTarget(db, body);
+  if (!subject) return { error: subject_missing_msg(body) };
   const a = parseTgLink(body.from_url);
   if (!a) return { error: "رابط الرسالة الأولى غير صالح. الشكل المدعوم: https://t.me/c/123456789/45 (أو /TOPIC/45) أو https://t.me/username/45" };
   const b = body.to_url ? parseTgLink(body.to_url) : a;
@@ -293,28 +331,28 @@ async function analyze(db: any, tg: (m: string, b: unknown) => Promise<any>, bod
   checks.push({ ok: !prot, label: "المصدر لا يمنع حفظ المحتوى" });
   if (prot) blockers.push("مجموعة المصدر عليها «تقييد حفظ المحتوى»؛ لا يمكن للبوت نسخ رسائلها. أوقفه مؤقتًا من إعدادات المجموعة.");
 
-  if (!subject.dest) blockers.push("لا توجد مجموعة تيليجرام نشطة لسنة هذه المادة. أضفها من إدارة University ← مجموعات Telegram.");
+  if (!subject.dest) blockers.push(subject.kind === "lesson" ? "لا توجد مجموعة أرشيف عامة نشطة (بلا سنة). أضفها من إدارة University ← مجموعات Telegram." : "لا توجد مجموعة تيليجرام نشطة لسنة هذه المادة. أضفها من إدارة University ← مجموعات Telegram.");
   let topicExists = false;
   if (subject.dest) {
     const dchat = await tg("getChat", { chat_id: String(subject.dest.telegram_chat_id) });
     const forumOk = dchat.ok && !!dchat.result?.is_forum;
     checks.push({ ok: forumOk, label: `مجموعة الأرشيف: ${subject.dest.title} (Forum)` });
     if (!forumOk) blockers.push("مجموعة الأرشيف غير جاهزة (المواضيع غير مفعّلة أو البوت لا يصل إليها). جرّب زر «اختبار» في مجموعات Telegram.");
-    const { data: tp } = await db.from("archive_topics").select("id").eq("destination_id", subject.dest.id).eq("subject_id", subject.id).maybeSingle();
+    const { data: tp } = await db.from("archive_topics").select("id").eq("destination_id", subject.dest.id).eq(subject.kind === "lesson" ? "course_id" : "subject_id", subject.kind === "lesson" ? subject.courseId : subject.id).maybeSingle();
     topicExists = !!tp;
   }
   if (count > MAX_RANGE) blockers.push(`النطاق كبير (${count} رسالة). الحد ${MAX_RANGE} في العملية الواحدة؛ قسّمه.`);
 
   // عملية غير مكتملة لنفس المادة تمنع غيرها (حتى لا يختل ترتيب الموضوع)
-  const { data: active } = await db.from("telegram_import_jobs").select("id, status, copied, skipped, cursor_message_id, from_message_id, to_message_id, last_error").eq("subject_id", subject.id).in("status", ["pending", "running", "paused"]).order("created_at", { ascending: false }).limit(1);
-  if (active && active.length) blockers.push("توجد عملية استيراد غير مكتملة لهذه المادة. أكملها أو ألغها أولًا.");
+  const { data: active } = await db.from("telegram_import_jobs").select("id, status, copied, skipped, cursor_message_id, from_message_id, to_message_id, last_error").eq(subject.kind === "lesson" ? "course_id" : "subject_id", subject.kind === "lesson" ? subject.courseId : subject.id).in("status", ["pending", "running", "paused"]).order("created_at", { ascending: false }).limit(1);
+  if (active && active.length) blockers.push(subject.kind === "lesson" ? "توجد عملية استيراد غير مكتملة لهذا الكورس (قد تكون لدرس آخر). أكملها أو ألغها أولًا." : "توجد عملية استيراد غير مكتملة لهذه المادة. أكملها أو ألغها أولًا.");
 
   // المستورد سابقًا (يُعدّ مستورَدًا فقط إن بقي مصدره في CodeUp)
-  const { data: prevItems } = await db.from("telegram_import_items").select("source_message_id, url").eq("source_chat_id", sourceId).eq("subject_id", subject.id).eq("status", "copied").gte("source_message_id", from).lte("source_message_id", to);
+  const { data: prevItems } = await db.from("telegram_import_items").select("source_message_id, url").eq("source_chat_id", sourceId).eq(subject.kind === "lesson" ? "lesson_id" : "subject_id", subject.id).eq("status", "copied").gte("source_message_id", from).lte("source_message_id", to);
   let already = 0;
   if (prevItems && prevItems.length) {
     const urls = prevItems.map((i: { url: string | null }) => i.url).filter(Boolean);
-    const { data: alive } = urls.length ? await db.from("university_materials").select("url").in("url", urls) : { data: [] };
+    const { data: alive } = urls.length ? await db.from(subject.kind === "lesson" ? "resources" : "university_materials").select("url").in("url", urls) : { data: [] };
     const aliveSet = new Set((alive || []).map((x: { url: string }) => x.url));
     already = prevItems.filter((i: { url: string | null }) => i.url && aliveSet.has(i.url)).length;
   }
@@ -336,11 +374,18 @@ async function runJob(db: any, BOT: string, jobId: string) {
   if (!job) return { state: "busy" as const };
   const tg = tgCall(BOT);
   const setJob = (patch: Record<string, unknown>) => db.from("telegram_import_jobs").update({ ...patch, updated_at: new Date().toISOString() }).eq("id", job.id);
-  const subject = await loadSubject(db, job.subject_id);
-  if (!subject || !subject.dest) { await setJob({ status: "paused", locked_until: null, last_error: "لا توجد مجموعة أرشيف نشطة لسنة المادة" }); return { state: "paused" as const }; }
+  const subject = await loadTarget(db, job);
+  if (!subject || !subject.dest) { await setJob({ status: "paused", locked_until: null, last_error: "لا توجد مجموعة أرشيف نشطة للوجهة" }); return { state: "paused" as const }; }
+  const isLesson = subject.kind === "lesson";
+  const tCol = isLesson ? "lesson_id" : "subject_id";
+  const tId = (isLesson ? job.lesson_id : job.subject_id) as string;
 
   let topic: { id: string; thread: number };
-  try { topic = await ensureSubjectTopic(db, BOT, subject.dest, subject.id, subject.title); }
+  try {
+    topic = isLesson
+      ? await ensureTopic(db, BOT, subject.dest, "course_id", subject.courseId as string, subject.topicTitle)
+      : await ensureTopic(db, BOT, subject.dest, "subject_id", subject.id, subject.title);
+  }
   catch (e) { await setJob({ status: "paused", locked_until: null, last_error: String((e as Error)?.message || e) }); return { state: "paused" as const }; }
   const ctx: ImportCtx = { chatId: String(subject.dest.telegram_chat_id), thread: topic.thread, topicId: topic.id };
 
@@ -349,10 +394,10 @@ async function runJob(db: any, BOT: string, jobId: string) {
     store: {
       async isCancelled(id) { const { data } = await db.from("telegram_import_jobs").select("status").eq("id", id).maybeSingle(); return data?.status === "cancelled"; },
       async isImported(j, m) {
-        const { data: items } = await db.from("telegram_import_items").select("url").eq("source_chat_id", j.source_chat_id).eq("source_message_id", m).eq("subject_id", j.subject_id).eq("status", "copied");
+        const { data: items } = await db.from("telegram_import_items").select("url").eq("source_chat_id", j.source_chat_id).eq("source_message_id", m).eq(tCol, tId).eq("status", "copied");
         const urls = (items || []).map((i: { url: string | null }) => i.url).filter(Boolean);
         if (!urls.length) return false;
-        const { count } = await db.from("university_materials").select("id", { count: "exact", head: true }).in("url", urls);
+        const { count } = await db.from(isLesson ? "resources" : "university_materials").select("id", { count: "exact", head: true }).in("url", urls);
         return (count || 0) > 0;
       },
       async nextEpisode(t, s) { return (await db.rpc("next_episode", { p_topic: t, p_section: s })).data ?? null; },
@@ -364,22 +409,32 @@ async function runJob(db: any, BOT: string, jobId: string) {
           topic_id: ctx.topicId, section: j.section, episode: d.n, episode_code: "E" + pad(d.n), aux_message_ids: d.sent,
         });
         if (tr.error) throw new Error(tr.error.message);
-        const { data: mx } = await db.from("university_materials").select("order_index").eq("subject_id", j.subject_id).order("order_index", { ascending: false }).limit(1);
-        const order = ((mx && mx[0]?.order_index) ?? 0) + 1;
-        const mat = await db.from("university_materials").insert({
-          subject_id: j.subject_id, material_type: "telegram", title: `${j.section} | ${d.n}`, url: d.link, role: j.role,
-          language: j.language, publisher: j.publisher, order_index: order, created_by: j.created_by,
-        });
-        if (mat.error) { await db.from("telegram_resource_files").delete().eq("url", d.link); throw new Error(mat.error.message); }
+        let order = 0;
+        if (isLesson) {
+          const { data: lr } = await db.from("lesson_resources").select("order_index").eq("lesson_id", tId).order("order_index", { ascending: false }).limit(1);
+          order = ((lr && lr[0]?.order_index) ?? 0) + 1;
+          const ins = await db.from("resources").insert({ type: "telegram", title: `${j.section} | ${d.n}`, url: d.link, publisher: j.publisher, language: j.language, created_by: j.created_by }).select("id").single();
+          if (ins.error) { await db.from("telegram_resource_files").delete().eq("url", d.link); throw new Error(ins.error.message); }
+          const lk = await db.from("lesson_resources").insert({ lesson_id: tId, resource_id: ins.data.id, role: j.role, order_index: order });
+          if (lk.error) { await db.from("telegram_resource_files").delete().eq("url", d.link); await db.from("resources").delete().eq("id", ins.data.id); throw new Error(lk.error.message); }
+        } else {
+          const { data: mx } = await db.from("university_materials").select("order_index").eq("subject_id", j.subject_id).order("order_index", { ascending: false }).limit(1);
+          order = ((mx && mx[0]?.order_index) ?? 0) + 1;
+          const mat = await db.from("university_materials").insert({
+            subject_id: j.subject_id, material_type: "telegram", title: `${j.section} | ${d.n}`, url: d.link, role: j.role,
+            language: j.language, publisher: j.publisher, order_index: order, created_by: j.created_by,
+          });
+          if (mat.error) { await db.from("telegram_resource_files").delete().eq("url", d.link); throw new Error(mat.error.message); }
+        }
         await db.from("telegram_import_items").insert({
-          job_id: j.id, subject_id: j.subject_id, source_chat_id: j.source_chat_id, source_message_id: d.m, status: "copied",
+          job_id: j.id, [tCol]: tId, source_chat_id: j.source_chat_id, source_message_id: d.m, status: "copied",
           dest_chat_id: Number(ctx.chatId), dest_thread_id: ctx.thread, dest_message_id: d.destMessageId, url: d.link, episode: d.n, sort_order: order,
         });
         j.cursor_message_id = d.m + 1; j.copied += 1;
         await db.from("telegram_import_jobs").update({ cursor_message_id: j.cursor_message_id, copied: j.copied, locked_until: new Date(Date.now() + 150_000).toISOString(), updated_at: new Date().toISOString() }).eq("id", j.id);
       },
       async recordSkipped(j, m, reason) {
-        await db.from("telegram_import_items").insert({ job_id: j.id, subject_id: j.subject_id, source_chat_id: j.source_chat_id, source_message_id: m, status: "skipped", reason: reason.slice(0, 200) });
+        await db.from("telegram_import_items").insert({ job_id: j.id, [tCol]: tId, source_chat_id: j.source_chat_id, source_message_id: m, status: "skipped", reason: reason.slice(0, 200) });
         j.cursor_message_id = m + 1; j.skipped += 1;
         await db.from("telegram_import_jobs").update({ cursor_message_id: j.cursor_message_id, skipped: j.skipped, locked_until: new Date(Date.now() + 150_000).toISOString(), updated_at: new Date().toISOString() }).eq("id", j.id);
       },
@@ -436,10 +491,10 @@ Deno.serve(async (req: Request) => {
     const tg = tgCall(BOT);
 
     if (action === "analyze" || action === "start") {
-      if (!body.subject_id) return json({ error: "missing subject_id" }, 400);
-      const subj = await loadSubject(db, body.subject_id);
-      if (!subj) return json({ error: "المادة غير موجودة" }, 404);
-      if (!(await canManage(db, uid, subj.universityId))) return json({ error: "forbidden" }, 403);
+      if (!body.subject_id && !body.lesson_id) return json({ error: "missing subject_id/lesson_id" }, 400);
+      const subj = await loadTarget(db, body);
+      if (!subj) return json({ error: subject_missing_msg(body) }, 404);
+      if (!(await canManageTarget(db, uid, subj))) return json({ error: "forbidden" }, 403);
       const an = await analyze(db, tg, body);
       if (an.error) return json({ error: an.error }, 400);
       // deno-lint-ignore no-explicit-any
@@ -450,7 +505,8 @@ Deno.serve(async (req: Request) => {
       const section = String(body.section || subj.title).trim().slice(0, 60);
       const role = ["alternative", "deep_dive", "study"].includes(body.role) ? body.role : "alternative";
       const { data: job, error } = await db.from("telegram_import_jobs").insert({
-        subject_id: subj.id, created_by: uid, source_chat_id: pub.source.id, source_title: pub.source.title,
+        subject_id: subj.kind === "subject" ? subj.id : null, lesson_id: subj.kind === "lesson" ? subj.id : null, course_id: subj.courseId,
+        created_by: uid, source_chat_id: pub.source.id, source_title: pub.source.title,
         from_message_id: pub.range.from, to_message_id: pub.range.to, cursor_message_id: pub.range.from, section, role,
         language: ["ar", "en", "other"].includes(body.language) ? body.language : null, publisher: body.publisher ? String(body.publisher).slice(0, 100) : null,
         force_reimport: !!body.force,
@@ -460,10 +516,10 @@ Deno.serve(async (req: Request) => {
     }
 
     if (action === "run" || action === "resume" || action === "cancel") {
-      const { data: job } = await db.from("telegram_import_jobs").select("id, subject_id, status").eq("id", body.job_id).maybeSingle();
+      const { data: job } = await db.from("telegram_import_jobs").select("id, subject_id, lesson_id, status").eq("id", body.job_id).maybeSingle();
       if (!job) return json({ error: "العملية غير موجودة" }, 404);
-      const subj = await loadSubject(db, job.subject_id);
-      if (!subj || !(await canManage(db, uid, subj.universityId))) return json({ error: "forbidden" }, 403);
+      const subj = await loadTarget(db, job);
+      if (!subj || !(await canManageTarget(db, uid, subj))) return json({ error: "forbidden" }, 403);
       if (action === "cancel") {
         if (["done", "cancelled"].includes(job.status)) return json({ ok: true });
         await db.from("telegram_import_jobs").update({ status: "cancelled", locked_until: null, updated_at: new Date().toISOString() }).eq("id", job.id);

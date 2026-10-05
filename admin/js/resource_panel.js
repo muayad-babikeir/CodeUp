@@ -90,7 +90,7 @@ async function renderResourcePanel(box, ad){
       <label>القسم في صفحة ${ad.pageName}</label><select id="rRole">${opt(RP_ROLE_LABEL, row?.role||presetRole||"alternative")}</select>
       <label>النوع</label><select id="rType">${opt(ad.types, row?.type||ad.defaultType)}</select>
       <label>العنوان</label><input id="rTitle" value="${esc(row?.title||"")}">
-      ${ad.fileCtx?`<label>طريقة الإضافة</label><select id="rMode"><option value="link">رابط</option><option value="file">رفع ملف (يُرسل إلى تيليجرام)</option>${ad.fileCtx.kind==="subject"&&!row?`<option value="import">استيراد من تيليجرام (نسخ من مجموعة مصدر)</option>`:""}</select>`:""}
+      ${ad.fileCtx?`<label>طريقة الإضافة</label><select id="rMode"><option value="link">رابط</option><option value="file">رفع ملف (يُرسل إلى تيليجرام)</option>${!row?`<option value="import">استيراد من تيليجرام (نسخ من مجموعة مصدر)</option>`:""}</select>`:""}
       <div id="rLinkBox"><label>الرابط</label><input id="rUrl" dir="ltr" placeholder="https://..." value="${esc(row?.url||"")}"></div>
       <div id="rFileBox" style="display:none"><label>الملف</label><input id="rFile" type="file">
         ${ad.fileCtx?.kind==="subject"?`<label>القسم داخل تيليجرام (اختياري)</label><input id="rSection" placeholder="مثال: Functions — يُرقَّم تلقائيًا E01, E02… داخل كل قسم (الافتراضي: عنوان المصدر)">`:""}
@@ -105,7 +105,7 @@ async function renderResourcePanel(box, ad){
     const modeSel = m2.el.querySelector("#rMode");
     const isFileMode = ()=>!!modeSel && modeSel.value==="file";
     if(modeSel) modeSel.onchange = ()=>{
-      if(modeSel.value==="import"){ m2.close(); openImportModal(ad.fileCtx.id, reload); return; }
+      if(modeSel.value==="import"){ m2.close(); openImportModal(ad.fileCtx.kind==="lesson" ? {lesson_id: ad.fileCtx.id} : {subject_id: ad.fileCtx.id}, reload); return; }
       m2.el.querySelector("#rLinkBox").style.display = isFileMode() ? "none" : "";
       m2.el.querySelector("#rFileBox").style.display = isFileMode() ? "" : "none";
       const tSel = m2.el.querySelector("#rType");
@@ -188,7 +188,8 @@ async function importEdge(action, body){
   return { ok: r.ok, status: r.status, ...j };
 }
 
-async function openImportModal(subjectId, onDone){
+async function openImportModal(target, onDone){
+  const isLesson = !!target.lesson_id;
   const esc = CodeUp.escapeHtml;
   const m = Admin.modal(`<h3>استيراد من تيليجرام</h3><div id="impBody"><div class="small">جارِ التحميل…</div></div>`);
   const box = m.el.querySelector("#impBody");
@@ -197,16 +198,16 @@ async function openImportModal(subjectId, onDone){
   m.close = ()=>{ closed = true; if(pollTimer) clearInterval(pollTimer); origClose(); };
 
   // عملية غير مكتملة لنفس المادة؟ نعرض تقدّمها بدل النموذج
-  const { data: openJobs } = await db.from("telegram_import_jobs").select("*").eq("subject_id", subjectId).in("status", ["pending","running","paused"]).order("created_at",{ascending:false}).limit(1);
+  const { data: openJobs } = await db.from("telegram_import_jobs").select("*").eq(isLesson ? "lesson_id" : "subject_id", isLesson ? target.lesson_id : target.subject_id).in("status", ["pending","running","paused"]).order("created_at",{ascending:false}).limit(1);
   if(openJobs && openJobs.length) return showProgress(openJobs[0].id);
   showForm();
 
   function showForm(){
     box.innerHTML = `
-      <p class="small" style="margin:0 0 10px">يعرف CodeUp الوجهة من المادة الحالية. الصق رابط رسالة (أو رابطين لنطاق) من مجموعة مصدر يكون البوت عضوًا فيها. تُنسخ الرسائل بالترتيب ولا تُحذف من المصدر.</p>
+      <p class="small" style="margin:0 0 10px">يعرف CodeUp الوجهة من ${isLesson?"الدرس":"المادة"} الحالي${isLesson?"":"ة"}. الصق رابط رسالة (أو رابطين لنطاق) من مجموعة مصدر يكون البوت عضوًا فيها. تُنسخ الرسائل بالترتيب ولا تُحذف من المصدر.</p>
       <label>رابط الرسالة الأولى</label><input id="impFrom" dir="ltr" placeholder="https://t.me/c/1234567890/123">
       <label>رابط الرسالة الأخيرة (اختياري — لاستيراد نطاق)</label><input id="impTo" dir="ltr" placeholder="https://t.me/c/1234567890/140">
-      <label>القسم داخل تيليجرام (اختياري — يُرقَّم تلقائيًا E01, E02…)</label><input id="impSection" placeholder="افتراضيًا: اسم المادة">
+      <label>القسم داخل تيليجرام (اختياري — يُرقَّم تلقائيًا E01, E02…)</label><input id="impSection" placeholder="افتراضيًا: اسم ${isLesson?"الدرس":"المادة"}">
       <label>قسم المصدر</label>
       <select id="impRole"><option value="alternative">مصدر بديل</option><option value="deep_dive">تعمّق</option><option value="study">للمذاكرة</option></select>
       <label>اللغة</label>
@@ -220,7 +221,7 @@ async function openImportModal(subjectId, onDone){
     box.querySelector("#impAnalyze").onclick = analyzeNow;
   }
   const formVals = ()=>({
-    subject_id: subjectId,
+    ...target,
     from_url: box.querySelector("#impFrom").value.trim(),
     to_url: box.querySelector("#impTo").value.trim() || undefined,
     section: box.querySelector("#impSection").value.trim(),
