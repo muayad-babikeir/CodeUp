@@ -2,7 +2,7 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 
 // استيراد رسائل من مجموعة/قناة تيليجرام "مصدر" إلى أرشيف مادة جامعية عبر copyMessage (نسخ داخل خوادم تيليجرام: بلا تنزيل ولا رفع).
 // كل رسالة تُصبح «مصدرًا» مستقلًا في CodeUp بنفس نظام الرفع: فاصل ← "القسم | رقم" ← الملف، ثم يُحدَّث الفهرس المثبّت.
-// actions: analyze | start | run | resume | cancel | cron
+// actions: analyze | start | run | resume | cancel | cron | import_field
 const cors = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-cron-secret",
@@ -530,6 +530,57 @@ Deno.serve(async (req: Request) => {
         await db.from("telegram_import_jobs").update({ status: "pending", last_error: null, locked_until: null, updated_at: new Date().toISOString() }).eq("id", job.id);
       }
       return json({ ok: true, ...(await runJob(db, BOT, job.id)) });
+    }
+    // ---- استيراد ملف واحد إلى حقل في الدرس (Anki عربي/إنجليزي): نسخ رسالة واحدة بنفس الصيغة ثم حفظ رابطها في الحقل ----
+    if (action === "import_field") {
+      const FIELDS: Record<string, string> = { anki_ar_url: "Anki AR", anki_en_url: "Anki EN" };
+      if (!body.lesson_id || !FIELDS[body.field]) return json({ error: "طلب غير صالح" }, 400);
+      const subj = await loadLesson(db, body.lesson_id);
+      if (!subj) return json({ error: "الدرس غير موجود" }, 404);
+      if (!(await canManageTarget(db, uid, subj))) return json({ error: "forbidden" }, 403);
+      const an = await analyze(db, tg, { lesson_id: body.lesson_id, from_url: body.from_url });   // رابط واحد فقط => رسالة واحدة
+      if (an.error) return json({ error: an.error }, 400);
+      // deno-lint-ignore no-explicit-any
+      const { _subject, ...pub } = an as any;
+      if (!pub.ok) return json({ error: pub.blockers[0], blockers: pub.blockers }, 400);
+      let topic: { id: string; thread: number };
+      try { topic = await ensureTopic(db, BOT, subj.dest as NonNullable<typeof subj.dest>, "course_id", subj.courseId as string, subj.topicTitle); }
+      catch (e) { return json({ error: String((e as Error)?.message || e) }, 502); }
+      const section = `${FIELDS[body.field]} · ${subj.title}`.slice(0, 60);
+      const dest = subj.dest as NonNullable<typeof subj.dest>;
+      const ctx: ImportCtx = { chatId: String(dest.telegram_chat_id), thread: topic.thread, topicId: topic.id };
+      let link = "", skipReason = "";
+      const job: ImportJob = {
+        id: "inline", subject_id: null, lesson_id: subj.id, course_id: subj.courseId, created_by: uid, source_chat_id: pub.source.id,
+        from_message_id: pub.range.from, to_message_id: pub.range.from, section, role: "alternative", language: null, publisher: null,
+        force_reimport: true, cursor_message_id: pub.range.from, copied: 0, skipped: 0,
+      };
+      const io: ImportIO = {
+        now: () => Date.now(), sleep, tg,
+        store: {
+          isCancelled: async () => false,
+          isImported: async () => false,
+          nextEpisode: async (t, s2) => (await db.rpc("next_episode", { p_topic: t, p_section: s2 })).data ?? null,
+          releaseEpisode: async (t, s2, n) => { await db.rpc("release_episode", { p_topic: t, p_section: s2, p_n: n }); },
+          async recordCopied(j, d) {
+            // تتبّع الرسائل (للحذف التلقائي) ثم حفظ الرابط في حقل الدرس؛ استبدال رابط مستورد سابقًا يحذف القديم عبر trigger القاعدة
+            const tr = await db.from("telegram_resource_files").upsert({
+              url: d.link, chat_id: Number(ctx.chatId), thread_id: ctx.thread, message_id: d.destMessageId, created_by: uid,
+              topic_id: ctx.topicId, section, episode: d.n, episode_code: "E" + pad(d.n), aux_message_ids: d.sent,
+            });
+            if (tr.error) throw new Error(tr.error.message);
+            const up = await db.from("lessons").update({ [body.field]: d.link }).eq("id", subj.id);
+            if (up.error) { await db.from("telegram_resource_files").delete().eq("url", d.link); throw new Error(up.error.message); }
+            link = d.link; j.copied += 1; j.cursor_message_id = d.m + 1;
+          },
+          async recordSkipped(j, m, reason) { skipReason = reason; j.skipped += 1; j.cursor_message_id = m + 1; },
+        },
+      };
+      const res = await runItems(job, ctx, io, 60_000, PACE_MS);
+      try { await rebuildIndex(db, tg, topic.id); } catch (e) { console.error("rebuildIndex:", e); }
+      if (res.state === "done" && link) return json({ ok: true, url: link });
+      if (res.state === "done") return json({ error: `الرسالة غير موجودة أو لا يمكن نسخها (رسالة خدمة/محذوفة)${skipReason ? ` [${skipReason}]` : ""}.` }, 400);
+      return json({ error: res.error || "تعذّر النسخ" }, 502);
     }
     return json({ error: "unknown action" }, 400);
   } catch (e) {

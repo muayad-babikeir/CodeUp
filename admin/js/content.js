@@ -165,8 +165,10 @@ async function openLessonModal(unitId, lesson, onDone){
     <label>رابط PDF (اختياري)</label><input id="lPdf" value="${lesson?CodeUp.escapeHtml(lesson.pdf_url||""):""}" placeholder="https://...">
     <label style="margin-top:14px;display:block">بطاقات Anki — النسخة العربية (رابط مباشر، اختياري)</label>
     <input id="lAnkiAr" value="${lesson?CodeUp.escapeHtml(lesson.anki_ar_url||""):""}" placeholder="https://...">
+      <div style="margin-top:6px"><button type="button" class="btn" data-impfield="anki_ar_url" data-input="lAnkiAr">استيراد من تيليجرام</button></div>
     <label style="margin-top:10px;display:block">بطاقات Anki — English Version (رابط مباشر، اختياري)</label>
     <input id="lAnkiEn" value="${lesson?CodeUp.escapeHtml(lesson.anki_en_url||""):""}" placeholder="https://...">
+      <div style="margin-top:6px"><button type="button" class="btn" data-impfield="anki_en_url" data-input="lAnkiEn">استيراد من تيليجرام</button></div>
     <label>الترتيب</label><input id="lOrder" type="number" value="${lesson?.order_index??0}">
     <div id="lResBox"></div>
     <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
@@ -195,6 +197,52 @@ async function openLessonModal(unitId, lesson, onDone){
   });
   obs.observe(document.body, {childList:true});
 
+  // يحفظ الدرس إن لم يكن محفوظًا (العنوان مطلوب) ويُظهر قسم المصادر الفعلي؛ يرجع صف الدرس أو null
+  const ensureSaved = async ()=>{
+    if(saved) return saved;
+    msgEl.style.display = "none";
+    const payload = readPayload();
+    if(!payload.title){ showErr("اكتب عنوان الدرس أولًا"); m.el.querySelector("#lTitle").focus(); return null; }
+    try{
+      const { data: row } = await db.from("lessons").insert({...payload, unit_id: unitId}).select().single().throwOnError();
+      saved = row; created = true;
+      m.el.querySelector("h3").textContent = "تعديل الدرس";
+      CodeUp.toast("تم حفظ الدرس", "success");
+      await renderLessonResources(resBox, row.id);
+      return row;
+    }catch(e){ showErr(e.message); return null; }
+  };
+
+  // استيراد ملف Anki من تيليجرام إلى حقل الدرس: ينسخه الخادم إلى أرشيف الكورس ويحفظ رابطه في الحقل
+  const openFieldImport = async (field, inputId)=>{
+    const row = await ensureSaved();
+    if(!row) return;
+    const label = field==="anki_ar_url" ? "بطاقات Anki — النسخة العربية" : "بطاقات Anki — English Version";
+    const mm = Admin.modal(`
+      <h3>استيراد من تيليجرام</h3>
+      <p class="small" style="margin:0 0 10px"><b>${CodeUp.escapeHtml(label)}</b><br>الصق رابط رسالة الملف في مجموعة المصدر (البوت عضو فيها). يُنسخ إلى أرشيف الكورس بصيغة: فاصل ← «Anki · اسم الدرس | رقم» ← الملف، ويُحفظ رابطه في هذا الحقل. إن كان في الحقل ملف مستورد سابقًا يُستبدل ويُحذف القديم من تيليجرام.</p>
+      <label>رابط الرسالة</label><input id="fiUrl" dir="ltr" placeholder="https://t.me/c/1234567890/123">
+      <div id="fiMsg" class="emptyState" style="display:none;padding:8px;color:#F2555F"></div>
+      <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
+        <button class="btn" id="fiCancel">إلغاء</button><button class="btn dark" id="fiGo">استيراد</button>
+      </div>`);
+    mm.el.querySelector("#fiCancel").onclick = mm.close;
+    mm.el.querySelector("#fiGo").onclick = async ()=>{
+      const go = mm.el.querySelector("#fiGo"), msg = mm.el.querySelector("#fiMsg");
+      const url = mm.el.querySelector("#fiUrl").value.trim();
+      msg.style.display = "none";
+      if(!url){ msg.style.display="block"; msg.textContent="الصق رابط رسالة تيليجرام"; return; }
+      go.disabled = true; go.textContent = "جارِ النسخ… (نحو 10 ثوانٍ)";
+      let r;
+      try{ r = await importEdge("import_field", {lesson_id: row.id, field, from_url: url}); }catch(e){ r = {ok:false, error:e.message}; }
+      if(!r.ok){ go.disabled = false; go.textContent = "استيراد"; msg.style.display="block"; msg.textContent = r.error || "تعذّر الاستيراد"; return; }
+      m.el.querySelector("#"+inputId).value = r.url;   // حتى لا يُستبدل بالقيمة القديمة عند «حفظ»
+      CodeUp.toast("تم استيراد الملف وحفظ رابطه", "success");
+      mm.close();
+    };
+  };
+  m.el.querySelectorAll("[data-impfield]").forEach(b=>{ b.onclick = ()=>openFieldImport(b.dataset.impfield, b.dataset.input); });
+
   if(saved){
     renderLessonResources(resBox, saved.id);
   }else{
@@ -203,18 +251,10 @@ async function openLessonModal(unitId, lesson, onDone){
       ...lessonResourceAdapter(null),
       load: async ()=>[],
       beforeAdd: async (role)=>{
-        msgEl.style.display = "none";
-        const payload = readPayload();
-        if(!payload.title){ showErr("اكتب عنوان الدرس أولًا ثم أضف المصادر"); m.el.querySelector("#lTitle").focus(); return false; }
-        try{
-          const { data: row } = await db.from("lessons").insert({...payload, unit_id: unitId}).select().single().throwOnError();
-          saved = row; created = true;
-          m.el.querySelector("h3").textContent = "تعديل الدرس";
-          CodeUp.toast("تم حفظ الدرس — أضف مصادره الآن", "success");
-          await renderLessonResources(resBox, row.id);
-          const btn = resBox.querySelector(`[data-addrole="${role}"]`);
-          if(btn) btn.click();
-        }catch(e){ showErr(e.message); }
+        const row = await ensureSaved();
+        if(!row) return false;
+        const btn = resBox.querySelector(`[data-addrole="${role}"]`);
+        if(btn) btn.click();
         return false;
       }
     };
