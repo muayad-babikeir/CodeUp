@@ -5,6 +5,7 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 // ثم يستدعي هذي الدالة (action: send) فتنقله لمجموعة الأرشفة (موضوع MATERIALS) بوسوم مرتبة،
 // وتحذفه من Storage، وترجع رابط الرسالة ليُحفظ كرابط المصدر العادي.
 // action: discard => حذف ملف مؤقت لم يُرسل (إلغاء المستخدم).
+// action: publish_link => رسالة لرابط خارجي بلا ملف (ids فقط من العميل؛ تُعدَّل نفس الرسالة عند التغيير، وتُسجَّل ملكيتها للمصدر في القاعدة).
 const cors = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -21,6 +22,21 @@ const tag = (s: string) => {
 const ROLE_TAG: Record<string, string> = { recommended: "#مصدر_أساسي", alternative: "#مصدر_بديل", deep_dive: "#تعمّق", study: "#للمذاكرة" };
 const ROLE_LABEL: Record<string, string> = { recommended: "المصدر الأساسي", alternative: "مصدر بديل", deep_dive: "تعمّق", study: "للمذاكرة" };
 const MAX_BYTES = 50 * 1024 * 1024; // حد البوت لإرسال المستندات
+const escAttr = (s: string) => String(s ?? "").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+const CLAIM_TTL_MS = 60 * 60 * 1000; // رفع جديد ينتظر حفظ مصدره؛ بعد ساعة بلا مصدر تُنظّفه telegram-resource-cleanup
+// رسالة رابط خارجي: الوسوم أعلاه، ثم اسم الرابط في blockquote، ثم «الانتقال إلى الرابط» (رابط فعلي) في blockquote. لا يظهر الرابط كنص؛ المعاينة من link_preview_options.
+// deno-lint-ignore no-explicit-any
+function buildLinkMessage(role: string, crumbs: string[], title: string, href: string): { text: string; link_preview_options: any } {
+  const tagLine = [...new Set([ROLE_TAG[role] || "#مصدر", ...crumbs.map(tag)].filter(Boolean))].join(" ").slice(0, 900);
+  const text = `${tagLine}\n\n<blockquote>${esc(String(title).trim().slice(0, 300))}</blockquote>\n<blockquote><a href="${escAttr(href)}">الانتقال إلى الرابط</a></blockquote>`;
+  return { text, link_preview_options: { url: href, prefer_large_media: true } };
+}
+// هوية الرسالة من رابط t.me/c/<chat>/<msg> أو t.me/c/<chat>/<topic>/<msg> (للمقارنة فقط)
+const tgIdentity = (u: string): [number, number] | null => {
+  const m = /^https?:\/\/t\.me\/c\/(\d+)\/(\d+)(?:\/(\d+))?(?:[/?#].*)?$/.exec(String(u || ""));
+  return m ? [Number(`-100${m[1]}`), Number(m[3] ?? m[2])] : null;
+};
+const NOT_EDITABLE = /message to edit not found|message can't be edited|MESSAGE_ID_INVALID|message identifier is not specified|chat not found/i;
 
 // ===== مكتبة الفهرس (نسخة مطابقة في telegram-upload-resource و telegram-resource-cleanup) =====
 const SEP = "────── ✦ ──────── ✦ ─────";
@@ -29,7 +45,7 @@ const escH = (s: string) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g,
 const KEYCAP = ["", "1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"];
 const icon = (i: number) => (i <= 10 ? KEYCAP[i] : `${i}.`);
 
-type IdxFile = { url: string; section: string | null; episode: number | null; episode_code: string | null; created_at: string };
+type IdxFile = { url: string; section: string | null; episode: number | null; episode_code: string | null; created_at: string; display_title?: string | null };
 
 // يبني نص الفهرس: قسم لكل مجموعة، وحلقاتها E01 | E02 ... كلها روابط مباشرة لرسائل الملفات.
 // حد تيليجرام 4096 حرفًا: عند تجاوزه نعرض آخر N حلقة من كل قسم (الأحدث) مع علامة «…».
@@ -57,7 +73,7 @@ function buildIndexText(files: IdxFile[]): string {
       i++;
       const part = others.length > max ? others.slice(others.length - max) : others;
       const base = others.length - part.length;
-      text += `\n${icon(i)} ملفات أخرى\n${others.length > max ? "… | " : ""}${part.map((r, k) => `<a href="${r.url}">${pad(base + k + 1)}</a>`).join(" | ")}\n`;
+      text += `\n${icon(i)} ملفات أخرى\n${others.length > max ? "… | " : ""}${part.map((r, k) => `<a href="${r.url}">${r.display_title ? escH(String(r.display_title).slice(0, 30)) : pad(base + k + 1)}</a>`).join(" | ")}\n`;
     }
     if (!files.length) text += "\n(لا توجد ملفات بعد)";
     return text.trimEnd();
@@ -73,7 +89,7 @@ async function rebuildIndex(db: any, tg: (m: string, b: unknown) => Promise<any>
   for (let attempt = 0; attempt < 2; attempt++) {
     const { data: topic } = await db.from("archive_topics").select("id, index_message_id, archive_destinations(telegram_chat_id)").eq("id", topicId).maybeSingle();
     if (!topic?.index_message_id) return;
-    const { data: files } = await db.from("telegram_resource_files").select("url, section, episode, episode_code, created_at").eq("topic_id", topicId).order("created_at");
+    const { data: files } = await db.from("telegram_resource_files").select("url, section, episode, episode_code, created_at, display_title").eq("topic_id", topicId).order("created_at");
     const r = await tg("editMessageText", {
       chat_id: String(topic.archive_destinations?.telegram_chat_id), message_id: topic.index_message_id,
       text: buildIndexText(files || []), parse_mode: "HTML", disable_web_page_preview: true,
@@ -162,8 +178,10 @@ Deno.serve(async (req: Request) => {
 
     const body = await req.json();
     const { action = "send", storage_path } = body;
+    if (!["send", "discard", "publish_link"].includes(action)) return json({ error: "unknown action" }, 400);
+    const isLink = action === "publish_link";
     // الملف المؤقت يجب أن يكون داخل مجلد المستخدم نفسه (منع حذف/إرسال ملفات غيره)
-    if (!storage_path || !String(storage_path).startsWith(`${uid}/resource-uploads/`) || String(storage_path).includes("..")) {
+    if (!isLink && (!storage_path || !String(storage_path).startsWith(`${uid}/resource-uploads/`) || String(storage_path).includes(".."))) {
       return json({ error: "invalid storage_path" }, 400);
     }
 
@@ -172,7 +190,7 @@ Deno.serve(async (req: Request) => {
       return json({ ok: true });
     }
 
-    const { kind, ref_id, role = "alternative", title = "", publisher = "", language = "", file_name = "file", mime_type = "", section: sectionIn = "" } = body;
+    const { kind, ref_id, role = "alternative", title = "", publisher = "", language = "", file_name = "file", mime_type = "", section: sectionIn = "", resource_id = "" } = body;
     if (!["lesson", "subject"].includes(kind) || !ref_id) return json({ error: "missing kind/ref_id" }, 400);
 
     // ---------- سياق + صلاحية ----------
@@ -216,6 +234,25 @@ Deno.serve(async (req: Request) => {
       lines.push(`الجامعة: ${sem?.universities?.name || ""}`, `البرنامج: ${progName || ""}`, `السنة: ${yearLabel}`, `الفصل: ${sem?.title || ""}`, `المادة: ${sx.title || ""}`);
     }
 
+    // ---------- نشر رابط خارجي: العميل يرسل معرّفات فقط؛ العنوان والرابط والدور تُقرأ من القاعدة بعد التحقق أن المصدر يتبع هذا الدرس/المادة ----------
+    let ownerType = "";
+    let src: { title: string; url: string; role: string } | null = null;
+    if (isLink) {
+      if (!resource_id) return json({ error: "missing resource_id" }, 400);
+      if (kind === "lesson") {
+        const { data: lr } = await db.from("lesson_resources").select("role, resources(title, url)").eq("lesson_id", ref_id).eq("resource_id", resource_id).maybeSingle();
+        // deno-lint-ignore no-explicit-any
+        const lx = lr as any;
+        if (!lx?.resources) return json({ error: "resource is not linked to this lesson" }, 404);
+        ownerType = "resource"; src = { title: lx.resources.title, url: lx.resources.url, role: lx.role };
+      } else {
+        const { data: m } = await db.from("university_materials").select("title, url, role").eq("id", resource_id).eq("subject_id", ref_id).maybeSingle();
+        if (!m) return json({ error: "material not found in this subject" }, 404);
+        ownerType = "university_material"; src = { title: m.title, url: m.url, role: m.role };
+      }
+      try { const pu = new URL(String(src.url)); if (!/^https?:$/.test(pu.protocol)) throw new Error("scheme"); } catch { return json({ error: "الرابط غير صالح (يجب أن يبدأ بـ http أو https)" }, 400); }
+    }
+
     const BOT = Deno.env.get("TELEGRAM_BOT_TOKEN");
     if (!BOT) return json({ error: "telegram not configured" }, 500);
     const { data: dests } = await db.from("archive_destinations").select("id, telegram_chat_id, university_id, year_id").eq("is_active", true);
@@ -227,7 +264,7 @@ Deno.serve(async (req: Request) => {
     if (!dest) return json({ error: "no active archive destination" }, 500);
 
     // استيراد غير مكتمل لنفس المادة (يعمل/متوقف) يمنع الرفع اليدوي حتى لا يتداخل مع ترتيب الموضوع
-    if (yearDest) {
+    if (yearDest && !isLink) {
       const { count: openJobs } = await db.from("telegram_import_jobs").select("id", { count: "exact", head: true }).eq("subject_id", ref_id).in("status", ["pending", "running", "paused"]);
       if (openJobs) return json({ error: "يوجد استيراد من تيليجرام غير مكتمل لهذه المادة. أكمله أو ألغه أولًا حتى لا يختل ترتيب الموضوع." }, 409);
     }
@@ -244,6 +281,45 @@ Deno.serve(async (req: Request) => {
       const { data: topics } = await db.from("archive_topics").select("topic_key, telegram_thread_id").eq("destination_id", dest.id).in("topic_key", [wantedKey, "materials"]);
       const topic = (topics || []).find((t) => t.topic_key === wantedKey) || (topics || []).find((t) => t.topic_key === "materials");
       threadId = topic?.telegram_thread_id ?? null;
+    }
+
+    // ===== رابط خارجي بلا ملف: تعديل نفس الرسالة إن وُجدت، وإلا رسالة جديدة تُسجَّل للمصدر ثم تُنظَّف القديمة =====
+    if (isLink && src) {
+      const tg = tgCall(BOT);
+      const msg = buildLinkMessage(src.role || role, crumbs, src.title, src.url);
+      const { data: ex } = await db.from("telegram_resource_owners").select("chat_id, message_id, kind").eq("owner_type", ownerType).eq("owner_id", resource_id).eq("owner_field", "").maybeSingle();
+      if (ex && ex.kind !== "link") {
+        // المصدر ملف/مستورد وما زال رابطه يشير إلى رسالته: لا نستبدله ببطاقة رابط ولا نحذف الملف (تعديل بيانات فقط)
+        const idn = tgIdentity(src.url);
+        if (idn && idn[0] === Number(ex.chat_id) && idn[1] === Number(ex.message_id)) return json({ ok: true, mode: "unchanged_file", message_id: ex.message_id });
+      }
+      if (ex && ex.kind === "link") {
+        const er = await tg("editMessageText", { chat_id: String(ex.chat_id), message_id: ex.message_id, text: msg.text, parse_mode: "HTML", link_preview_options: msg.link_preview_options });
+        const edesc = String(er.description || "");
+        if (er.ok || /message is not modified/i.test(edesc)) {
+          const { data: trk } = await db.from("telegram_resource_files").update({ display_title: String(src.title).slice(0, 200) }).eq("chat_id", ex.chat_id).eq("message_id", ex.message_id).select("url, topic_id").maybeSingle();
+          if (trk?.topic_id) { try { await rebuildIndex(db, tg, trk.topic_id); } catch (e) { console.error("rebuildIndex:", e); } }
+          return json({ ok: true, mode: "edited", url: trk?.url ?? null, message_id: ex.message_id });
+        }
+        if (!NOT_EDITABLE.test(edesc)) return json({ error: "Telegram: " + (edesc || "فشل تعديل الرسالة") }, 502); // عطل مؤقت: لا تغيير في أي حالة
+        // الرسالة القديمة محذوفة/غير قابلة للتعديل: ننشئ جديدة ثم تُنظَّف القديمة بعد نجاح التسجيل
+      }
+      const chatIdL = String(dest.telegram_chat_id);
+      const m = await tg("sendMessage", { chat_id: chatIdL, ...(threadId ? { message_thread_id: threadId } : {}), text: msg.text, parse_mode: "HTML", link_preview_options: msg.link_preview_options });
+      if (!m.ok) return json({ error: "Telegram: " + (m.description || "فشل إرسال الرسالة") }, 502);
+      const mid: number = m.result.message_id;
+      const chatPartL = chatIdL.replace(/^-100/, "");
+      const linkL = threadId ? `https://t.me/c/${chatPartL}/${threadId}/${mid}` : `https://t.me/c/${chatPartL}/${mid}`;
+      const { data: okReg, error: regErr } = await db.rpc("telegram_register_message", {
+        p_url: linkL, p_chat: Number(chatIdL), p_thread: threadId, p_msg: mid, p_topic: topicRow?.id ?? null, p_kind: "link",
+        p_title: String(src.title).slice(0, 200), p_created_by: uid, p_type: ownerType, p_id: resource_id, p_field: "",
+      });
+      if (regErr || !okReg) {
+        await tg("deleteMessage", { chat_id: chatIdL, message_id: mid }); // لا نترك رسالة بلا مالك
+        return json({ error: regErr ? "تعذّر تسجيل الرسالة: " + regErr.message : "المصدر لم يعد موجودًا" }, regErr ? 500 : 409);
+      }
+      if (topicRow) { try { await rebuildIndex(db, tg, topicRow.id); } catch (e) { console.error("rebuildIndex:", e); } }
+      return json({ ok: true, mode: ex ? "replaced" : "created", url: linkL, message_id: mid });
     }
 
     const { data: blob, error: dlErr } = await db.storage.from("submissions").download(storage_path);
@@ -294,9 +370,17 @@ Deno.serve(async (req: Request) => {
       const { error: trackErr } = await db.from("telegram_resource_files").upsert({
         url: link, chat_id: Number(chatId), thread_id: threadId, message_id: messageId, created_by: uid,
         topic_id: topicRow.id, section, episode: n, episode_code: "E" + pad(n), aux_message_ids: sent,
+        kind: "file", claim_deadline: new Date(Date.now() + CLAIM_TTL_MS).toISOString(),
       });
+      if (trackErr) {
+        // لا نسلّم رابطًا لرسالة غير متتبَّعة (كانت ستبقى يتيمة عند الحذف): نحذف ما أرسلناه ونُعلم الأدمن
+        for (const id of [...sent, messageId]) await tg("deleteMessage", { chat_id: chatId, message_id: id });
+        await db.rpc("release_episode", { p_topic: topicRow.id, p_section: section, p_n: n });
+        try { await rebuildIndex(db, tg, topicRow.id); } catch (_e) { /* ignore */ }
+        return json({ error: "تعذّر تسجيل الرسالة (" + trackErr.message + "). لم يُحفظ شيء؛ أعد المحاولة." }, 500);
+      }
       await rebuildIndex(db, tg, topicRow.id);
-      return json({ ok: true, url: link, message_id: messageId, episode: "E" + pad(n), tracked: !trackErr });
+      return json({ ok: true, url: link, message_id: messageId, episode: "E" + pad(n), tracked: true });
     }
 
     const form = new FormData();
@@ -319,8 +403,13 @@ Deno.serve(async (req: Request) => {
     // تسجيل الرسالة لتُحذف تلقائيًا من تيليجرام عند حذف المصدر من الموقع (لا يُحذف إلا ما رفعناه هنا)
     const { error: trackErr } = await db.from("telegram_resource_files").upsert({
       url: link, chat_id: Number(dest.telegram_chat_id), thread_id: threadId, message_id: messageId, created_by: uid,
+      kind: "file", claim_deadline: new Date(Date.now() + CLAIM_TTL_MS).toISOString(),
     });
-    return json({ ok: true, url: link, message_id: messageId, tracked: !trackErr });
+    if (trackErr) {
+      await tgCall(BOT)("deleteMessage", { chat_id: String(dest.telegram_chat_id), message_id: messageId });
+      return json({ error: "تعذّر تسجيل الرسالة (" + trackErr.message + "). لم يُحفظ شيء؛ أعد المحاولة." }, 500);
+    }
+    return json({ ok: true, url: link, message_id: messageId, tracked: true });
   } catch (e) {
     return json({ error: String((e as Error)?.message || e) }, 500);
   }

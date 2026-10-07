@@ -501,12 +501,14 @@ function subjectResourceAdapter(subjectId){
       return (data||[]).map(toRow);
     },
     async create(p, role, idx){
-      await thr(db.from("university_materials").insert({...toCols(p), role, order_index: idx, subject_id: subjectId, created_by: Admin.ctx?.user?.id || null}));
+      const {data: ins} = await thr(db.from("university_materials").insert({...toCols(p), role, order_index: idx, subject_id: subjectId, created_by: Admin.ctx?.user?.id || null}).select("id").single());
+      return ins.id;   // معرّف المصدر (يُستخدم لنشر رسالة الرابط في تيليجرام)
     },
     async update(row, p, role, newIdx){
       const patch = toCols(p);
       if(newIdx!==null){ patch.role = role; patch.order_index = newIdx; }
       await thr(db.from("university_materials").update(patch).eq("id", row.id));
+      return row.id;
     },
     async remove(row){ await thr(db.from("university_materials").delete().eq("id", row.id)); },
     async setOrder(row, idx){ await thr(db.from("university_materials").update({order_index: idx}).eq("id", row.id)); },

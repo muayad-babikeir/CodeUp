@@ -54,7 +54,7 @@ const escH = (s: string) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g,
 const KEYCAP = ["", "1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"];
 const icon = (i: number) => (i <= 10 ? KEYCAP[i] : `${i}.`);
 
-type IdxFile = { url: string; section: string | null; episode: number | null; episode_code: string | null; created_at: string };
+type IdxFile = { url: string; section: string | null; episode: number | null; episode_code: string | null; created_at: string; display_title?: string | null };
 
 // يبني نص الفهرس: قسم لكل مجموعة، وحلقاتها E01 | E02 ... كلها روابط مباشرة لرسائل الملفات.
 // حد تيليجرام 4096 حرفًا: عند تجاوزه نعرض آخر N حلقة من كل قسم (الأحدث) مع علامة «…».
@@ -82,7 +82,7 @@ function buildIndexText(files: IdxFile[]): string {
       i++;
       const part = others.length > max ? others.slice(others.length - max) : others;
       const base = others.length - part.length;
-      text += `\n${icon(i)} ملفات أخرى\n${others.length > max ? "… | " : ""}${part.map((r, k) => `<a href="${r.url}">${pad(base + k + 1)}</a>`).join(" | ")}\n`;
+      text += `\n${icon(i)} ملفات أخرى\n${others.length > max ? "… | " : ""}${part.map((r, k) => `<a href="${r.url}">${r.display_title ? escH(String(r.display_title).slice(0, 30)) : pad(base + k + 1)}</a>`).join(" | ")}\n`;
     }
     if (!files.length) text += "\n(لا توجد ملفات بعد)";
     return text.trimEnd();
@@ -98,7 +98,7 @@ async function rebuildIndex(db: any, tg: (m: string, b: unknown) => Promise<any>
   for (let attempt = 0; attempt < 2; attempt++) {
     const { data: topic } = await db.from("archive_topics").select("id, index_message_id, archive_destinations(telegram_chat_id)").eq("id", topicId).maybeSingle();
     if (!topic?.index_message_id) return;
-    const { data: files } = await db.from("telegram_resource_files").select("url, section, episode, episode_code, created_at").eq("topic_id", topicId).order("created_at");
+    const { data: files } = await db.from("telegram_resource_files").select("url, section, episode, episode_code, created_at, display_title").eq("topic_id", topicId).order("created_at");
     const r = await tg("editMessageText", {
       chat_id: String(topic.archive_destinations?.telegram_chat_id), message_id: topic.index_message_id,
       text: buildIndexText(files || []), parse_mode: "HTML", disable_web_page_preview: true,
@@ -406,25 +406,31 @@ async function runJob(db: any, BOT: string, jobId: string) {
         // 1) تتبّع رسائل تيليجرام (يمكّن الحذف التلقائي وتحديث الفهرس)  2) المصدر في CodeUp  3) سجل العنصر  4) المؤشر
         const tr = await db.from("telegram_resource_files").upsert({
           url: d.link, chat_id: Number(ctx.chatId), thread_id: ctx.thread, message_id: d.destMessageId, created_by: j.created_by,
-          topic_id: ctx.topicId, section: j.section, episode: d.n, episode_code: "E" + pad(d.n), aux_message_ids: d.sent,
+          topic_id: ctx.topicId, section: j.section, episode: d.n, episode_code: "E" + pad(d.n), aux_message_ids: d.sent, kind: "imported",
         });
         if (tr.error) throw new Error(tr.error.message);
+        // فشل لاحق: لا نترك الرسالة المنسوخة يتيمة في تيليجرام (كانت تُحذف سجلّات التتبع فقط) — تدخل قائمة التنظيف
+        const discard = async () => { await db.rpc("telegram_discard_message", { p_url: d.link }); };
         let order = 0;
         if (isLesson) {
           const { data: lr } = await db.from("lesson_resources").select("order_index").eq("lesson_id", tId).order("order_index", { ascending: false }).limit(1);
           order = ((lr && lr[0]?.order_index) ?? 0) + 1;
           const ins = await db.from("resources").insert({ type: "telegram", title: `${j.section} | ${d.n}`, url: d.link, publisher: j.publisher, language: j.language, created_by: j.created_by }).select("id").single();
-          if (ins.error) { await db.from("telegram_resource_files").delete().eq("url", d.link); throw new Error(ins.error.message); }
+          if (ins.error) { await discard(); throw new Error(ins.error.message); }
           const lk = await db.from("lesson_resources").insert({ lesson_id: tId, resource_id: ins.data.id, role: j.role, order_index: order });
-          if (lk.error) { await db.from("telegram_resource_files").delete().eq("url", d.link); await db.from("resources").delete().eq("id", ins.data.id); throw new Error(lk.error.message); }
+          if (lk.error) { await db.from("resources").delete().eq("id", ins.data.id); await discard(); throw new Error(lk.error.message); }
+          const own = await db.rpc("telegram_attach_owner", { p_url: d.link, p_type: "resource", p_id: ins.data.id, p_field: "", p_kind: "imported" });
+          if (own.error || !own.data) { await db.from("resources").delete().eq("id", ins.data.id); await discard(); throw new Error(own.error?.message || "تعذّر تسجيل ملكية الرسالة"); }
         } else {
           const { data: mx } = await db.from("university_materials").select("order_index").eq("subject_id", j.subject_id).order("order_index", { ascending: false }).limit(1);
           order = ((mx && mx[0]?.order_index) ?? 0) + 1;
           const mat = await db.from("university_materials").insert({
             subject_id: j.subject_id, material_type: "telegram", title: `${j.section} | ${d.n}`, url: d.link, role: j.role,
             language: j.language, publisher: j.publisher, order_index: order, created_by: j.created_by,
-          });
-          if (mat.error) { await db.from("telegram_resource_files").delete().eq("url", d.link); throw new Error(mat.error.message); }
+          }).select("id").single();
+          if (mat.error) { await discard(); throw new Error(mat.error.message); }
+          const own = await db.rpc("telegram_attach_owner", { p_url: d.link, p_type: "university_material", p_id: mat.data.id, p_field: "", p_kind: "imported" });
+          if (own.error || !own.data) { await db.from("university_materials").delete().eq("id", mat.data.id); await discard(); throw new Error(own.error?.message || "تعذّر تسجيل ملكية الرسالة"); }
         }
         await db.from("telegram_import_items").insert({
           job_id: j.id, [tCol]: tId, source_chat_id: j.source_chat_id, source_message_id: d.m, status: "copied",
@@ -566,11 +572,13 @@ Deno.serve(async (req: Request) => {
             // تتبّع الرسائل (للحذف التلقائي) ثم حفظ الرابط في حقل الدرس؛ استبدال رابط مستورد سابقًا يحذف القديم عبر trigger القاعدة
             const tr = await db.from("telegram_resource_files").upsert({
               url: d.link, chat_id: Number(ctx.chatId), thread_id: ctx.thread, message_id: d.destMessageId, created_by: uid,
-              topic_id: ctx.topicId, section, episode: d.n, episode_code: "E" + pad(d.n), aux_message_ids: d.sent,
+              topic_id: ctx.topicId, section, episode: d.n, episode_code: "E" + pad(d.n), aux_message_ids: d.sent, kind: "imported",
             });
             if (tr.error) throw new Error(tr.error.message);
             const up = await db.from("lessons").update({ [body.field]: d.link }).eq("id", subj.id);
-            if (up.error) { await db.from("telegram_resource_files").delete().eq("url", d.link); throw new Error(up.error.message); }
+            if (up.error) { await db.rpc("telegram_discard_message", { p_url: d.link }); throw new Error(up.error.message); }
+            const own = await db.rpc("telegram_attach_owner", { p_url: d.link, p_type: "lesson_field", p_id: subj.id, p_field: body.field, p_kind: "imported" });
+            if (own.error || !own.data) { await db.rpc("telegram_discard_message", { p_url: d.link }); throw new Error(own.error?.message || "تعذّر تسجيل ملكية الرسالة"); }
             link = d.link; j.copied += 1; j.cursor_message_id = d.m + 1;
           },
           async recordSkipped(j, m, reason) { skipReason = reason; j.skipped += 1; j.cursor_message_id = m + 1; },

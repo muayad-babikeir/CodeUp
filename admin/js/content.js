@@ -301,10 +301,12 @@ function lessonResourceAdapter(lessonId){
     async create(payload, role, idx){
       const {data: res} = await thr(db.from("resources").insert({...payload, created_by: Admin.ctx?.user?.id || null}).select("id").single());
       await thr(db.from("lesson_resources").insert({lesson_id: lessonId, resource_id: res.id, role, order_index: idx}));
+      return res.id;   // معرّف المصدر (يُستخدم لنشر رسالة الرابط في تيليجرام)
     },
     async update(row, payload, role, newIdx){
       await thr(db.from("resources").update(payload).eq("id", row.resource_id));
       if(newIdx!==null) await thr(db.from("lesson_resources").update({role, order_index:newIdx}).eq("id", row.id));
+      return row.resource_id;
     },
     async remove(row){ await thr(db.from("lesson_resources").delete().eq("id", row.id)); },
     async setOrder(row, idx){ await thr(db.from("lesson_resources").update({order_index: idx}).eq("id", row.id)); },

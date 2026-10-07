@@ -132,6 +132,18 @@ async function renderResourcePanel(box, ad){
       }
       return j.url;
     };
+    // رابط خارجي بلا ملف: نشر/تعديل رسالة جميلة في تيليجرام (الوسوم ← اسم الرابط ← «الانتقال إلى الرابط» + معاينة). نرسل معرّفات فقط؛ الخادم يقرأ العنوان والرابط من القاعدة ويتولى الملكية والتنظيف.
+    const publishLink = async (resourceId)=>{
+      const { data: sd } = await db.auth.getSession();
+      const token = sd?.session?.access_token;
+      if(!token) throw new Error("انتهت الجلسة، أعد تسجيل الدخول");
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/telegram-upload-resource`, {
+        method:"POST", headers:{"Content-Type":"application/json","Authorization":`Bearer ${token}`},
+        body: JSON.stringify({action:"publish_link", kind: ad.fileCtx.kind, ref_id: ad.fileCtx.id, resource_id: resourceId})
+      });
+      const j = await res.json().catch(()=>({error:"رد غير صالح من الخادم"}));
+      if(!j.ok) throw new Error(j.error || "خطأ غير معروف");
+    };
     m2.el.querySelector("#rSave").onclick = async ()=>{
       const g = id=>m2.el.querySelector(id).value.trim();
       const msg = m2.el.querySelector("#rMsg");
@@ -161,16 +173,27 @@ async function renderResourcePanel(box, ad){
         start_at: ad.hasStart && g("#rStart") ? Number(g("#rStart")) : null
       };
       const role = g("#rRole");
+      saveBtn.disabled = true;
+      let resourceId = null;
       try{
         if(edit){
           if(role==="recommended") await ad.demoteRecommended(row.id);
-          await ad.update(row, payload, role, role!==row.role ? rows.filter(y=>y.role===role).length : null);
+          resourceId = await ad.update(row, payload, role, role!==row.role ? rows.filter(y=>y.role===role).length : null);
         }else{
           if(role==="recommended") await ad.demoteRecommended(null);
-          await ad.create(payload, role, rows.filter(y=>y.role===role).length);
+          resourceId = await ad.create(payload, role, rows.filter(y=>y.role===role).length);
         }
-        CodeUp.toast(edit?"تم حفظ التعديل":"تمت إضافة المصدر","success"); if(edit) Admin.kickTelegramCleanup(); m2.close(); reload();
-      }catch(e){ fail(e.message); }
+      }catch(e){ saveBtn.disabled = false; return fail(e.message); }
+      // المصدر حُفظ. رابط خارجي (وضع «رابط») => رسالة تيليجرام؛ فشلها لا يُلغي الحفظ ويُعلَم به الأدمن بوضوح (إعادة الحفظ تعيد المحاولة)
+      let tgWarn = "";
+      if(ad.fileCtx && !fileMode && resourceId){
+        saveBtn.textContent = "جارِ النشر في تيليجرام…";
+        try{ await publishLink(resourceId); }catch(e){ tgWarn = e.message; }
+      }
+      CodeUp.toast(edit?"تم حفظ التعديل":"تمت إضافة المصدر","success");
+      if(tgWarn) CodeUp.toast("حُفظ المصدر لكن تعذّر نشره في تيليجرام: " + tgWarn + " — افتح المصدر واحفظه مجددًا لإعادة المحاولة.","error");
+      Admin.kickTelegramCleanup();   // يُنظّف رسائل قديمة استُبدلت (ملف جديد أو بطاقة رابط جديدة)
+      m2.close(); reload();
     };
   }
 }
