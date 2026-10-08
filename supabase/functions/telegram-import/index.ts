@@ -110,6 +110,30 @@ async function rebuildIndex(db: any, tg: (m: string, b: unknown) => Promise<any>
 }
 // ===== نهاية المكتبة =====
 
+// ===== ترويسة الميتاداتا الموحدة (نسخة مطابقة في telegram-upload-resource و telegram-import) =====
+// [اقتباس: الوسوم] سطر فارغ [اقتباس: العنوان] — تُضاف فوق تنسيق الأرشيف القديم ولا تستبدله. لا يُرسل اقتباس فارغ أبدًا (الوسم/العنوان يلزمه حرف أو رقم فعلي).
+const MH_ROLE_TAG: Record<string, string> = { recommended: "#مصدر_أساسي", alternative: "#مصدر_بديل", deep_dive: "#تعمّق", study: "#للمذاكرة" };
+// أحرف غير مرئية/حشو (zero-width، Hangul filler...) تُحذف قبل الفحص حتى لا يمرّ عنوان «فارغ» كأنه نص
+const MH_INVIS = /[\u200B-\u200F\u2060\uFEFF\u3164\u115F\u1160\u17B4\u17B5\uFFA0]/g;
+const mhTag = (s: string) => {
+  const t = String(s ?? "").replace(MH_INVIS, "").trim().replace(/[\s\-–—.]+/g, "_").replace(/[^\p{L}\p{N}_]/gu, "").replace(/_+/g, "_").replace(/^_|_$/g, "");
+  return t ? "#" + t.slice(0, 40) : "";
+};
+const mhEsc = (s: string) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+// السطر الأول = الدور + السياق، والسطر الثاني = اسم آخر عنصر (الدرس/المادة). يرجع "" إن لم يوجد ما يُعرض.
+function buildMetaHeader(role: string, crumbs: string[], title: string): string {
+  const tags = [...new Set([MH_ROLE_TAG[role] || "#مصدر", ...crumbs.map(mhTag)].filter(Boolean))];
+  const last = crumbs.length ? mhTag(crumbs[crumbs.length - 1]) : "";
+  const head = tags.filter((t) => t !== last);
+  const tagText = [head.join(" "), last && tags.includes(last) ? last : ""].filter(Boolean).join("\n").slice(0, 900);
+  const name = String(title ?? "").replace(MH_INVIS, "").trim().slice(0, 300);
+  const parts: string[] = [];
+  if (/[\p{L}\p{N}]/u.test(tagText)) parts.push(`<blockquote>${mhEsc(tagText)}</blockquote>`);
+  if (/[\p{L}\p{N}]/u.test(name)) parts.push(`<blockquote>${mhEsc(name)}</blockquote>`);
+  return parts.join("\n\n");
+}
+// ===== نهاية الترويسة =====
+
 // استدعاء Telegram Bot API (JSON)
 const tgCall = (BOT: string) => (m: string, b: unknown) =>
   fetch(`https://api.telegram.org/bot${BOT}/${m}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(b) }).then((r) => r.json());
@@ -163,7 +187,7 @@ type ImportJob = {
   section: string; role: string; language: string | null; publisher: string | null; force_reimport: boolean;
   cursor_message_id: number; copied: number; skipped: number;
 };
-type ImportCtx = { chatId: string; thread: number; topicId: string };
+type ImportCtx = { chatId: string; thread: number; topicId: string; crumbs: string[] };
 type ImportIO = {
   now: () => number;
   sleep: (ms: number) => Promise<void>;
@@ -203,10 +227,17 @@ async function runItems(job: ImportJob, ctx: ImportCtx, io: ImportIO, budgetMs: 
     const n = await io.store.nextEpisode(ctx.topicId, job.section);
     if (!n) return { state: "paused", error: "تعذّر توليد رقم الحلقة" };
     const sent: number[] = [];
+    let metaId: number | null = null; // ترويسة الميتاداتا (تُرسل أولًا قبل الفاصل)
     const rollback = async () => {
-      for (const id of sent) await io.tg("deleteMessage", { chat_id: ctx.chatId, message_id: id });
+      for (const id of [...(metaId ? [metaId] : []), ...sent]) await io.tg("deleteMessage", { chat_id: ctx.chatId, message_id: id });
       await io.store.releaseEpisode(ctx.topicId, job.section, n);
     };
+    const metaText = buildMetaHeader(job.role, ctx.crumbs, `${job.section} | ${n}`);
+    if (metaText) {
+      const mt = await send("sendMessage", { chat_id: ctx.chatId, message_thread_id: ctx.thread, text: metaText, parse_mode: "HTML" });
+      if (!mt.ok) { await rollback(); return { state: "paused", error: "Telegram: " + (mt.description || "فشل إرسال الترويسة") }; }
+      metaId = mt.result.message_id;
+    }
     const sep = await send("sendMessage", { chat_id: ctx.chatId, message_thread_id: ctx.thread, text: SEP });
     if (!sep.ok) { await rollback(); return { state: "paused", error: "Telegram: " + (sep.description || "فشل إرسال الفاصل") }; }
     sent.push(sep.result.message_id);
@@ -225,7 +256,7 @@ async function runItems(job: ImportJob, ctx: ImportCtx, io: ImportIO, budgetMs: 
     const chatPart = ctx.chatId.replace(/^-100/, "");
     const link = `https://t.me/c/${chatPart}/${ctx.thread}/${destMessageId}`;
     try {
-      await io.store.recordCopied(job, { m, n, sent, destMessageId, link });
+      await io.store.recordCopied(job, { m, n, sent: metaId ? [...sent, metaId] : sent, destMessageId, link }); // aux = [فاصل، عنوان، (ميتاداتا)]
     } catch (e) {
       await io.tg("deleteMessage", { chat_id: ctx.chatId, message_id: destMessageId });
       await rollback();
@@ -253,6 +284,7 @@ async function loadSubject(db: any, subjectId: string) {
   return {
     kind: "subject" as const, courseId: null as string | null, topicTitle: sx.title as string,
     id: sx.id as string, title: sx.title as string, universityId: sem?.university_id as string | null, yearId: sem?.year_id as string | null,
+    crumbs: [sem?.universities?.name, yr?.university_programs?.name, yearLabel, sem?.title, sx.title].filter(Boolean) as string[],
     path: [sem?.universities?.name, yr?.university_programs?.name, yearLabel, sem?.title, sx.title].filter(Boolean).join(" › "),
     dest: (dests && dests[0]) || null,
   };
@@ -281,6 +313,7 @@ async function loadLesson(db: any, lessonId: string) {
   return {
     kind: "lesson" as const, courseId: (lx.units?.course_id ?? null) as string | null, topicTitle: courseName || "Course",
     id: lx.id as string, title: lx.title as string, universityId: null as string | null, yearId: null as string | null,
+    crumbs: [courseName, lx.units?.title, lx.title].filter(Boolean) as string[],
     path: [courseName, lx.units?.title, lx.title].filter(Boolean).join(" › "),
     dest: (dests && dests[0]) || null,
   };
@@ -387,7 +420,7 @@ async function runJob(db: any, BOT: string, jobId: string) {
       : await ensureTopic(db, BOT, subject.dest, "subject_id", subject.id, subject.title);
   }
   catch (e) { await setJob({ status: "paused", locked_until: null, last_error: String((e as Error)?.message || e) }); return { state: "paused" as const }; }
-  const ctx: ImportCtx = { chatId: String(subject.dest.telegram_chat_id), thread: topic.thread, topicId: topic.id };
+  const ctx: ImportCtx = { chatId: String(subject.dest.telegram_chat_id), thread: topic.thread, topicId: topic.id, crumbs: subject.crumbs };
 
   const io: ImportIO = {
     now: () => Date.now(), sleep, tg,
@@ -554,7 +587,7 @@ Deno.serve(async (req: Request) => {
       catch (e) { return json({ error: String((e as Error)?.message || e) }, 502); }
       const section = `${FIELDS[body.field]} · ${subj.title}`.slice(0, 60);
       const dest = subj.dest as NonNullable<typeof subj.dest>;
-      const ctx: ImportCtx = { chatId: String(dest.telegram_chat_id), thread: topic.thread, topicId: topic.id };
+      const ctx: ImportCtx = { chatId: String(dest.telegram_chat_id), thread: topic.thread, topicId: topic.id, crumbs: subj.crumbs };
       let link = "", skipReason = "";
       const job: ImportJob = {
         id: "inline", subject_id: null, lesson_id: subj.id, course_id: subj.courseId, created_by: uid, source_chat_id: pub.source.id,
