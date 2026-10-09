@@ -25,7 +25,7 @@ function world(over = {}) {
 const body = { action: 'publish_link', kind: 'lesson', ref_id: 'L1', resource_id: 'R1', title: 'EVIL title from client', storage_path: 'ignored' };
 
 // 1) new link in a topic: THREE messages like a file (separator, "section | n", content)
-const SEPL = '───────── ✦ ─────────';
+const SEPL = '─── ✦ ────';
 const CARD = '<blockquote>Linux guide &lt;b&gt;</blockquote>\n<blockquote><a href="https://youtube.com/watch?v=1&amp;t=2">الانتقال إلى الرابط</a></blockquote>';
 { const w = world(); const h = await loadFn('telegram-upload-resource', w); const r = await call(h, body); const j = await r.json();
   const sends = w.tg.filter(x => x.m === 'sendMessage');
@@ -127,7 +127,7 @@ const CARD = '<blockquote>Linux guide &lt;b&gt;</blockquote>\n<blockquote><a hre
 { const w = world(); w.owner = { chat_id: -1004337039125, message_id: 900, kind: 'file' }; w.aux = []; w.trk = { topic_id: 'TOPIC1', section: 'Lec', episode: 3 };
   w.resolve = ((orig) => (st, s) => st.table === 'lesson_resources' ? { data: { role: 'recommended', resources: { title: 'New title', url: 'https://t.me/c/4337039125/107/900' } } } : orig(st, s))(w.resolve);
   const h = await loadFn('telegram-upload-resource', w); const r = await call(h, body); const j = await r.json(); const ec = w.tg.filter(x => x.m === 'editMessageCaption');
-  ok(r.status === 200 && j.mode === 'unchanged_file' && j.meta_updated === true && ec.length === 1 && ec[0].body.message_id === 900 && ec[0].body.caption.includes('<blockquote>New title</blockquote>') && ec[0].body.caption.endsWith('───────── ✦ ─────────\n\nLec | 3'), 'T-edit.6 one-message file: caption refreshed in the same message (title updated, "Lec | 3" and numbering kept)');
+  ok(r.status === 200 && j.mode === 'unchanged_file' && j.meta_updated === true && ec.length === 1 && ec[0].body.message_id === 900 && ec[0].body.caption.includes('<blockquote>New title</blockquote>') && ec[0].body.caption.endsWith('─── ✦ ────\n\nLec | 3'), 'T-edit.6 one-message file: caption refreshed in the same message (title updated, "Lec | 3" and numbering kept)');
   ok(!w.tg.some(x => ['sendMessage', 'deleteMessage', 'sendDocument', 'editMessageText'].includes(x.m)) && !w.rpcs.some(x => /telegram_(register|attach|set_owner|release|discard)/.test(x.n)), 'T-edit.7 no duplicate, no delete, no ownership RPC'); }
 // 16) caption message deleted manually: ignored, not recreated
 { const w = world({ tgReply: (m) => m === 'editMessageCaption' ? { ok: false, description: 'Bad Request: message to edit not found' } : { ok: true, result: { message_id: 1 } } });
@@ -185,4 +185,10 @@ for (const [k, label] of [[1, 'separator'], [2, 'number'], [3, 'content']]) {
 // 26) no archive topic (lesson without a course): ONE message as before (no numbering exists there)
 { const w = world(); w.noCourse = true; const h = await loadFn('telegram-upload-resource', w); const r = await call(h, body);
   ok(r.status === 200 && w.tg.filter(x => x.m === 'sendMessage').length === 1 && !w.rpcs.some(x => x.n === 'next_episode') && w.tg.find(x => x.m === 'sendMessage').body.text.startsWith('<blockquote>#مصدر_أساسي'), 'T-link3.12 no topic -> single message with the previous layout (unchanged fallback)'); }
+
+// 27) editing a resource owned by a THREE-message file (aux=[separator, number], topic): nothing to refresh -> no edit, no new message, no delete, no ownership RPC
+{ const w = world(); w.owner = { chat_id: -1004337039125, message_id: 321, kind: 'file' }; w.aux = [301, 302]; w.trk = { topic_id: 'TOPIC1', section: 'T', episode: 4 };
+  w.resolve = ((orig) => (st, s) => st.table === 'lesson_resources' ? { data: { role: 'recommended', resources: { title: 'New title', url: 'https://t.me/c/4337039125/107/321' } } } : orig(st, s))(w.resolve);
+  const h = await loadFn('telegram-upload-resource', w); const r = await call(h, body); const j = await r.json();
+  ok(r.status === 200 && j.mode === 'unchanged_file' && j.meta_updated === false && w.tg.length === 0 && !w.rpcs.some(x => /telegram_(register|attach|set_owner|release|discard)/.test(x.n)) && !w.writes.length, 'T-edit.10 three-message file: editing the resource data touches no Telegram message and no ownership/tracking row'); }
 console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

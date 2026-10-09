@@ -48,7 +48,7 @@ const tgIdentity = (u: string): [number, number] | null => {
 const NOT_EDITABLE = /message to edit not found|message can't be edited|MESSAGE_ID_INVALID|message identifier is not specified|chat not found/i;
 
 // ===== مكتبة الفهرس (نسخة مطابقة في telegram-upload-resource و telegram-resource-cleanup) =====
-const SEP = "───────── ✦ ─────────"; // فاصل موحّد (✦ واحد، طرفان متساويان، أقصر من عرض فقاعة المستند)
+const SEP = "─── ✦ ────"; // فاصل موحّد قصير (يُستخدم في الرفع والروابط والاستيراد؛ لا فواصل أخرى)
 const pad = (n: number) => String(n).padStart(2, "0");
 const escH = (s: string) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const KEYCAP = ["", "1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"];
@@ -356,6 +356,7 @@ Deno.serve(async (req: Request) => {
         if (idn && idn[0] === Number(ex.chat_id) && idn[1] === Number(ex.message_id)) {
           // تحديث الميتاداتا (العنوان/الوسوم) في نفس الرسالة، بلا إنشاء رسائل ولا مساس بالملكية:
           //  - رسالة جديدة (رسالة واحدة، في موضوع، بلا aux): نعدّل كابشنها بنفس "القسم | رقم" المحفوظ
+          //  - ثلاث رسائل (aux = [فاصل، عنوان]): لا شيء يُعدَّل؛ العنوان "القسم | رقم" ثابت (الفهرس والترقيم) والملف نفسه لا يُمسّ
           //  - رسالة قديمة (aux = [فاصل، عنوان، ميتاداتا] أو [ميتاداتا]): نعدّل رسالة الميتاداتا المنفصلة كما كان
           //  - غير ذلك (قديمة بلا ميتاداتا، أو احتياطي بلا موضوع): لا نمسّها
           const { data: trk0 } = await db.from("telegram_resource_files").select("aux_message_ids, topic_id, section, episode").eq("chat_id", ex.chat_id).eq("message_id", ex.message_id).maybeSingle();
@@ -461,29 +462,38 @@ Deno.serve(async (req: Request) => {
     const chatId = String(dest.telegram_chat_id);
     const chatPart = chatId.replace(/^-100/, "");
 
-    // ===== مسار الموضوع (مادة جامعة / كورس): رسالة تيليجرام واحدة لكل ملف = كابشن [ميتاداتا ← فاصل ← "القسم | رقم"] + الملف + تحديث الفهرس المثبّت =====
+    // ===== مسار الموضوع (مادة جامعة / كورس): ثلاث رسائل لكل ملف (فاصل ← "القسم | رقم" ← الملف نفسه) + تحديث الفهرس المثبّت =====
     if (topicRow) {
       const tg = tgCall(BOT);
       const section = String(sectionIn || title || file_name).trim().slice(0, 60);
       const n: number | null = (await db.rpc("next_episode", { p_topic: topicRow.id, p_section: section })).data;
       if (!n) return json({ error: "تعذّر توليد رقم الحلقة" }, 500);
-      const rollback = async () => { await db.rpc("release_episode", { p_topic: topicRow!.id, p_section: section, p_n: n }); }; // لا رسائل مساعدة تُحذف
-      const oneCaption = buildArchiveCaption(role, crumbs, title || file_name, [escH(`${section} | ${n}`)]);
-      const fileRes = await sendMedia(BOT, chatId, threadId, mediaKind(file_name, mime_type), blob, file_name, oneCaption);
-      if (!fileRes.ok) { await rollback(); return json({ error: "Telegram: " + (fileRes.description || "فشل إرسال الملف") }, 502); }
+      const made: number[] = [];   // ما أُرسل حتى الآن؛ يُحذف كله عند أي فشل قبل اكتمال التتبّع (فلا تبقى فواصل/عناوين يتيمة ولا يتكرر شيء عند إعادة المحاولة)
+      const undo = async () => {
+        for (const id of made) await tg("deleteMessage", { chat_id: chatId, message_id: id });
+        await db.rpc("release_episode", { p_topic: topicRow!.id, p_section: section, p_n: n });
+      };
+      const sepRes = await tg("sendMessage", { chat_id: chatId, ...(threadId ? { message_thread_id: threadId } : {}), text: SEP });
+      if (!sepRes.ok) { await undo(); return json({ error: "Telegram: " + (sepRes.description || "فشل إرسال الفاصل") }, 502); }
+      made.push(sepRes.result.message_id);
+      const headRes = await tg("sendMessage", { chat_id: chatId, ...(threadId ? { message_thread_id: threadId } : {}), text: `${section} | ${n}` });
+      if (!headRes.ok) { await undo(); return json({ error: "Telegram: " + (headRes.description || "فشل إرسال العنوان") }, 502); }
+      made.push(headRes.result.message_id);
+      const fileRes = await sendMedia(BOT, chatId, threadId, mediaKind(file_name, mime_type), blob, file_name, "");
+      if (!fileRes.ok) { await undo(); return json({ error: "Telegram: " + (fileRes.description || "فشل إرسال الملف") }, 502); }
+      made.push(fileRes.result.message_id);
 
       await db.storage.from("submissions").remove([storage_path]);
       const messageId: number = fileRes.result.message_id;
       const link = `https://t.me/c/${chatPart}/${threadId}/${messageId}`; // رابط مباشر لرسالة الملف نفسها
       const { error: trackErr } = await db.from("telegram_resource_files").upsert({
         url: link, chat_id: Number(chatId), thread_id: threadId, message_id: messageId, created_by: uid,
-        topic_id: topicRow.id, section, episode: n, episode_code: "E" + pad(n), aux_message_ids: [],
+        topic_id: topicRow.id, section, episode: n, episode_code: "E" + pad(n), aux_message_ids: [sepRes.result.message_id, headRes.result.message_id],
         kind: "file", claim_deadline: new Date(Date.now() + CLAIM_TTL_MS).toISOString(),
       });
       if (trackErr) {
-        // لا نسلّم رابطًا لرسالة غير متتبَّعة (كانت ستبقى يتيمة عند الحذف): نحذف ما أرسلناه ونُعلم الأدمن
-        await tg("deleteMessage", { chat_id: chatId, message_id: messageId });
-        await db.rpc("release_episode", { p_topic: topicRow.id, p_section: section, p_n: n });
+        // لا نسلّم رابطًا لرسالة غير متتبَّعة (كانت ستبقى يتيمة عند الحذف): نحذف الرسائل الثلاث ونُعلم الأدمن
+        await undo();
         try { await rebuildIndex(db, tg, topicRow.id); } catch (_e) { /* ignore */ }
         return json({ error: "تعذّر تسجيل الرسالة (" + trackErr.message + "). لم يُحفظ شيء؛ أعد المحاولة." }, 500);
       }

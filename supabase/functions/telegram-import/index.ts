@@ -48,7 +48,7 @@ function parseTgLink(raw: string): { chat: string; thread: number | null; msg: n
 
 
 // ===== مكتبة الفهرس (نسخة مطابقة في telegram-upload-resource و telegram-resource-cleanup) =====
-const SEP = "───────── ✦ ─────────"; // فاصل موحّد (✦ واحد، طرفان متساويان، أقصر من عرض فقاعة المستند)
+const SEP = "─── ✦ ────"; // فاصل موحّد قصير (نفسه في الرفع والروابط والاستيراد؛ لا فواصل أخرى)
 const pad = (n: number) => String(n).padStart(2, "0");
 const escH = (s: string) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const KEYCAP = ["", "1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"];
@@ -109,50 +109,6 @@ async function rebuildIndex(db: any, tg: (m: string, b: unknown) => Promise<any>
   }
 }
 // ===== نهاية المكتبة =====
-
-// ===== ترويسة الميتاداتا الموحدة (نسخة مطابقة في telegram-upload-resource و telegram-import) =====
-// [اقتباس: الوسوم] سطر فارغ [اقتباس: العنوان] — تُضاف فوق تنسيق الأرشيف القديم ولا تستبدله. لا يُرسل اقتباس فارغ أبدًا (الوسم/العنوان يلزمه حرف أو رقم فعلي).
-const MH_ROLE_TAG: Record<string, string> = { recommended: "#مصدر_أساسي", alternative: "#مصدر_بديل", deep_dive: "#تعمّق", study: "#للمذاكرة" };
-// أحرف غير مرئية/حشو (zero-width، Hangul filler...) تُحذف قبل الفحص حتى لا يمرّ عنوان «فارغ» كأنه نص
-const MH_INVIS = /[\u200B-\u200F\u2060\uFEFF\u3164\u115F\u1160\u17B4\u17B5\uFFA0]/g;
-const mhTag = (s: string) => {
-  const t = String(s ?? "").replace(MH_INVIS, "").trim().replace(/[\s\-–—.]+/g, "_").replace(/[^\p{L}\p{N}_]/gu, "").replace(/_+/g, "_").replace(/^_|_$/g, "");
-  return t ? "#" + t.slice(0, 40) : "";
-};
-const mhEsc = (s: string) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-// السطر الأول = الدور + السياق، والسطر الثاني = اسم آخر عنصر (الدرس/المادة). يرجع "" إن لم يوجد ما يُعرض.
-function buildMetaHeader(role: string, crumbs: string[], title: string, tagBudget = 900): string {
-  const tags = [...new Set([MH_ROLE_TAG[role] || "#مصدر", ...crumbs.map(mhTag)].filter(Boolean))];
-  const last = crumbs.length ? mhTag(crumbs[crumbs.length - 1]) : "";
-  const head = tags.filter((t) => t !== last);
-  let tagText = [head.join(" "), last && tags.includes(last) ? last : ""].filter(Boolean).join("\n");
-  // الافتراضي كما كان (قصّ عند 900)؛ عند ضيق حد الكابشن يُقصّ عند آخر وسم كامل
-  tagText = tagBudget >= 900 ? tagText.slice(0, 900) : tagText.length > tagBudget ? tagText.slice(0, tagBudget).replace(/\s+\S*$/, "") : tagText;
-  const name = String(title ?? "").replace(MH_INVIS, "").trim().slice(0, 300);
-  const parts: string[] = [];
-  if (/[\p{L}\p{N}]/u.test(tagText)) parts.push(`<blockquote>${mhEsc(tagText)}</blockquote>`);
-  if (/[\p{L}\p{N}]/u.test(name)) parts.push(`<blockquote>${mhEsc(name)}</blockquote>`);
-  return parts.join("\n\n");
-}
-// ===== نهاية الترويسة =====
-
-// كابشن الرسالة الواحدة: [ميتاداتا: وسوم + عنوان] ← فاصل ← سطور الأرشيف القديم («القسم | رقم») (نسخة مطابقة في telegram-upload-resource). tailLines مُهرَّبة HTML.
-const CAP_MAX = 1024;
-const capLen = (h: string) => h.replace(/<[^>]+>/g, "").replace(/&(lt|gt|amp|quot);/g, "x").length;
-function buildArchiveCaption(role: string, crumbs: string[], title: string, tailLines: string[]): string {
-  const lines = [...tailLines];   // السطر الفارغ "" يُحفظ كما هو (فاصل بصري داخل التنسيق القديم)
-  const trim = () => { while (lines.length && !lines[lines.length - 1].trim()) lines.pop(); };
-  trim();
-  for (;;) {
-    let cap = "";
-    for (let budget = 900; budget >= 100; budget -= 100) {
-      cap = [buildMetaHeader(role, crumbs, title, budget), lines.length ? SEP : "", lines.join("\n")].filter(Boolean).join("\n\n");
-      if (capLen(cap) <= CAP_MAX) return cap;
-    }
-    if (lines.length <= 1) return cap;
-    lines.pop(); trim();
-  }
-}
 
 // استدعاء Telegram Bot API (JSON)
 const tgCall = (BOT: string) => (m: string, b: unknown) =>
@@ -246,56 +202,32 @@ async function runItems(job: ImportJob, ctx: ImportCtx, io: ImportIO, budgetMs: 
 
     const n = await io.store.nextEpisode(ctx.topicId, job.section);
     if (!n) return { state: "paused", error: "تعذّر توليد رقم الحلقة" };
-    const sent: number[] = [];
-    let metaId: number | null = null; // ترويسة منفصلة: فقط للرسائل التي لا تحمل كابشن (نص/استطلاع...)
+    const sent: number[] = [];   // [فاصل، عنوان] — تُحذف عند أي فشل قبل اكتمال التتبّع، وتُسجَّل aux للمورد بعد نجاحه (cleanup الحالي يحذفها معه)
     const rollback = async () => {
-      for (const id of [...(metaId ? [metaId] : []), ...sent]) await io.tg("deleteMessage", { chat_id: ctx.chatId, message_id: id });
+      for (const id of sent) await io.tg("deleteMessage", { chat_id: ctx.chatId, message_id: id });
       await io.store.releaseEpisode(ctx.topicId, job.section, n);
     };
     const heading = `${job.section} | ${n}`;
-    const oneCaption = buildArchiveCaption(job.role, ctx.crumbs, heading, [mhEsc(heading)]);
-    const copyBody = { chat_id: ctx.chatId, message_thread_id: ctx.thread, from_chat_id: String(job.source_chat_id), message_id: m };
+    const sep = await send("sendMessage", { chat_id: ctx.chatId, message_thread_id: ctx.thread, text: SEP });
+    if (!sep.ok) { await rollback(); return { state: "paused", error: "Telegram: " + (sep.description || "فشل إرسال الفاصل") }; }
+    sent.push(sep.result.message_id);
+    const head = await send("sendMessage", { chat_id: ctx.chatId, message_thread_id: ctx.thread, text: heading });
+    if (!head.ok) { await rollback(); return { state: "paused", error: "Telegram: " + (head.description || "فشل إرسال العنوان") }; }
+    sent.push(head.result.message_id);
 
-    // 1) الأصل: رسالة واحدة — copyMessage بكابشن موحّد (وسائط/مستندات). نتحقق بتعديل الكابشن أنه طُبّق فعلًا؛ الرسائل النصية لا تحمل كابشن.
-    let destMessageId = 0;
-    const cp1 = await send("copyMessage", { ...copyBody, caption: oneCaption, parse_mode: "HTML" });
-    if (cp1.ok) {
-      const v = await send("editMessageCaption", { chat_id: ctx.chatId, message_id: cp1.result.message_id, caption: oneCaption, parse_mode: "HTML" });
-      if (v.ok || /message is not modified/i.test(String(v.description || ""))) destMessageId = cp1.result.message_id;
-      else await io.tg("deleteMessage", { chat_id: ctx.chatId, message_id: cp1.result.message_id }); // لا كابشن => نسخة بلا ميتاداتا: تُحذف وتُعاد بالمسار المنفصل
-    } else if (COPY_SKIP_RE.test(String(cp1.description || cp1.error_code || ""))) {
-      await io.store.releaseEpisode(ctx.topicId, job.section, n);
-      await io.store.recordSkipped(job, m, String(cp1.description || cp1.error_code || ""));
-      continue;
+    // الرسالة الثالثة: المحتوى الأصلي كما هو (نوعه وكابشنه ومصدره)، بنسخ الرسالة بلا أي كابشن جديد
+    const cp = await send("copyMessage", { chat_id: ctx.chatId, message_thread_id: ctx.thread, from_chat_id: String(job.source_chat_id), message_id: m });
+    if (!cp.ok) {
+      const desc = String(cp.description || cp.error_code || "");
+      await rollback();
+      if (COPY_SKIP_RE.test(desc)) { await io.store.recordSkipped(job, m, desc); continue; }  // رسالة خدمة/محذوفة: لا محتوى لنسخه
+      return { state: "paused", error: friendlyCopyError(desc) };
     }
-    // 2) استثناء تقني: رسالة بلا كابشن => المسار السابق (ترويسة، فاصل، عنوان، ثم النسخ) بنفس الفاصل الموحّد
-    if (!destMessageId) {
-      const metaText = buildMetaHeader(job.role, ctx.crumbs, heading);
-      if (metaText) {
-        const mt = await send("sendMessage", { chat_id: ctx.chatId, message_thread_id: ctx.thread, text: metaText, parse_mode: "HTML" });
-        if (!mt.ok) { await rollback(); return { state: "paused", error: "Telegram: " + (mt.description || "فشل إرسال الترويسة") }; }
-        metaId = mt.result.message_id;
-      }
-      const sep = await send("sendMessage", { chat_id: ctx.chatId, message_thread_id: ctx.thread, text: SEP });
-      if (!sep.ok) { await rollback(); return { state: "paused", error: "Telegram: " + (sep.description || "فشل إرسال الفاصل") }; }
-      sent.push(sep.result.message_id);
-      const head = await send("sendMessage", { chat_id: ctx.chatId, message_thread_id: ctx.thread, text: heading });
-      if (!head.ok) { await rollback(); return { state: "paused", error: "Telegram: " + (head.description || "فشل إرسال العنوان") }; }
-      sent.push(head.result.message_id);
-
-      const cp = await send("copyMessage", copyBody);
-      if (!cp.ok) {
-        const desc = String(cp.description || cp.error_code || "");
-        await rollback();
-        if (COPY_SKIP_RE.test(desc)) { await io.store.recordSkipped(job, m, desc); continue; }  // رسالة خدمة/محذوفة: لا محتوى لنسخه
-        return { state: "paused", error: friendlyCopyError(desc) };
-      }
-      destMessageId = cp.result.message_id;
-    }
+    const destMessageId: number = cp.result.message_id;
     const chatPart = ctx.chatId.replace(/^-100/, "");
     const link = `https://t.me/c/${chatPart}/${ctx.thread}/${destMessageId}`;
     try {
-      await io.store.recordCopied(job, { m, n, sent: metaId ? [...sent, metaId] : sent, destMessageId, link }); // aux = [فاصل، عنوان، (ميتاداتا)]
+      await io.store.recordCopied(job, { m, n, sent, destMessageId, link }); // aux = [فاصل، عنوان]
     } catch (e) {
       await io.tg("deleteMessage", { chat_id: ctx.chatId, message_id: destMessageId });
       await rollback();

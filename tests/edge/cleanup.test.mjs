@@ -47,4 +47,12 @@ const rowsOf = (...r) => r.map((x, i) => ({ id: i + 1, chat_id: -100, message_id
 { const w = world(rowsOf({ message_id: 557 }, { message_id: 555 }, { message_id: 556 })); const h = await loadFn('telegram-resource-cleanup', w); const r = await call(h, {}); const j = await r.json();
   const del = w.tg.filter(x => x.m === 'deleteMessage').map(x => x.body.message_id).sort();
   ok(j.deleted === 3 && JSON.stringify(del) === '[555,556,557]' && w.updates.every(u => u.processed_at), 'T-clean.12 link trio (content + separator + number) queued by the DB -> all three deleted and marked processed'); }
+// three-message FILE (content + separator + number queued together): only those queued messages are deleted; other resources' messages are never touched
+{ const w = world(rowsOf({ message_id: 321 }, { message_id: 301 }, { message_id: 302 })); const h = await loadFn('telegram-resource-cleanup', w); const r = await call(h, {}); const j = await r.json();
+  const del = w.tg.filter(x => x.m === 'deleteMessage').map(x => x.body.message_id).sort((a, b) => a - b);
+  ok(j.deleted === 3 && JSON.stringify(del) === '[301,302,321]', 'T-clean.13 file trio queued -> exactly those three messages are deleted (a neighbouring resource, e.g. 322/303, is not in the queue and is never touched)'); }
+// a helper message that somehow became owned by another resource is skipped (last-line guard), the rest are still removed
+{ const w = world(rowsOf({ message_id: 321 }, { message_id: 301 }, { message_id: 302 }), { owned: { 301: true } }); const h = await loadFn('telegram-resource-cleanup', w); const r = await call(h, {}); const j = await r.json();
+  const del = w.tg.filter(x => x.m === 'deleteMessage').map(x => x.body.message_id).sort((a, b) => a - b);
+  ok(j.deleted === 2 && j.skipped === 1 && JSON.stringify(del) === '[302,321]', 'T-clean.14 an owned message in the queue is skipped, never deleted; the others are removed'); }
 console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);
