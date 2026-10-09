@@ -1,8 +1,9 @@
 import fs from 'node:fs';
+import os from "node:os";
 export async function loadFn(name, world) {
   let src = fs.readFileSync(new URL(`../../supabase/functions/${name}/index.ts`, import.meta.url), 'utf8');
   src = src.replace(/^import \{ createClient \} from "jsr:@supabase\/supabase-js@2";/, 'const createClient = globalThis.__createClient;');
-  const f = `/tmp/${name}-${Math.random().toString(36).slice(2)}.mts`;
+  const f = `${os.tmpdir()}/${name}-${Math.random().toString(36).slice(2)}.mts`;
   fs.writeFileSync(f, src);
   globalThis.__world = world;
   globalThis.__createClient = (url, key, opts) => {
