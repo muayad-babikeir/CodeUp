@@ -9,12 +9,12 @@ function world(over = {}) {
     rpc: async (n, a) => { w.rpcs.push({ n, a }); if (n === 'is_super_admin') return { data: w.isAdmin }; if (n === 'is_course_admin' || n === 'leader_has_permission') return { data: false }; if (n === 'telegram_register_message') return { data: w.registerOk, error: null }; return { data: null }; },
     resolve: (st, single) => {
       const t = st.table;
-      if (t === 'lessons') return { data: { title: 'Pointers', units: { title: 'C basics', course_id: 'c1', courses: { name: 'Linux' } } } };
+      if (t === 'lessons') return { data: { title: 'Pointers', units: { title: 'C basics', course_id: w.noCourse ? null : 'c1', courses: { name: 'Linux' } } } };
       if (t === 'lesson_resources') return { data: w.linked ? { role: 'recommended', resources: { title: 'Linux guide <b>', url: 'https://youtube.com/watch?v=1&t=2' } } : null };
       if (t === 'archive_destinations') return { data: [{ id: 'd1', telegram_chat_id: '-1004337039125', university_id: null, year_id: null }] };
-      if (t === 'archive_topics') return { data: [{ topic_key: 'materials', telegram_thread_id: 5 }] };
+      if (t === 'archive_topics') return single ? { data: { id: 'TOPIC1', telegram_thread_id: 107, index_message_id: 9 } } : { data: [{ topic_key: 'materials', telegram_thread_id: 5 }] };
       if (t === 'telegram_resource_owners') return { data: w.owner };
-      if (t === 'telegram_resource_files') return { data: { url: 'https://t.me/c/4337039125/5/900', topic_id: null } };
+      if (t === 'telegram_resource_files') return { data: { url: 'https://t.me/c/4337039125/5/900', topic_id: null, aux_message_ids: w.aux, ...(w.trk || {}) } };
       return { data: null };
     },
   };
@@ -25,12 +25,13 @@ const body = { action: 'publish_link', kind: 'lesson', ref_id: 'L1', resource_id
 // 1) new link message
 { const w = world(); const h = await loadFn('telegram-upload-resource', w); const r = await call(h, body); const j = await r.json();
   const send = w.tg.find(x => x.m === 'sendMessage');
-  ok(r.status === 200 && j.mode === 'created' && j.url === 'https://t.me/c/4337039125/5/555', 'T-link.1 new link: created, url built from chat/thread/message');
-  ok(send && send.body.text.split('\n')[0].startsWith('#مصدر_أساسي') && /#Linux/.test(send.body.text.split('\n')[0]), 'T-link.2 tags on the first line (role + breadcrumbs)');
+  ok(r.status === 200 && j.mode === 'created' && j.url === 'https://t.me/c/4337039125/107/555', 'T-link.1 new link: created in the course topic, url built from chat/thread/message');
+  const exact = '<blockquote>#مصدر_أساسي #Linux #C_basics\n#Pointers</blockquote>\n\n<blockquote>Linux guide &lt;b&gt;</blockquote>\n<blockquote><a href="https://youtube.com/watch?v=1&amp;t=2">الانتقال إلى الرابط</a></blockquote>';
+  ok(send && send.body.text === exact, 'T-link.2 exact layout: [quote: role+course+unit tags / lesson tag] blank [quote: title] [quote: «الانتقال إلى الرابط» link]');
   ok(send && /<blockquote>Linux guide &lt;b&gt;<\/blockquote>/.test(send.body.text) && !/EVIL/.test(send.body.text), 'T-link.3 link name in blockquote, escaped, taken from DB (client title ignored)');
   ok(send && /<blockquote><a href="https:\/\/youtube\.com\/watch\?v=1&amp;t=2">الانتقال إلى الرابط<\/a><\/blockquote>/.test(send.body.text), 'T-link.4 «الانتقال إلى الرابط» is a real link inside blockquote');
   ok(send && !send.body.text.replace(/href="[^"]*"/, '').includes('youtube.com'), 'T-link.5 raw URL not shown as text');
-  ok(send && send.body.link_preview_options?.url === 'https://youtube.com/watch?v=1&t=2' && send.body.parse_mode === 'HTML' && send.body.message_thread_id === 5, 'T-link.6 link_preview_options.url set, HTML mode, sent to the archive topic');
+  ok(send && send.body.link_preview_options?.url === 'https://youtube.com/watch?v=1&t=2' && send.body.parse_mode === 'HTML' && send.body.message_thread_id === 107 && send.body.link_preview_options.show_above_text === false, 'T-link.6 preview url set (below the text), HTML mode, sent to the COURSE topic (107), not MATERIALS');
   const reg = w.rpcs.find(x => x.n === 'telegram_register_message');
   ok(reg && reg.a.p_kind === 'link' && reg.a.p_type === 'resource' && reg.a.p_id === 'R1' && reg.a.p_msg === 555 && reg.a.p_chat === -1004337039125, 'T-link.7 ownership registered (kind=link, owner=resource R1, chat+message ids)');
   ok(!w.tg.some(x => x.m === 'deleteMessage'), 'T-link.8 nothing deleted on success'); }
@@ -80,4 +81,56 @@ const body = { action: 'publish_link', kind: 'lesson', ref_id: 'L1', resource_id
 { const w = world(); w.owner = { chat_id: -1004337039125, message_id: 900, kind: 'file' };
   const h = await loadFn('telegram-upload-resource', w); const r = await call(h, body); const j = await r.json();
   ok(r.status === 200 && j.mode === 'replaced' && w.rpcs.some(x => x.n === 'telegram_register_message'), 'T-link.21 file-owned resource now pointing to an external url: new link card registered (DB queues the old file message)'); }
+// 8) lesson without a course context keeps the current fallback (MATERIALS topic)
+{ const w = world(); w.noCourse = true; const h = await loadFn('telegram-upload-resource', w); const r = await call(h, body); const j = await r.json();
+  const send = w.tg.find(x => x.m === 'sendMessage');
+  ok(r.status === 200 && send && send.body.message_thread_id === 5 && j.url.endsWith('/5/555'), 'T-link.22 lesson with no course context -> fallback MATERIALS topic (thread 5)'); }
+// 9) title edit on an existing link message: same message edited, tags/title refreshed, no duplicate
+{ const w = world(); w.owner = { chat_id: -1004337039125, message_id: 777, kind: 'link' }; const h = await loadFn('telegram-upload-resource', w); const r = await call(h, body); 
+  const ed = w.tg.find(x => x.m === 'editMessageText');
+  ok(ed && /^<blockquote>#مصدر_أساسي/.test(ed.body.text) && ed.body.text.includes('<blockquote>Linux guide &lt;b&gt;</blockquote>') && w.tg.filter(x => x.m === 'sendMessage').length === 0, 'T-link.23 edit keeps the new layout and sends no duplicate'); }
+
+// 10) link with an invisible/blank title: no empty blockquote (tags quote + link quote only)
+{ const w = world(); w.resolve = ((orig) => (st, s) => st.table === 'lesson_resources' ? { data: { role: 'study', resources: { title: '\u200b\u3164 ', url: 'https://youtube.com/watch?v=1' } } } : orig(st, s))(w.resolve);
+  const h = await loadFn('telegram-upload-resource', w); const r = await call(h, body); const send = w.tg.find(x => x.m === 'sendMessage');
+  ok(r.status === 200 && (send.body.text.match(/<blockquote>/g) || []).length === 2 && !/<blockquote>\s*<\/blockquote>/.test(send.body.text), 'T-link.24 blank title -> no empty blockquote (tags quote + link quote)'); }
+// 11) editing a FILE-owned resource refreshes the title in the SAME metadata message (aux=[sep,head,meta]); ownership/other messages untouched
+{ const w = world(); w.owner = { chat_id: -1004337039125, message_id: 900, kind: 'file' }; w.aux = [11, 12, 13];
+  w.resolve = ((orig) => (st, s) => st.table === 'lesson_resources' ? { data: { role: 'recommended', resources: { title: 'New title', url: 'https://t.me/c/4337039125/5/900' } } } : orig(st, s))(w.resolve);
+  const h = await loadFn('telegram-upload-resource', w); const r = await call(h, body); const j = await r.json(); const ed = w.tg.filter(x => x.m === 'editMessageText');
+  ok(r.status === 200 && j.mode === 'unchanged_file' && j.meta_updated === true && ed.length === 1 && ed[0].body.message_id === 13 && ed[0].body.text.includes('<blockquote>New title</blockquote>'), 'T-edit.1 file resource: title updated in its metadata message (13) only');
+  ok(!w.tg.some(x => ['sendMessage', 'deleteMessage', 'sendDocument'].includes(x.m)) && !w.rpcs.some(x => /telegram_(register|attach|set_owner|release|discard)/.test(x.n)), 'T-edit.2 no new message, no delete, no ownership RPC'); }
+// 12) legacy file (aux=[sep,head], no metadata message): nothing touched
+{ const w = world(); w.owner = { chat_id: -1004337039125, message_id: 900, kind: 'file' }; w.aux = [11, 12];
+  w.resolve = ((orig) => (st, s) => st.table === 'lesson_resources' ? { data: { role: 'study', resources: { title: 'x', url: 'https://t.me/c/4337039125/5/900' } } } : orig(st, s))(w.resolve);
+  const h = await loadFn('telegram-upload-resource', w); const r = await call(h, body); const j = await r.json();
+  ok(r.status === 200 && j.meta_updated === false && w.tg.length === 0, 'T-edit.3 old file without metadata message: nothing is edited or created'); }
+// 13) fallback-path file (aux=[meta]) edit
+{ const w = world(); w.owner = { chat_id: -1004337039125, message_id: 900, kind: 'file' }; w.aux = [41];
+  w.resolve = ((orig) => (st, s) => st.table === 'lesson_resources' ? { data: { role: 'study', resources: { title: 'Renamed', url: 'https://t.me/c/4337039125/5/900' } } } : orig(st, s))(w.resolve);
+  const h = await loadFn('telegram-upload-resource', w); const r = await call(h, body); const ed = w.tg.find(x => x.m === 'editMessageText');
+  ok(ed && ed.body.message_id === 41 && ed.body.text.includes('<blockquote>Renamed</blockquote>'), 'T-edit.4 fallback-path file: its single metadata message is refreshed'); }
+// 14) metadata message deleted manually: edit failure is ignored, no crash, no recreation
+{ const w = world({ tgReply: (m) => m === 'editMessageText' ? { ok: false, description: 'Bad Request: message to edit not found' } : { ok: true, result: { message_id: 1 } } });
+  w.owner = { chat_id: -1004337039125, message_id: 900, kind: 'file' }; w.aux = [11, 12, 13];
+  w.resolve = ((orig) => (st, s) => st.table === 'lesson_resources' ? { data: { role: 'study', resources: { title: 'x', url: 'https://t.me/c/4337039125/5/900' } } } : orig(st, s))(w.resolve);
+  const h = await loadFn('telegram-upload-resource', w); const r = await call(h, body); const j = await r.json();
+  ok(r.status === 200 && j.meta_updated === false && !w.tg.some(x => x.m === 'sendMessage'), 'T-edit.5 missing metadata message: ignored, not recreated'); }
+// 15) NEW one-message file (topic, aux=[]): title edit -> editMessageCaption on the SAME message with the stored "section | n"; nothing created/deleted; no ownership RPC
+{ const w = world(); w.owner = { chat_id: -1004337039125, message_id: 900, kind: 'file' }; w.aux = []; w.trk = { topic_id: 'TOPIC1', section: 'Lec', episode: 3 };
+  w.resolve = ((orig) => (st, s) => st.table === 'lesson_resources' ? { data: { role: 'recommended', resources: { title: 'New title', url: 'https://t.me/c/4337039125/107/900' } } } : orig(st, s))(w.resolve);
+  const h = await loadFn('telegram-upload-resource', w); const r = await call(h, body); const j = await r.json(); const ec = w.tg.filter(x => x.m === 'editMessageCaption');
+  ok(r.status === 200 && j.mode === 'unchanged_file' && j.meta_updated === true && ec.length === 1 && ec[0].body.message_id === 900 && ec[0].body.caption.includes('<blockquote>New title</blockquote>') && ec[0].body.caption.endsWith('───────── ✦ ─────────\n\nLec | 3'), 'T-edit.6 one-message file: caption refreshed in the same message (title updated, "Lec | 3" and numbering kept)');
+  ok(!w.tg.some(x => ['sendMessage', 'deleteMessage', 'sendDocument', 'editMessageText'].includes(x.m)) && !w.rpcs.some(x => /telegram_(register|attach|set_owner|release|discard)/.test(x.n)), 'T-edit.7 no duplicate, no delete, no ownership RPC'); }
+// 16) caption message deleted manually: ignored, not recreated
+{ const w = world({ tgReply: (m) => m === 'editMessageCaption' ? { ok: false, description: 'Bad Request: message to edit not found' } : { ok: true, result: { message_id: 1 } } });
+  w.owner = { chat_id: -1004337039125, message_id: 900, kind: 'file' }; w.aux = []; w.trk = { topic_id: 'TOPIC1', section: 'Lec', episode: 3 };
+  w.resolve = ((orig) => (st, s) => st.table === 'lesson_resources' ? { data: { role: 'study', resources: { title: 'x', url: 'https://t.me/c/4337039125/107/900' } } } : orig(st, s))(w.resolve);
+  const h = await loadFn('telegram-upload-resource', w); const r = await call(h, body); const j = await r.json();
+  ok(r.status === 200 && j.meta_updated === false && !w.tg.some(x => x.m === 'sendMessage'), 'T-edit.8 missing one-message file: edit failure ignored, nothing recreated'); }
+// 17) OLD fallback file (topic_id null, aux=[]): untouched (cannot be told apart from pre-patch messages)
+{ const w = world(); w.owner = { chat_id: -1004337039125, message_id: 900, kind: 'file' }; w.aux = [];
+  w.resolve = ((orig) => (st, s) => st.table === 'lesson_resources' ? { data: { role: 'study', resources: { title: 'x', url: 'https://t.me/c/4337039125/5/900' } } } : orig(st, s))(w.resolve);
+  const h = await loadFn('telegram-upload-resource', w); const r = await call(h, body); const j = await r.json();
+  ok(r.status === 200 && j.meta_updated === false && w.tg.length === 0, 'T-edit.9 no-topic message with empty aux: nothing is edited (old messages never modified)'); }
 console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

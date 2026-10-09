@@ -39,7 +39,7 @@ const tgIdentity = (u: string): [number, number] | null => {
 const NOT_EDITABLE = /message to edit not found|message can't be edited|MESSAGE_ID_INVALID|message identifier is not specified|chat not found/i;
 
 // ===== مكتبة الفهرس (نسخة مطابقة في telegram-upload-resource و telegram-resource-cleanup) =====
-const SEP = "────── ✦ ──────── ✦ ─────";
+const SEP = "───────── ✦ ─────────"; // فاصل موحّد (✦ واحد، طرفان متساويان، أقصر من عرض فقاعة المستند)
 const pad = (n: number) => String(n).padStart(2, "0");
 const escH = (s: string) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const KEYCAP = ["", "1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"];
@@ -112,11 +112,13 @@ const mhTag = (s: string) => {
 };
 const mhEsc = (s: string) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 // السطر الأول = الدور + السياق، والسطر الثاني = اسم آخر عنصر (الدرس/المادة). يرجع "" إن لم يوجد ما يُعرض.
-function buildMetaHeader(role: string, crumbs: string[], title: string): string {
+function buildMetaHeader(role: string, crumbs: string[], title: string, tagBudget = 900): string {
   const tags = [...new Set([MH_ROLE_TAG[role] || "#مصدر", ...crumbs.map(mhTag)].filter(Boolean))];
   const last = crumbs.length ? mhTag(crumbs[crumbs.length - 1]) : "";
   const head = tags.filter((t) => t !== last);
-  const tagText = [head.join(" "), last && tags.includes(last) ? last : ""].filter(Boolean).join("\n").slice(0, 900);
+  let tagText = [head.join(" "), last && tags.includes(last) ? last : ""].filter(Boolean).join("\n");
+  // الافتراضي كما كان (قصّ عند 900)؛ عند ضيق حد الكابشن يُقصّ عند آخر وسم كامل
+  tagText = tagBudget >= 900 ? tagText.slice(0, 900) : tagText.length > tagBudget ? tagText.slice(0, tagBudget).replace(/\s+\S*$/, "") : tagText;
   const name = String(title ?? "").replace(MH_INVIS, "").trim().slice(0, 300);
   const parts: string[] = [];
   if (/[\p{L}\p{N}]/u.test(tagText)) parts.push(`<blockquote>${mhEsc(tagText)}</blockquote>`);
@@ -124,6 +126,25 @@ function buildMetaHeader(role: string, crumbs: string[], title: string): string 
   return parts.join("\n\n");
 }
 // ===== نهاية الترويسة =====
+
+// كابشن الرسالة الواحدة: [ميتاداتا: وسوم + عنوان] ← فاصل ← سطور الأرشيف القديم (مثل «اسم المصدر | رقم»). tailLines مُهرَّبة HTML مسبقًا.
+// حد تيليجرام للكابشن 1024 حرفًا ظاهرًا: نُقصّر الوسوم أولًا (بحدود كاملة)، ثم نُسقط سطور الذيل من الآخر؛ العنوان وأول سطر لا يُمسّان.
+const CAP_MAX = 1024;
+const capLen = (h: string) => h.replace(/<[^>]+>/g, "").replace(/&(lt|gt|amp|quot);/g, "x").length;
+function buildArchiveCaption(role: string, crumbs: string[], title: string, tailLines: string[]): string {
+  const lines = [...tailLines];   // السطر الفارغ "" يُحفظ كما هو (فاصل بصري داخل التنسيق القديم)
+  const trim = () => { while (lines.length && !lines[lines.length - 1].trim()) lines.pop(); };
+  trim();
+  for (;;) {
+    let cap = "";
+    for (let budget = 900; budget >= 100; budget -= 100) {
+      cap = [buildMetaHeader(role, crumbs, title, budget), lines.length ? SEP : "", lines.join("\n")].filter(Boolean).join("\n\n");
+      if (capLen(cap) <= CAP_MAX) return cap;
+    }
+    if (lines.length <= 1) return cap;
+    lines.pop(); trim();
+  }
+}
 
 // استدعاء Telegram Bot API (JSON)
 const tgCall = (BOT: string) => (m: string, b: unknown) =>
@@ -323,16 +344,27 @@ Deno.serve(async (req: Request) => {
         // المصدر ملف/مستورد وما زال رابطه يشير إلى رسالته: لا نستبدله ببطاقة رابط ولا نحذف الملف (تعديل بيانات فقط)
         const idn = tgIdentity(src.url);
         if (idn && idn[0] === Number(ex.chat_id) && idn[1] === Number(ex.message_id)) {
-          // تحديث ترويسة الميتاداتا (العنوان/الوسوم) في نفس رسالتها إن كانت موجودة (aux = [فاصل، عنوان، ميتاداتا] أو [ميتاداتا])؛ لا ننشئ رسالة ولا نمسّ الملكية
-          const { data: trk0 } = await db.from("telegram_resource_files").select("aux_message_ids").eq("chat_id", ex.chat_id).eq("message_id", ex.message_id).maybeSingle();
-          const aux = ((trk0 as { aux_message_ids?: number[] } | null)?.aux_message_ids || []) as number[];
-          const metaIdE = aux.length === 3 ? aux[2] : aux.length === 1 ? aux[0] : null;
-          const metaTextE = buildMetaHeader(src.role || role, crumbs, src.title);
+          // تحديث الميتاداتا (العنوان/الوسوم) في نفس الرسالة، بلا إنشاء رسائل ولا مساس بالملكية:
+          //  - رسالة جديدة (رسالة واحدة، في موضوع، بلا aux): نعدّل كابشنها بنفس "القسم | رقم" المحفوظ
+          //  - رسالة قديمة (aux = [فاصل، عنوان، ميتاداتا] أو [ميتاداتا]): نعدّل رسالة الميتاداتا المنفصلة كما كان
+          //  - غير ذلك (قديمة بلا ميتاداتا، أو احتياطي بلا موضوع): لا نمسّها
+          const { data: trk0 } = await db.from("telegram_resource_files").select("aux_message_ids, topic_id, section, episode").eq("chat_id", ex.chat_id).eq("message_id", ex.message_id).maybeSingle();
+          const t0 = trk0 as { aux_message_ids?: number[]; topic_id?: string | null; section?: string | null; episode?: number | null } | null;
+          const aux = (t0?.aux_message_ids || []) as number[];
           let metaUpdated = false;
-          if (metaIdE && metaTextE) {
-            const er0 = await tg("editMessageText", { chat_id: String(ex.chat_id), message_id: metaIdE, text: metaTextE, parse_mode: "HTML" });
-            metaUpdated = !!er0.ok || /message is not modified/i.test(String(er0.description || ""));
-            if (!metaUpdated && !NOT_EDITABLE.test(String(er0.description || ""))) console.error("meta edit failed:", er0.description);
+          if (t0 && aux.length === 0 && t0.topic_id && t0.section && t0.episode) {
+            const cap = buildArchiveCaption(src.role || role, crumbs, src.title, [escH(`${t0.section} | ${t0.episode}`)]);
+            const er1 = await tg("editMessageCaption", { chat_id: String(ex.chat_id), message_id: ex.message_id, caption: cap, parse_mode: "HTML" });
+            metaUpdated = !!er1.ok || /message is not modified/i.test(String(er1.description || ""));
+            if (!metaUpdated && !NOT_EDITABLE.test(String(er1.description || ""))) console.error("caption edit failed:", er1.description);
+          } else {
+            const metaIdE = aux.length === 3 ? aux[2] : aux.length === 1 ? aux[0] : null;
+            const metaTextE = buildMetaHeader(src.role || role, crumbs, src.title);
+            if (metaIdE && metaTextE) {
+              const er0 = await tg("editMessageText", { chat_id: String(ex.chat_id), message_id: metaIdE, text: metaTextE, parse_mode: "HTML" });
+              metaUpdated = !!er0.ok || /message is not modified/i.test(String(er0.description || ""));
+              if (!metaUpdated && !NOT_EDITABLE.test(String(er0.description || ""))) console.error("meta edit failed:", er0.description);
+            }
           }
           return json({ ok: true, mode: "unchanged_file", message_id: ex.message_id, meta_updated: metaUpdated });
         }
@@ -370,63 +402,31 @@ Deno.serve(async (req: Request) => {
     if (dlErr || !blob) return json({ error: "temp file not found: " + (dlErr?.message || "") }, 404);
     if (blob.size > MAX_BYTES) return json({ error: "file larger than 50MB" }, 413);
 
-    const tags = [ROLE_TAG[role] || "#مصدر", ...crumbs.map(tag)].filter(Boolean);
-    const ext = (String(file_name).split(".").pop() || "").toLowerCase();
-    if (/^[a-z0-9]{2,5}$/.test(ext)) tags.push("#" + ext.toUpperCase());
-    const caption = [
-      `<b>${esc(title || file_name)}</b>`,
-      `القسم: ${esc(ROLE_LABEL[role] || role)}`,
-      ...lines.filter((x) => !x.endsWith(": ")).map(esc),
-      publisher ? `الناشر: ${esc(publisher)}` : "",
-      language ? `اللغة: ${esc(language)}` : "",
-      "",
-      [...new Set(tags)].join(" "),
-    ].join("\n").slice(0, 1024);
-
     const chatId = String(dest.telegram_chat_id);
     const chatPart = chatId.replace(/^-100/, "");
 
-    // ===== مواد الجامعة داخل مجموعة سنة: ثلاث رسائل لكل ملف (فاصل ← "القسم | رقم" ← الملف) + تحديث الفهرس المثبّت =====
+    // ===== مسار الموضوع (مادة جامعة / كورس): رسالة تيليجرام واحدة لكل ملف = كابشن [ميتاداتا ← فاصل ← "القسم | رقم"] + الملف + تحديث الفهرس المثبّت =====
     if (topicRow) {
       const tg = tgCall(BOT);
       const section = String(sectionIn || title || file_name).trim().slice(0, 60);
       const n: number | null = (await db.rpc("next_episode", { p_topic: topicRow.id, p_section: section })).data;
       if (!n) return json({ error: "تعذّر توليد رقم الحلقة" }, 500);
-      const sent: number[] = []; // رسائل الفاصل والعنوان، تُحذف عند فشل الملف حتى لا تبقى يتيمة
-      let metaId: number | null = null; // ترويسة الميتاداتا (تُرسل أولًا قبل الفاصل)
-      const rollback = async () => {
-        for (const id of [...(metaId ? [metaId] : []), ...sent]) await tg("deleteMessage", { chat_id: chatId, message_id: id });
-        await db.rpc("release_episode", { p_topic: topicRow!.id, p_section: section, p_n: n });
-      };
-      const metaText = buildMetaHeader(role, crumbs, title || file_name);
-      if (metaText) {
-        const mt = await tg("sendMessage", { chat_id: chatId, message_thread_id: threadId, text: metaText, parse_mode: "HTML" });
-        if (!mt.ok) { await rollback(); return json({ error: "Telegram: " + (mt.description || "فشل إرسال الترويسة") }, 502); }
-        metaId = mt.result.message_id;
-      }
-      const sep = await tg("sendMessage", { chat_id: chatId, message_thread_id: threadId, text: SEP });
-      if (!sep.ok) { await rollback(); return json({ error: "Telegram: " + (sep.description || "فشل إرسال الفاصل") }, 502); }
-      sent.push(sep.result.message_id);
-      const head = await tg("sendMessage", { chat_id: chatId, message_thread_id: threadId, text: `${section} | ${n}` });
-      if (!head.ok) { await rollback(); return json({ error: "Telegram: " + (head.description || "فشل إرسال العنوان") }, 502); }
-      sent.push(head.result.message_id);
-      // تعليق الملف: وسوم بحث فقط (بلا ناشر ولا بيانات إضافية)
-      const tagLine = [...new Set([ROLE_TAG[role] || "", ...crumbs.slice(-3).map(tag), tag(section)].filter(Boolean))].join(" ").slice(0, 1000);
-      const fileRes = await sendMedia(BOT, chatId, threadId, mediaKind(file_name, mime_type), blob, file_name, tagLine);
+      const rollback = async () => { await db.rpc("release_episode", { p_topic: topicRow!.id, p_section: section, p_n: n }); }; // لا رسائل مساعدة تُحذف
+      const oneCaption = buildArchiveCaption(role, crumbs, title || file_name, [escH(`${section} | ${n}`)]);
+      const fileRes = await sendMedia(BOT, chatId, threadId, mediaKind(file_name, mime_type), blob, file_name, oneCaption);
       if (!fileRes.ok) { await rollback(); return json({ error: "Telegram: " + (fileRes.description || "فشل إرسال الملف") }, 502); }
 
       await db.storage.from("submissions").remove([storage_path]);
       const messageId: number = fileRes.result.message_id;
-      const auxIds = metaId ? [...sent, metaId] : sent; // [فاصل، عنوان، (ميتاداتا)] — كلها تُحذف مع الملف عبر cleanup الحالي
       const link = `https://t.me/c/${chatPart}/${threadId}/${messageId}`; // رابط مباشر لرسالة الملف نفسها
       const { error: trackErr } = await db.from("telegram_resource_files").upsert({
         url: link, chat_id: Number(chatId), thread_id: threadId, message_id: messageId, created_by: uid,
-        topic_id: topicRow.id, section, episode: n, episode_code: "E" + pad(n), aux_message_ids: auxIds,
+        topic_id: topicRow.id, section, episode: n, episode_code: "E" + pad(n), aux_message_ids: [],
         kind: "file", claim_deadline: new Date(Date.now() + CLAIM_TTL_MS).toISOString(),
       });
       if (trackErr) {
         // لا نسلّم رابطًا لرسالة غير متتبَّعة (كانت ستبقى يتيمة عند الحذف): نحذف ما أرسلناه ونُعلم الأدمن
-        for (const id of [...auxIds, messageId]) await tg("deleteMessage", { chat_id: chatId, message_id: id });
+        await tg("deleteMessage", { chat_id: chatId, message_id: messageId });
         await db.rpc("release_episode", { p_topic: topicRow.id, p_section: section, p_n: n });
         try { await rebuildIndex(db, tg, topicRow.id); } catch (_e) { /* ignore */ }
         return json({ error: "تعذّر تسجيل الرسالة (" + trackErr.message + "). لم يُحفظ شيء؛ أعد المحاولة." }, 500);
@@ -435,13 +435,21 @@ Deno.serve(async (req: Request) => {
       return json({ ok: true, url: link, message_id: messageId, episode: "E" + pad(n), tracked: true });
     }
 
-    const metaTextF = buildMetaHeader(role, crumbs, title || file_name);
-    let metaIdF: number | null = null;
-    if (metaTextF) {
-      const mt = await tgCall(BOT)("sendMessage", { chat_id: String(dest.telegram_chat_id), ...(threadId ? { message_thread_id: threadId } : {}), text: metaTextF, parse_mode: "HTML" });
-      if (!mt.ok) return json({ error: "Telegram: " + (mt.description || "فشل إرسال الترويسة") }, 502);
-      metaIdF = mt.result.message_id;
-    }
+    // احتياطي بلا موضوع أرشيف (لا فهرس ولا ترقيم): رسالة واحدة = [ميتاداتا ← فاصل ← تفاصيل المصدر] + الملف
+    // التنسيق القديم كاملًا (عنوان عريض، القسم، السياق، الناشر، اللغة، سطر الوسوم + وسم الامتداد) تحت الميتاداتا الجديدة
+    const fbTags = [ROLE_TAG[role] || "#مصدر", ...crumbs.map(tag)].filter(Boolean);
+    const fbExt = (String(file_name).split(".").pop() || "").toLowerCase();
+    if (/^[a-z0-9]{2,5}$/.test(fbExt)) fbTags.push("#" + fbExt.toUpperCase());
+    const details = [
+      `<b>${esc(title || file_name)}</b>`,
+      `القسم: ${esc(ROLE_LABEL[role] || role)}`,
+      ...lines.filter((x) => !x.endsWith(": ")).map(esc),
+      publisher ? `الناشر: ${esc(publisher)}` : "",
+      language ? `اللغة: ${esc(language)}` : "",
+      "",
+      [...new Set(fbTags)].join(" "),
+    ];
+    const caption = buildArchiveCaption(role, crumbs, title || file_name, details);
     const form = new FormData();
     form.append("chat_id", String(dest.telegram_chat_id));
     if (threadId) form.append("message_thread_id", String(threadId));
@@ -450,10 +458,7 @@ Deno.serve(async (req: Request) => {
     form.append("document", blob, file_name);
     const tgRes = await fetch(`https://api.telegram.org/bot${BOT}/sendDocument`, { method: "POST", body: form });
     const tg = await tgRes.json();
-    if (!tg.ok) {
-      if (metaIdF) await tgCall(BOT)("deleteMessage", { chat_id: String(dest.telegram_chat_id), message_id: metaIdF }); // لا ترويسة يتيمة
-      return json({ error: "Telegram: " + (tg.description || tgRes.status) }, 502); // الملف المؤقت يبقى لإعادة المحاولة
-    }
+    if (!tg.ok) return json({ error: "Telegram: " + (tg.description || tgRes.status) }, 502); // الملف المؤقت يبقى لإعادة المحاولة
 
     // نجح الإرسال: احذف الملف المؤقت فورًا (تيليجرام وحده يحتفظ به)
     await db.storage.from("submissions").remove([storage_path]);
@@ -465,11 +470,9 @@ Deno.serve(async (req: Request) => {
     // تسجيل الرسالة لتُحذف تلقائيًا من تيليجرام عند حذف المصدر من الموقع (لا يُحذف إلا ما رفعناه هنا)
     const { error: trackErr } = await db.from("telegram_resource_files").upsert({
       url: link, chat_id: Number(dest.telegram_chat_id), thread_id: threadId, message_id: messageId, created_by: uid,
-      ...(metaIdF ? { aux_message_ids: [metaIdF] } : {}),
       kind: "file", claim_deadline: new Date(Date.now() + CLAIM_TTL_MS).toISOString(),
     });
     if (trackErr) {
-      if (metaIdF) await tgCall(BOT)("deleteMessage", { chat_id: String(dest.telegram_chat_id), message_id: metaIdF });
       await tgCall(BOT)("deleteMessage", { chat_id: String(dest.telegram_chat_id), message_id: messageId });
       return json({ error: "تعذّر تسجيل الرسالة (" + trackErr.message + "). لم يُحفظ شيء؛ أعد المحاولة." }, 500);
     }
