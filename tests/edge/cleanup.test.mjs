@@ -43,4 +43,8 @@ const rowsOf = (...r) => r.map((x, i) => ({ id: i + 1, chat_id: -100, message_id
   ok(logs.some(l => /gave up after 5 attempts/.test(l)) && j.stuck === 1, 'T-clean.10 job that exhausts retries is logged loudly and reported as stuck in the response'); }
 { const w = world(rowsOf({ message_id: null, thread_id: 777 })); const h = await loadFn('telegram-resource-cleanup', w); const r = await call(h, {}); const j = await r.json();
   ok(w.tg.some(x => x.m === 'deleteForumTopic' && x.body.message_thread_id === 777) && j.deleted === 1, 'T-clean.11 topic job -> deleteForumTopic'); }
+// three-message link: when its resource is deleted the DB queues the content message + its separator + number (aux) -> all three are deleted
+{ const w = world(rowsOf({ message_id: 557 }, { message_id: 555 }, { message_id: 556 })); const h = await loadFn('telegram-resource-cleanup', w); const r = await call(h, {}); const j = await r.json();
+  const del = w.tg.filter(x => x.m === 'deleteMessage').map(x => x.body.message_id).sort();
+  ok(j.deleted === 3 && JSON.stringify(del) === '[555,556,557]' && w.updates.every(u => u.processed_at), 'T-clean.12 link trio (content + separator + number) queued by the DB -> all three deleted and marked processed'); }
 console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0);

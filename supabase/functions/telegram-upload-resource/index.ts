@@ -31,6 +31,15 @@ function buildLinkMessage(role: string, crumbs: string[], title: string, href: s
   const linkQ = `<blockquote><a href="${escAttr(href)}">الانتقال إلى الرابط</a></blockquote>`;
   return { text: head ? head + "\n" + linkQ : linkQ, link_preview_options: { url: href, prefer_large_media: true, show_above_text: false } };
 }
+// رسالة المحتوى في تصميم الرسائل الثلاث (فاصل ← "القسم | رقم" ← المحتوى): عنوان الرابط في اقتباس + «الانتقال إلى الرابط» (رابط فعلي) في اقتباس، بلا وسوم. المعاينة تحت الرسالة. لا اقتباس فارغ أبدًا.
+// deno-lint-ignore no-explicit-any
+function buildLinkCard(title: string, href: string): { text: string; link_preview_options: any } {
+  const name = String(title ?? "").replace(MH_INVIS, "").trim().slice(0, 300);
+  const parts: string[] = [];
+  if (/[\p{L}\p{N}]/u.test(name)) parts.push(`<blockquote>${mhEsc(name)}</blockquote>`);
+  parts.push(`<blockquote><a href="${escAttr(href)}">الانتقال إلى الرابط</a></blockquote>`);
+  return { text: parts.join("\n"), link_preview_options: { url: href, prefer_large_media: true, show_above_text: false } };
+}
 // هوية الرسالة من رابط t.me/c/<chat>/<msg> أو t.me/c/<chat>/<topic>/<msg> (للمقارنة فقط)
 const tgIdentity = (u: string): [number, number] | null => {
   const m = /^https?:\/\/t\.me\/c\/(\d+)\/(\d+)(?:\/(\d+))?(?:[/?#].*)?$/.exec(String(u || ""));
@@ -338,7 +347,8 @@ Deno.serve(async (req: Request) => {
     // ===== رابط خارجي بلا ملف: تعديل نفس الرسالة إن وُجدت، وإلا رسالة جديدة تُسجَّل للمصدر ثم تُنظَّف القديمة =====
     if (isLink && src) {
       const tg = tgCall(BOT);
-      const msg = buildLinkMessage(src.role || role, crumbs, src.title, src.url);
+      const msgLegacy = buildLinkMessage(src.role || role, crumbs, src.title, src.url);   // الرسالة الواحدة (روابط قديمة، أو بلا موضوع أرشيف)
+      const msgCard = buildLinkCard(src.title, src.url);                                    // رسالة المحتوى في التصميم الجديد
       const { data: ex } = await db.from("telegram_resource_owners").select("chat_id, message_id, kind").eq("owner_type", ownerType).eq("owner_id", resource_id).eq("owner_field", "").maybeSingle();
       if (ex && ex.kind !== "link") {
         // المصدر ملف/مستورد وما زال رابطه يشير إلى رسالته: لا نستبدله ببطاقة رابط ولا نحذف الملف (تعديل بيانات فقط)
@@ -370,6 +380,12 @@ Deno.serve(async (req: Request) => {
         }
       }
       if (ex && ex.kind === "link") {
+        // تصميم الرسائل الثلاث (موضوع + رقم + aux=[فاصل، رقم]) يُعدَّل فيه رسالة المحتوى فقط (العنوان/الوجهة/المعاينة)؛ الفاصل والرقم يبقيان.
+        // الرابط القديم (رسالة واحدة) يُعدَّل في مكانه بتصميمه القديم؛ لا نعيد إنشاءه تلقائيًا.
+        const { data: lt } = await db.from("telegram_resource_files").select("aux_message_ids, topic_id, section, episode").eq("chat_id", ex.chat_id).eq("message_id", ex.message_id).maybeSingle();
+        const l0 = lt as { aux_message_ids?: number[]; topic_id?: string | null; section?: string | null; episode?: number | null } | null;
+        const isCard = !!(l0 && l0.topic_id && l0.section && l0.episode && (l0.aux_message_ids || []).length === 2);
+        const msg = isCard ? msgCard : msgLegacy;
         const er = await tg("editMessageText", { chat_id: String(ex.chat_id), message_id: ex.message_id, text: msg.text, parse_mode: "HTML", link_preview_options: msg.link_preview_options });
         const edesc = String(er.description || "");
         if (er.ok || /message is not modified/i.test(edesc)) {
@@ -378,23 +394,63 @@ Deno.serve(async (req: Request) => {
           return json({ ok: true, mode: "edited", url: trk?.url ?? null, message_id: ex.message_id });
         }
         if (!NOT_EDITABLE.test(edesc)) return json({ error: "Telegram: " + (edesc || "فشل تعديل الرسالة") }, 502); // عطل مؤقت: لا تغيير في أي حالة
-        // الرسالة القديمة محذوفة/غير قابلة للتعديل: ننشئ جديدة ثم تُنظَّف القديمة بعد نجاح التسجيل
+        // رسالة المحتوى محذوفة/غير قابلة للتعديل: ننشئ رسائل جديدة ونسجّلها ثم تُنظَّف القديمة (مع فاصلها ورقمها) بعد نجاح التسجيل
       }
       const chatIdL = String(dest.telegram_chat_id);
-      const m = await tg("sendMessage", { chat_id: chatIdL, ...(threadId ? { message_thread_id: threadId } : {}), text: msg.text, parse_mode: "HTML", link_preview_options: msg.link_preview_options });
+      const chatPartL = chatIdL.replace(/^-100/, "");
+      const registerOwner = (linkL: string, mid: number) => db.rpc("telegram_register_message", {
+        p_url: linkL, p_chat: Number(chatIdL), p_thread: threadId, p_msg: mid, p_topic: topicRow?.id ?? null, p_kind: "link",
+        p_title: String(src!.title).slice(0, 200), p_created_by: uid, p_type: ownerType, p_id: resource_id, p_field: "",
+      });
+
+      // ===== داخل موضوع أرشيف: ثلاث رسائل كالملف (فاصل ← "القسم | رقم" ← المحتوى) + ترقيم وفهرس =====
+      if (topicRow) {
+        const section = String(src.title ?? "").replace(MH_INVIS, "").trim().slice(0, 60) || "رابط";
+        const n: number | null = (await db.rpc("next_episode", { p_topic: topicRow.id, p_section: section })).data;
+        if (!n) return json({ error: "تعذّر توليد رقم الحلقة" }, 500);
+        const made: number[] = [];   // ما أُرسل حتى الآن (يُحذف عند أي فشل قبل اكتمال التسجيل)
+        const undo = async () => {
+          for (const id of made) await tg("deleteMessage", { chat_id: chatIdL, message_id: id });
+          await db.rpc("release_episode", { p_topic: topicRow!.id, p_section: section, p_n: n });
+        };
+        const sep = await tg("sendMessage", { chat_id: chatIdL, message_thread_id: threadId, text: SEP });
+        if (!sep.ok) { await undo(); return json({ error: "Telegram: " + (sep.description || "فشل إرسال الفاصل") }, 502); }
+        made.push(sep.result.message_id);
+        const head = await tg("sendMessage", { chat_id: chatIdL, message_thread_id: threadId, text: `${section} | ${n}` });
+        if (!head.ok) { await undo(); return json({ error: "Telegram: " + (head.description || "فشل إرسال الرقم") }, 502); }
+        made.push(head.result.message_id);
+        const card = await tg("sendMessage", { chat_id: chatIdL, message_thread_id: threadId, text: msgCard.text, parse_mode: "HTML", link_preview_options: msgCard.link_preview_options });
+        if (!card.ok) { await undo(); return json({ error: "Telegram: " + (card.description || "فشل إرسال الرسالة") }, 502); }
+        const mid: number = card.result.message_id;
+        made.push(mid);
+        const linkL = `https://t.me/c/${chatPartL}/${threadId}/${mid}`;
+        // تتبّع أولًا (aux = [فاصل، رقم] تُحذف مع رسالة المحتوى عبر cleanup الحالي)، ثم تسجيل الملكية؛ التسجيل لا يمسّ aux/section/episode
+        const { error: trackErr } = await db.from("telegram_resource_files").upsert({
+          url: linkL, chat_id: Number(chatIdL), thread_id: threadId, message_id: mid, created_by: uid,
+          topic_id: topicRow.id, section, episode: n, episode_code: "E" + pad(n), aux_message_ids: [sep.result.message_id, head.result.message_id],
+          kind: "link", display_title: String(src.title).slice(0, 200), claim_deadline: new Date(Date.now() + CLAIM_TTL_MS).toISOString(),
+        });
+        if (trackErr) { await undo(); return json({ error: "تعذّر تسجيل الرسالة: " + trackErr.message }, 500); }
+        const { data: okReg, error: regErr } = await registerOwner(linkL, mid);
+        if (regErr || !okReg) {
+          await undo(); // لا نترك رسائل بلا مالك
+          await db.rpc("telegram_discard_message", { p_url: linkL }); // يزيل سجل التتبّع غير المملوك (لا مالك له)
+          return json({ error: regErr ? "تعذّر تسجيل الرسالة: " + regErr.message : "المصدر لم يعد موجودًا" }, regErr ? 500 : 409);
+        }
+        try { await rebuildIndex(db, tg, topicRow.id); } catch (e) { console.error("rebuildIndex:", e); }
+        return json({ ok: true, mode: ex ? "replaced" : "created", url: linkL, message_id: mid, episode: "E" + pad(n) });
+      }
+
+      // ===== بلا موضوع أرشيف (لا فهرس ولا ترقيم): الرسالة الواحدة كما هي =====
+      const m = await tg("sendMessage", { chat_id: chatIdL, ...(threadId ? { message_thread_id: threadId } : {}), text: msgLegacy.text, parse_mode: "HTML", link_preview_options: msgLegacy.link_preview_options });
       if (!m.ok) return json({ error: "Telegram: " + (m.description || "فشل إرسال الرسالة") }, 502);
       const mid: number = m.result.message_id;
-      const chatPartL = chatIdL.replace(/^-100/, "");
       const linkL = threadId ? `https://t.me/c/${chatPartL}/${threadId}/${mid}` : `https://t.me/c/${chatPartL}/${mid}`;
-      const { data: okReg, error: regErr } = await db.rpc("telegram_register_message", {
-        p_url: linkL, p_chat: Number(chatIdL), p_thread: threadId, p_msg: mid, p_topic: topicRow?.id ?? null, p_kind: "link",
-        p_title: String(src.title).slice(0, 200), p_created_by: uid, p_type: ownerType, p_id: resource_id, p_field: "",
-      });
+      const { data: okReg, error: regErr } = await registerOwner(linkL, mid);
       if (regErr || !okReg) {
         await tg("deleteMessage", { chat_id: chatIdL, message_id: mid }); // لا نترك رسالة بلا مالك
         return json({ error: regErr ? "تعذّر تسجيل الرسالة: " + regErr.message : "المصدر لم يعد موجودًا" }, regErr ? 500 : 409);
       }
-      if (topicRow) { try { await rebuildIndex(db, tg, topicRow.id); } catch (e) { console.error("rebuildIndex:", e); } }
       return json({ ok: true, mode: ex ? "replaced" : "created", url: linkL, message_id: mid });
     }
 
