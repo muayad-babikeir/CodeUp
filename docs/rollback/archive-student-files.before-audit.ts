@@ -4,40 +4,15 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 // 1) حذف نسخ Storage اللي اترسلت لتيليجرام بنجاح (archive_status='sent') ووصل موعد حذفها.
 // 2) إعادة محاولة إرسال أي ملف فشل إرساله لتيليجرام قبل كده (archive_status='failed').
 // لا تُرسل أي ملف "live" لأول مرة — هذا يصير فورًا عند الرفع عبر telegram-send-immediate.
-// مقارنة بزمن ثابت (لا تتوقف عند أول حرف مختلف) حتى لا يُستنتج السر من زمن الاستجابة.
-function safeEqual(a: string, b: string): boolean {
-  const enc = new TextEncoder();
-  const x = enc.encode(a), y = enc.encode(b);
-  let diff = x.length ^ y.length;
-  for (let i = 0; i < Math.max(x.length, y.length); i++) diff |= (x[i] ?? 0) ^ (y[i] ?? 0);
-  return diff === 0;
-}
-
-const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
-
 Deno.serve(async (req: Request) => {
-  // هذه الدالة تعمل بـ verify_jwt=false (يستدعيها pg_cron)، فالسر هو خط الدفاع الوحيد.
-  // إن لم يكن CRON_SECRET مضبوطًا نرفض التنفيذ (fail closed) بدل السماح لأي طالب.
   const CRON_SECRET = Deno.env.get("CRON_SECRET");
-  if (!CRON_SECRET) {
-    console.error("archive-student-files: CRON_SECRET is not configured; refusing to run");
-    return json({ error: "service_misconfigured" }, 503);
-  }
-  if (!safeEqual(req.headers.get("x-cron-secret") ?? "", CRON_SECRET)) {
-    return json({ error: "unauthorized" }, 401);
+  if (CRON_SECRET && req.headers.get("x-cron-secret") !== CRON_SECRET) {
+    return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401 });
   }
 
   const BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN");
   const CHAT_ID = Deno.env.get("TELEGRAM_ARCHIVE_CHAT_ID");
-  const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  const supabase = createClient(Deno.env.get("SUPABASE_URL")!, SERVICE_KEY);
-  // رسائل أخطاء fetch في Deno قد تتضمن عنوان الطلب كاملًا (وفيه توكن البوت)، وتُخزَّن في file_uploads.archive_error.
-  const redact = (e: unknown): string => {
-    let m = String((e as Error)?.message || e);
-    for (const secret of [BOT_TOKEN, CRON_SECRET, SERVICE_KEY]) if (secret) m = m.split(secret).join("[redacted]");
-    return m;
-  };
+  const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
   let deleted = 0, deleteFailed = 0, retried = 0, retryFailed = 0;
 
@@ -59,7 +34,7 @@ Deno.serve(async (req: Request) => {
       await supabase.from("file_uploads").update({ archive_status: "archived", archived_at: new Date().toISOString() }).eq("id", f.id);
       deleted++;
     } catch (e) {
-      await supabase.from("file_uploads").update({ archive_error: "delete failed: " + redact(e) }).eq("id", f.id);
+      await supabase.from("file_uploads").update({ archive_error: "delete failed: " + String((e as Error)?.message || e) }).eq("id", f.id);
       deleteFailed++;
     }
   }
@@ -146,11 +121,13 @@ Deno.serve(async (req: Request) => {
         }).eq("id", f.id);
         retried++;
       } catch (e) {
-        await supabase.from("file_uploads").update({ archive_error: redact(e) }).eq("id", f.id);
+        await supabase.from("file_uploads").update({ archive_error: String((e as Error)?.message || e) }).eq("id", f.id);
         retryFailed++;
       }
     }
   }
 
-  return json({ deleted, deleteFailed, retried, retryFailed });
+  return new Response(JSON.stringify({ deleted, deleteFailed, retried, retryFailed }), {
+    headers: { "Content-Type": "application/json" }
+  });
 });
