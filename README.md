@@ -78,7 +78,7 @@ Full guides: [Development](docs/DEVELOPMENT.md) · [Deployment](docs/DEPLOYMENT.
 - `database/` is not a complete schema: many migrations were applied directly to the live project and have no file here ([docs/PRODUCTION-DIFFERENCES.md](docs/PRODUCTION-DIFFERENCES.md)).
 - Patch 66's header says it is unapplied; the live database already has it.
 - Tech Week individual `capacity` is not enforced in production; `database/2026_patch_67_*` fixes this but is **not applied**.
-- Any signed-in user can pin their own post or label it as an admin announcement (confirmed from definitions, not exploited); `database/2026_patch_68_*` fixes this but is **not applied**.
+- Any signed-in user can pin their own post or label it as an admin announcement (confirmed from definitions, not exploited); `database/2026_patch_68_*` fixes this but is **not applied**. `database/2026_patch_69_*` removes the duplicate archive cron job (also not applied).
 - `archive-student-files` is fixed in the repo (fails closed, redacts secrets) but **not deployed**. A duplicate cron job calls it with a stale secret.
 - The Wallet QR points to `/verify?m=…`; no such page exists in the repository.
 - No frontend tests, CI, or license file. Decisions and rollout order: [docs/ROLLOUT-PLAN.md](docs/ROLLOUT-PLAN.md).

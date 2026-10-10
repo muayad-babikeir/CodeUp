@@ -15,7 +15,7 @@
 -- What this patch does
 --   1) Sanity CHECKs on tech_week_events (capacity > 0, 1 <= team_min <= team_max).
 --   2) BEFORE INSERT/UPDATE trigger on tech_week_registrations that:
---        - locks the parent event row (FOR UPDATE) so concurrent registrations for the
+--        - locks the parent event row (FOR NO KEY UPDATE) so concurrent registrations for the
 --          same event are serialised and cannot overshoot a limit;
 --        - individual events: counts rows with team_id IS NULL and status IN
 --          ('registered','attended') against capacity;
@@ -87,7 +87,11 @@ begin
   end if;
 
   -- Serialise concurrent registrations for the same event (row lock held until commit).
-  select * into v_event from public.tech_week_events where id = new.event_id for update;
+  -- FOR NO KEY UPDATE (not FOR UPDATE): the foreign-key check of tech_week_teams (used by
+  -- tech_week_create_team) already holds a FOR KEY SHARE lock on this event row in the same
+  -- transaction; upgrading that to FOR UPDATE could deadlock two concurrent team creations.
+  -- NO KEY UPDATE does not conflict with KEY SHARE but still excludes other registrants.
+  select * into v_event from public.tech_week_events where id = new.event_id for no key update;
   if not found then
     return new;  -- the foreign key reports the missing event
   end if;
