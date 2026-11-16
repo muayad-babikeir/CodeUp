@@ -181,7 +181,7 @@ async function openDestinationModal(dest){
     const msg = m.el.querySelector("#dMsg");
     const fail = t=>{ msg.style.display="block"; msg.textContent=t; };
     const title = m.el.querySelector("#dName").value.trim();
-    const chat = m.el.querySelector("#dChat").value.trim();
+    const chat = isEdit ? "" : m.el.querySelector("#dChat").value.trim();
     const yearId = m.el.querySelector("#dYear").value || null;
     if(!title) return fail("الاسم مطلوب");
     if(!isEdit && !/^-?\d+$/.test(chat)) return fail("Chat ID أرقام فقط، مثل -1001234567890");
@@ -196,6 +196,10 @@ async function openDestinationModal(dest){
     if(error){
       if(/archive_destinations_year_active_key/.test(error.message)) return fail("هذه السنة لها مجموعة نشطة بالفعل. عطّل القديمة أو احذفها أولًا.");
       if(/archive_destinations_serial_key/.test(error.message)) return fail("هذا الكود مستخدم لمجموعة أخرى.");
+      if(/archive_destinations_chat_id_key/.test(error.message)) return fail("Chat ID هذا مسجّل لمجموعة أخرى بالفعل.");
+      if(/archive_destinations_global_active_key/.test(error.message)) return fail("توجد مجموعة عامة نشطة بالفعل. عطّلها أولًا أو اربط هذه المجموعة بسنة دراسية.");
+      if(/archive_destinations_uni_fallback_active_key/.test(error.message)) return fail("لهذه الجامعة مجموعة احتياطية نشطة بالفعل. اربط هذه المجموعة بسنة دراسية، أو عطّل القديمة.");
+      if(/الجامعة لا تطابق|السنة الدراسية غير موجودة/.test(error.message)) return fail("السنة الدراسية المختارة لا تتبع هذه الجامعة. أعد اختيار السنة.");
       return fail(error.message);
     }
     m.close(); Admin.go("universities");
@@ -334,7 +338,7 @@ async function renderYears(body, program){
   const ids = (years||[]).map(y=>y.id);
   if(ids.length && Admin.role === "super"){
     const g = await db.from("archive_destinations").select("year_id,title,is_active").in("year_id", ids);
-    if(!g.error){ groups = {}; (g.data||[]).forEach(x=>{ groups[x.year_id] = x; }); }
+    if(!g.error){ groups = {}; (g.data||[]).forEach(x=>{ if(!groups[x.year_id] || (x.is_active && !groups[x.year_id].is_active)) groups[x.year_id] = x; }); }
   }
   const nextNum = Math.max(0, ...(years||[]).map(y=>y.year_number)) + 1;
   body.innerHTML = `
