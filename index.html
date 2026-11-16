@@ -129,9 +129,6 @@ body{
   .wrap{padding-bottom:96px}
 }
 
-/* ===== منطقة الهيدر الموحّدة (topbar + crumbs/tabs) — سلوك سحب بأسلوب X، هاتف فقط ===== */
-/* على الديسكتوب: الغلاف "يختفي" من صندوق الـlayout تمامًا (display:contents) فتبقى
-   العناصر الداخلية (topbar الخاصة بها بالتصميم القديم) بمكانها الطبيعي بدون أي تغيير. */
 #mobileHeaderWrap{display:contents}
 @media (max-width:720px){
   #mobileHeaderWrap{
@@ -205,13 +202,7 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
 .wrap{max-width:1080px;margin:0 auto}
 .topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--surface);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--line);border-radius:18px;padding:12px 16px;position:sticky;top:10px;z-index:20}
 @media (max-width:720px){
-  /* السبب الحقيقي لتراكب الـTop Bar فوق المنشورات بالهاتف: هذي القاعدة كانت
-     موجودة *قبل* تعريف .topbar الأساسي بالملف (سطر أعلى)، وبما إن ترتيب CSS
-     بنفس درجة التحديد يحسم الأولوية بترتيب الظهور بالملف مو بمكان الميديا كويري،
-     كانت قاعدة display:flex الأساسية (الأحدث بالترتيب) تلغي display:none تلقائيًا
-     — فتظل الشريط ظاهرة وعائمة فوق المحتوى بالهاتف رغم النية إخفاءها. نقلها هنا
-     (بعد التعريف الأساسي مباشرة) يضمن فوزها فعليًا، ونظام الحساب/الإشعارات/الرسائل
-     يبقى متاحًا كاملًا عبر الشريط السفلي وصفحة "حسابي" بدون أي فقدان وظيفة. */
+
   .topbar{display:none}
 }
 .topbrand{display:flex;align-items:center;gap:9px;font-weight:700;flex-shrink:0}
@@ -240,7 +231,6 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
 .courseCard h3{margin:0 0 6px;font-size:15.5px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .courseCard p{margin:0;color:var(--ink60);font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
-/* Course Card v2 — إضافات فقط لبطاقة الكورس (تقدّم الدروس الحقيقي + CTA)، بدون لمس القواعد الأساسية أعلاه */
 .courseCardV2{display:flex;flex-direction:column;gap:12px}
 .ccHead{display:flex;align-items:flex-start;gap:10px}
 .ccHead h3{white-space:normal;overflow:visible}
@@ -901,12 +891,7 @@ div.metaAvatar{background:var(--accent);color:#fff;display:flex;align-items:cent
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.81.1"></script>
 <script src="js/supabase.js"></script>
 <script>
-// ===== فحص Session مبكر جدًا — قبل تحميل/parse سكريبت التطبيق الضخم بالكامل =====
-// الهدف الوحيد هنا: المستخدم غير المسجّل (وده بالظبط سيناريو أي زيارة أولى/فحص
-// Lighthouse) يشوف شاشة تسجيل الدخول بأسرع ما يمكن، من غير ما ينتظر تحميل كل
-// كود الفيد/الكورسات/الأدمن/الماركت بليس اللي مش محتاجها أصلًا في اللحظة دي.
-// لا يلمس منطق الجلسات الخاصة (OAuth/تأكيد بريد/استعادة كلمة مرور) خالص —
-// بينسحب تلقائيًا ويسيب القرار الكامل للسكريبت الأصلي تحت لو فيه أي رابط خاص.
+
 (async function(){
   if(location.hash || new URLSearchParams(location.search).has("code")) return;
   try{
