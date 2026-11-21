@@ -181,7 +181,7 @@ async function openDestinationModal(dest){
     const msg = m.el.querySelector("#dMsg");
     const fail = t=>{ msg.style.display="block"; msg.textContent=t; };
     const title = m.el.querySelector("#dName").value.trim();
-    const chat = m.el.querySelector("#dChat").value.trim();
+    const chat = isEdit ? "" : m.el.querySelector("#dChat").value.trim();
     const yearId = m.el.querySelector("#dYear").value || null;
     if(!title) return fail("الاسم مطلوب");
     if(!isEdit && !/^-?\d+$/.test(chat)) return fail("Chat ID أرقام فقط، مثل -1001234567890");
@@ -196,6 +196,10 @@ async function openDestinationModal(dest){
     if(error){
       if(/archive_destinations_year_active_key/.test(error.message)) return fail("هذه السنة لها مجموعة نشطة بالفعل. عطّل القديمة أو احذفها أولًا.");
       if(/archive_destinations_serial_key/.test(error.message)) return fail("هذا الكود مستخدم لمجموعة أخرى.");
+      if(/archive_destinations_chat_id_key/.test(error.message)) return fail("Chat ID هذا مسجّل لمجموعة أخرى بالفعل.");
+      if(/archive_destinations_global_active_key/.test(error.message)) return fail("توجد مجموعة عامة نشطة بالفعل. عطّلها أولًا أو اربط هذه المجموعة بسنة دراسية.");
+      if(/archive_destinations_uni_fallback_active_key/.test(error.message)) return fail("لهذه الجامعة مجموعة احتياطية نشطة بالفعل. اربط هذه المجموعة بسنة دراسية، أو عطّل القديمة.");
+      if(/الجامعة لا تطابق|السنة الدراسية غير موجودة/.test(error.message)) return fail("السنة الدراسية المختارة لا تتبع هذه الجامعة. أعد اختيار السنة.");
       return fail(error.message);
     }
     m.close(); Admin.go("universities");
@@ -334,7 +338,7 @@ async function renderYears(body, program){
   const ids = (years||[]).map(y=>y.id);
   if(ids.length && Admin.role === "super"){
     const g = await db.from("archive_destinations").select("year_id,title,is_active").in("year_id", ids);
-    if(!g.error){ groups = {}; (g.data||[]).forEach(x=>{ groups[x.year_id] = x; }); }
+    if(!g.error){ groups = {}; (g.data||[]).forEach(x=>{ if(!groups[x.year_id] || (x.is_active && !groups[x.year_id].is_active)) groups[x.year_id] = x; }); }
   }
   const nextNum = Math.max(0, ...(years||[]).map(y=>y.year_number)) + 1;
   body.innerHTML = `
@@ -403,7 +407,19 @@ async function renderYears(body, program){
 }
 
 async function renderSubjects(body, semester){
-  const { data: subjects } = await db.from("university_subjects").select("*").eq("semester_id", semester.id).order("order_index");
+  // المواد عبر المواضع (patch_70) لتظهر المواد المشتركة من أقسام أخرى؛ ويُرجَع للاستعلام القديم إن لم يتوفر الجدول
+  let subjects = null, placeCount = {};
+  const pl = await db.from("university_subject_placements").select("order_index, university_subjects(*)").eq("semester_id", semester.id).order("order_index");
+  if(!pl.error){
+    subjects = (pl.data||[]).filter(x=>x.university_subjects).map(x=>({...x.university_subjects, order_index: x.order_index}));
+    const ids0 = subjects.map(x=>x.id);
+    if(ids0.length){
+      const pc = await db.from("university_subject_placements").select("subject_id").in("subject_id", ids0);
+      (pc.data||[]).forEach(x=>{ placeCount[x.subject_id] = (placeCount[x.subject_id]||0)+1; });
+    }
+  }else{
+    subjects = (await db.from("university_subjects").select("*").eq("semester_id", semester.id).order("order_index")).data;
+  }
   // عدد مصادر كل مادة (patch_58)
   const resCount = {};
   const subjectIds = (subjects||[]).map(x=>x.id);
@@ -418,12 +434,15 @@ async function renderSubjects(body, semester){
       <thead><tr><th>المادة</th><th>الترتيب</th><th></th></tr></thead>
       <tbody>${(subjects||[]).map(s=>`
         <tr>
-          <td>${CodeUp.escapeHtml(s.title)}</td>
+          <td>${CodeUp.escapeHtml(s.title)}${placeCount[s.id]>1?` <span class="pill" title="هذه المادة تظهر في ${placeCount[s.id]} أقسام">مشتركة (${placeCount[s.id]})</span>`:""}</td>
           <td>${s.order_index}</td>
           <td>
             <button class="btn dark" data-materials="${s.id}">المصادر${resCount[s.id]?` (${resCount[s.id]})`:""}</button>
             <button class="btn" data-edit="${s.id}">تعديل</button>
-            <button class="btn danger" data-del="${s.id}">حذف</button>
+            <button class="btn" data-depts="${s.id}">الأقسام</button>
+            ${placeCount[s.id]>1
+              ? `<button class="btn danger" data-unplace="${s.id}" title="تُزال المادة من هذا القسم فقط وتبقى في الأقسام الأخرى">إزالة من هذا القسم</button>`
+              : `<button class="btn danger" data-del="${s.id}">حذف</button>`}
           </td>
         </tr>`).join("") || `<tr><td colspan="3"><div class="emptyStatePro"><p style="margin:0">لا توجد مواد بهذا السمستر بعد.</p></div></td></tr>`}
       </tbody></table></div></div>`;
@@ -435,6 +454,18 @@ async function renderSubjects(body, semester){
   });
   body.querySelectorAll("[data-materials]").forEach(b=>{
     b.onclick = ()=> openSubjectResourcesModal(subjects.find(s=>s.id===b.dataset.materials), semester, body);
+  });
+  body.querySelectorAll("[data-depts]").forEach(b=>{
+    b.onclick = ()=> openSubjectDepartmentsModal(subjects.find(s=>s.id===b.dataset.depts), semester, body);
+  });
+  body.querySelectorAll("[data-unplace]").forEach(b=>{
+    b.onclick = async ()=>{
+      const s0 = subjects.find(s=>s.id===b.dataset.unplace);
+      if(!await Admin.confirmDialog({title:"إزالة المادة من هذا القسم", message:`ستختفي «${s0.title}» من هذا السمستر فقط، وتبقى بملفاتها في الأقسام الأخرى.`, confirmLabel:"إزالة"})) return;
+      const { error } = await db.rpc("university_subject_remove_placement", { p_subject: s0.id, p_semester: semester.id });
+      if(error){ CodeUp.toast(error.message, "error"); return; }
+      renderSubjects(body, semester);
+    };
   });
   body.querySelectorAll("[data-del]").forEach(b=>{
     b.onclick = async ()=>{
@@ -482,6 +513,65 @@ function openSubjectModal(subject, semester, body){
       : await db.from("university_subjects").insert({...payload, semester_id: semester.id});
     if(error){ CodeUp.toast(error.message, "error"); return; }
     m.close();
+    renderSubjects(body, semester);
+  };
+}
+
+// الأقسام التي تظهر فيها المادة (patch_70): اختيار قسم/سنة/سمستر لكل قسم من نفس الجامعة. الملفات لا تُنسخ ولا تُعاد رفعها.
+async function openSubjectDepartmentsModal(subject, semester, body){
+  const esc = CodeUp.escapeHtml;
+  const [pr, pl] = await Promise.all([
+    db.from("university_programs").select("id,name,order_index,university_years(id,year_number,title,university_semesters(id,title,semester_number))").eq("university_id", semester.university_id).order("order_index"),
+    db.from("university_subject_placements").select("semester_id,program_id").eq("subject_id", subject.id)
+  ]);
+  if(pr.error || pl.error){ CodeUp.toast("تعذّر تحميل الأقسام. تأكد من تطبيق patch_70.", "error"); return; }
+  const programs = pr.data||[];
+  const cur = {}; (pl.data||[]).forEach(x=>{ cur[x.program_id] = x.semester_id; });
+  const years = p => (p.university_years||[]).slice().sort((a,b)=>a.year_number-b.year_number);
+  const semOf = (p, semId) => years(p).find(y=>(y.university_semesters||[]).some(sm=>sm.id===semId));
+  const rowHtml = p=>{
+    const ys = years(p);
+    if(!ys.length) return `<div class="card" style="padding:10px;margin-bottom:8px;opacity:.6"><b>${esc(p.name)}</b> <span class="small">— لا توجد سنوات لهذا القسم بعد</span></div>`;
+    const curY = semOf(p, cur[p.id]) || ys[0];
+    const sems = (curY.university_semesters||[]).slice().sort((a,b)=>a.semester_number-b.semester_number);
+    return `<div class="card" style="padding:10px;margin-bottom:8px" data-prog="${p.id}">
+      <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" class="dpOn" ${cur[p.id]?"checked":""}> <b>${esc(p.name)}</b></label>
+      <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+        <select class="dpYear">${ys.map(y=>`<option value="${y.id}" ${y.id===curY.id?"selected":""}>${esc(yearLabel(y))}</option>`).join("")}</select>
+        <select class="dpSem">${sems.map(sm=>`<option value="${sm.id}" ${sm.id===cur[p.id]?"selected":""}>${esc(sm.title)}</option>`).join("")}</select>
+      </div></div>`;
+  };
+  const m = Admin.modal(`
+    <h3>أقسام المادة: ${esc(subject.title)}</h3>
+    <div class="small" style="margin-bottom:10px">اختر الأقسام التي تظهر فيها هذه المادة وحدّد السنة والسمستر لكل قسم. الملفات والمصادر مشتركة ولا تُنسخ.</div>
+    <div id="dpList">${programs.map(rowHtml).join("") || "<p>لا توجد أقسام.</p>"}</div>
+    <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end"><button class="btn" id="dpCancel">إلغاء</button><button class="btn dark" id="dpSave">حفظ</button></div>`);
+  m.el.querySelectorAll("[data-prog]").forEach(row=>{
+    const p = programs.find(x=>x.id===row.dataset.prog);
+    row.querySelector(".dpYear").onchange = e=>{
+      const y = years(p).find(x=>x.id===e.target.value);
+      row.querySelector(".dpSem").innerHTML = (y.university_semesters||[]).slice().sort((a,b)=>a.semester_number-b.semester_number).map(sm=>`<option value="${sm.id}">${esc(sm.title)}</option>`).join("");
+    };
+  });
+  m.el.querySelector("#dpCancel").onclick = m.close;
+  m.el.querySelector("#dpSave").onclick = async ()=>{
+    const want = {};
+    m.el.querySelectorAll("[data-prog]").forEach(row=>{ if(row.querySelector(".dpOn").checked) want[row.dataset.prog] = row.querySelector(".dpSem").value; });
+    if(!Object.keys(want).length){ CodeUp.toast("اختر قسمًا واحدًا على الأقل", "error"); return; }
+    // الإضافة/النقل أولًا ثم الإزالة، حتى لا تُترك المادة بلا موضع
+    for(const [pid, sid] of Object.entries(want)){
+      if(cur[pid] === sid) continue;
+      const { error } = await db.rpc("university_subject_set_placement", { p_subject: subject.id, p_semester: sid });
+      if(error){ CodeUp.toast(error.message, "error"); return; }
+    }
+    for(const [pid, sid] of Object.entries(cur)){
+      if(want[pid]) continue;
+      const { error } = await db.rpc("university_subject_remove_placement", { p_subject: subject.id, p_semester: sid });
+      if(error){ CodeUp.toast(error.message, "error"); return; }
+    }
+    CodeUp.toast("تم حفظ أقسام المادة", "success");
+    m.close();
+    // قد تكون المادة غادرت هذا السمستر
     renderSubjects(body, semester);
   };
 }

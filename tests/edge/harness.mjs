@@ -20,7 +20,7 @@ export async function loadFn(name, world) {
     };
     return { from: mk, rpc: async (n, a) => world.rpc(n, a), storage: { from: () => ({ remove: async () => ({}), download: async () => (world.blob ? ({ data: world.blob, error: null }) : ({ data: null, error: { message: 'x' } })) }) } };
   };
-  globalThis.Deno = { env: { get: (k) => ({ SUPABASE_URL: 'http://x', SUPABASE_ANON_KEY: 'a', SUPABASE_SERVICE_ROLE_KEY: 's', TELEGRAM_BOT_TOKEN: 'BOT', CRON_SECRET: 'cron' })[k] }, serve: (h) => { globalThis.__handler = h; } };
+  globalThis.Deno = { env: { get: (k) => ({ SUPABASE_URL: 'http://x', SUPABASE_ANON_KEY: 'a', SUPABASE_SERVICE_ROLE_KEY: 's', TELEGRAM_BOT_TOKEN: 'BOT', CRON_SECRET: 'cron', ...(world.env || {}) })[k] }, serve: (h) => { globalThis.__handler = h; } };
   globalThis.fetch = async (u, init) => { const m = String(u).split('/').pop(); const body = init?.body && typeof init.body === 'string' ? JSON.parse(init.body) : null; world.tg.push({ m, body }); const r = world.tgReply(m, body); return { json: async () => r, status: 200 }; };
   await import(f);
   return globalThis.__handler;
