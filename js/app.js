@@ -2754,7 +2754,11 @@ const App = {
 
     const showSubjects = async (semester, university, isOnlyUniversity)=>{
       body.innerHTML = `${loadingHtml()}`;
-      const {data: subjects} = await db.from("university_subjects").select("*").eq("semester_id", semester.id).order("order_index");
+      // المواد عبر المواضع (patch_70) لتشمل المواد المشتركة بين الأقسام؛ والرجوع للاستعلام القديم عند أي خطأ
+      let subjects = null;
+      const plr = await db.from("university_subject_placements").select("order_index, university_subjects(*)").eq("semester_id", semester.id).order("order_index");
+      if(!plr.error) subjects = (plr.data||[]).filter(x=>x.university_subjects).map(x=>({...x.university_subjects, order_index:x.order_index}));
+      else subjects = (await db.from("university_subjects").select("*").eq("semester_id", semester.id).order("order_index")).data;
       const backRow = `<button class="btn" id="uniBackToSemesters" style="margin-bottom:10px"><span class="inlineBtnIcon">${Icon("arrow_right")}</span> رجوع للفصول</button>`;
       if(!subjects || !subjects.length){
         body.innerHTML = backRow + `<div class="emptyState">لا توجد مواد مضافة لهذا الفصل بعد.</div>`;
